@@ -22,8 +22,8 @@ const defaultImportMap: Required<ImportMapOptions> = {
 
 const defaultPrefix: Required<NonNullable<SSGOptions["prefix"]>> = {
   template: "page.react-",
-  section: "section.react-",
-  block: "block.react-",
+  section: "react-",
+  block: "react-",
 };
 
 export const resolveOptions = (options: Options = {}): ResolvedOptions => {

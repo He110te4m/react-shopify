@@ -131,6 +131,6 @@ function resolveFileName(
     );
   }
 
-  const prefix = options.prefix[type as keyof typeof options.prefix] ?? "section.react-";
+  const prefix = options.prefix[type as keyof typeof options.prefix] ?? "react-";
   return `${prefix}${entry.kebabName}.liquid`;
 }
