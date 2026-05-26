@@ -112,7 +112,7 @@ export default function MyComponent(props) {
 
 ## 设置 (Settings)
 
-使用 `SettingSchema` 类型定义设置项：
+使用 `SettingSchema` 类型定义设置项。`SettingSchema` 是根据 `type` 字段判别（discriminated union）的联合类型 —— 每种 type 只接受 Shopify 文档中合法的字段，无效字段会在编译时报错：
 
 ```tsx
 import type { SettingSchema } from "vite-plugin-react-shopify";
@@ -144,11 +144,68 @@ const settings = [
     step: 1,
   },
 ] satisfies SettingSchema[];
+
+// 也可以直接引用具体类型：
+import type { SelectSetting, RangeSetting } from "vite-plugin-react-shopify";
 ```
 
-支持的 setting 类型：`text`、`textarea`、`richtext`、`inline_richtext`、`number`、`range`、`checkbox`、`select`、`radio`、`text_alignment`、`image_picker`、`video_url`、`product`、`collection`、`page`、`link_list`、`blog`、`article`、`color`、`color_background`、`font_picker`、`url`、`html`、`liquid`、`header`、`paragraph`、`line_break`。
+### 基本输入类型
 
-Setting 的 `id` 会作为 React 组件的 prop 名传入。Shopify 编辑器修改 setting 后，水合层会读取 `{{ section.settings | json }}` 将最新值传给组件。
+| 类型 | 额外字段 | `default` |
+|------|----------|-----------|
+| `checkbox` | — | 可选 `boolean` |
+| `number` | `placeholder` | 可选 `number` |
+| `radio` | `options`（必填） | 可选 `string` |
+| `range` | `min`（必填）、`max`（必填）、`step`、`unit` | **必填** `number` |
+| `select` | `options`（必填） | 可选 `string` |
+| `text` | `placeholder` | 可选 `string` |
+| `textarea` | `placeholder` | 可选 `string` |
+
+### 专用输入类型
+
+| 类型 | 额外字段 |
+|------|----------|
+| `article` | —（不支持 `default`） |
+| `article_list` | `limit` |
+| `blog` | —（不支持 `default`） |
+| `collection` | —（不支持 `default`） |
+| `collection_list` | `limit` |
+| `color` | — |
+| `color_background` | — |
+| `color_scheme` | — |
+| `color_scheme_group` | `definition`（必填）、`role`（必填） |
+| `font_picker` | —（`default` **必填** `string`） |
+| `html` | `placeholder` |
+| `image_picker` | —（不支持 `default`） |
+| `inline_richtext` | — |
+| `link_list` | —（`default` 限制为 `"main-menu"` / `"footer"`） |
+| `liquid` | — |
+| `metaobject` | `metaobject_type`（必填） |
+| `metaobject_list` | `metaobject_type`（必填）、`limit` |
+| `page` | —（不支持 `default`） |
+| `product` | —（不支持 `default`） |
+| `product_list` | `limit` |
+| `richtext` | — |
+| `text_alignment` | —（`default` 限制为 `"left"` / `"center"` / `"right"`） |
+| `url` | — |
+| `video` | —（不支持 `default`） |
+| `video_url` | `accept`（必填）、`placeholder` |
+
+### 侧边栏类型（非输入，仅显示信息）
+
+`header`、`paragraph`、`line_break`。与输入类型不同，侧边栏类型不保存值，仅用于组织和描述设置项。使用 `content` 字段代替 `id`/`label`：
+
+```tsx
+const settings = [
+  { type: "header", content: "Typography", info: "Customize text styles below." },
+  { type: "font_picker", id: "heading_font", label: "Heading font", default: "helvetica_n4" },
+  { type: "paragraph", content: "Set your brand colors for buttons and accents." },
+  { type: "color", id: "accent_color", label: "Accent color", default: "#000000" },
+  { type: "line_break" },
+  { type: "checkbox", id: "dark_mode", label: "Enable dark mode", default: false },
+] satisfies SettingSchema[];
+
+Setting 的 `id` 会作为 React 组件的 prop 名传入。Shopify 编辑器修改 setting 后，水合层会读取 `{{ section.settings | json }}` 将最新值传给组件。设置值通过 `useShopifySettings()` hook 读取。
 
 ---
 
