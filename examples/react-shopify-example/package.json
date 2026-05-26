@@ -1,10 +1,11 @@
 {
-  "name": "example-react-shopify",
+  "name": "react-shopify-example",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -13,7 +14,8 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
     "vite": "^8.0.14",
     "vite-plugin-react-shopify": "workspace:*"
   }

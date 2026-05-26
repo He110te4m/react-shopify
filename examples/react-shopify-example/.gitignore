@@ -1,0 +1,31 @@
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+node_modules/
+
+# Shopify CLI files
+.shopify/
+
+## Release files
+release
+*.zip
+
+# Vite build output (hashed names: chunk-XYZ.js, chunk-XYZ.css)
+assets/*-*.js
+assets/*-*.css
+assets/.vite/
+snippets/vite-tag.liquid
+
+# SSG hydration entries (auto-generated)
+frontend/entrypoints/_ssg-hydrate/
+
+# SSG compiled Liquid files (auto-generated)
+sections/section.react-*.liquid
+blocks/block.react-*.liquid
+templates/page.react-*.liquid

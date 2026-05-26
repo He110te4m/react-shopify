@@ -1,0 +1,11 @@
+{
+  "sections": {
+    "main": {
+      "type": "section.react-hello-world",
+      "settings": {}
+    }
+  },
+  "order": [
+    "main"
+  ]
+}

@@ -23,3 +23,16 @@ const vitePluginShopify = (options: Options = {}): Plugin[] => {
 };
 
 export default vitePluginShopify;
+
+export type {
+  Options,
+  SSGOptions,
+  ShopifyMeta,
+  SchemaSetting,
+  PresetDefinition,
+  PresetBlock,
+  ShopifyBlockType,
+  SSGEntry,
+  DevServerUrl,
+  FrontendURLResult,
+} from "./types";
