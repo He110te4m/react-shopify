@@ -1,43 +1,45 @@
-import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
 import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
 import "./GroupBlock.css";
+
+const settings = [
+  {
+    type: "select",
+    id: "layout_direction",
+    label: "Layout Direction",
+    default: "group--vertical",
+    options: [
+      { value: "group--horizontal", label: "Horizontal" },
+      { value: "group--vertical", label: "Vertical" },
+    ],
+  },
+  {
+    type: "select",
+    id: "alignment",
+    label: "Alignment",
+    default: "flex-start",
+    options: [
+      { value: "flex-start", label: "Left" },
+      { value: "center", label: "Center" },
+      { value: "flex-end", label: "Right" },
+    ],
+  },
+  {
+    type: "range",
+    id: "padding",
+    label: "Padding",
+    default: 0,
+    min: 0,
+    max: 200,
+    step: 2,
+    unit: "px",
+  },
+] as const satisfies SettingSchema[];
 
 export const shopifyMeta = {
   name: "Group (React)",
   blocks: [{ type: "@theme" }],
-  settings: [
-    {
-      type: "select",
-      id: "layout_direction",
-      label: "Layout Direction",
-      default: "group--vertical",
-      options: [
-        { value: "group--horizontal", label: "Horizontal" },
-        { value: "group--vertical", label: "Vertical" },
-      ],
-    },
-    {
-      type: "select",
-      id: "alignment",
-      label: "Alignment",
-      default: "flex-start",
-      options: [
-        { value: "flex-start", label: "Left" },
-        { value: "center", label: "Center" },
-        { value: "flex-end", label: "Right" },
-      ],
-    },
-    {
-      type: "range",
-      id: "padding",
-      label: "Padding",
-      default: 0,
-      min: 0,
-      max: 200,
-      step: 2,
-      unit: "px",
-    },
-  ],
+  settings,
   presets: [
     {
       name: "Column (React)",
@@ -60,7 +62,7 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function GroupBlock() {
-  const s = useShopifySettings();
+  const s = useShopifySettings<InferSettings<typeof settings>>();
 
   return (
     <div

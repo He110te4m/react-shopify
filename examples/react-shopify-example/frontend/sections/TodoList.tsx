@@ -1,18 +1,20 @@
 import { useState } from "react";
-import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
 import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+
+const settings = [
+  { type: "text", id: "title", label: "Title", default: "Todo List" },
+  {
+    type: "text",
+    id: "placeholder",
+    label: "Placeholder",
+    default: "What needs to be done?",
+  },
+] as const satisfies SettingSchema[];
 
 export const shopifyMeta = {
   name: "Todo List (React)",
-  settings: [
-    { type: "text", id: "title", label: "Title", default: "Todo List" },
-    {
-      type: "text",
-      id: "placeholder",
-      label: "Placeholder",
-      default: "What needs to be done?",
-    },
-  ],
+  settings,
   presets: [
     { name: "Todo List (Default)", category: "Demo" },
     {
@@ -32,9 +34,9 @@ interface Todo {
 let nextId = 1;
 
 export default function TodoList() {
-  const s = useShopifySettings();
-  const title = (s.title as string) || "Todo List";
-  const placeholder = (s.placeholder as string) || "What needs to be done?";
+  const s = useShopifySettings<InferSettings<typeof settings>>();
+  const title = s.title || "Todo List";
+  const placeholder = s.placeholder || "What needs to be done?";
 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");

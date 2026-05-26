@@ -35,6 +35,7 @@ export type {
   ImportMapOptions,
   ColorSchemeRole,
   ColorSchemeGroupSetting,
+  InferSettings,
 } from "./types";
 
 export type {

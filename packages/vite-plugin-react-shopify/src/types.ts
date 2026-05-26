@@ -334,3 +334,14 @@ export interface SSGEntry {
   targetType: ShopifyBlockType;
   meta: Required<Pick<ShopifyMeta, "name">> & ShopifyMeta;
 }
+
+// ── Utility ─────────────────────────────────────────────────────────────
+
+type ValueForType<T extends string> =
+  T extends "checkbox" ? boolean
+  : T extends "number" | "range" ? number
+  : string;
+
+export type InferSettings<T extends readonly { type: string; id: string }[]> = {
+  [K in T[number] as K["id"]]: ValueForType<K["type"]>;
+};

@@ -1,4 +1,4 @@
-import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
+import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
 import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
 import "./TextBlock.css";
 
@@ -26,7 +26,7 @@ const settings = [
     label: "Alignment",
     default: "left",
   },
-] satisfies SettingSchema[];
+] as const satisfies SettingSchema[];
 
 export const shopifyMeta = {
   name: "Text (React)",
@@ -35,10 +35,10 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function TextBlock() {
-  const s = useShopifySettings();
-  const text = (s.text as string) || "Text";
-  const text_style = (s.text_style as string) || "ssg-text--title";
-  const alignment = (s.alignment as string) || "left";
+  const s = useShopifySettings<InferSettings<typeof settings>>();
+  const text = s.text || "Text";
+  const text_style = s.text_style || "ssg-text--title";
+  const alignment = s.alignment || "left";
 
   return (
     <div
