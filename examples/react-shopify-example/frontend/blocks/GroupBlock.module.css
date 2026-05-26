@@ -1,0 +1,16 @@
+.ssg-group {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  width: 100%;
+}
+
+.ssg-group--horizontal {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ssg-group--vertical {
+  flex-direction: column;
+}

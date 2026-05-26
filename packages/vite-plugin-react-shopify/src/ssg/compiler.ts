@@ -50,6 +50,11 @@ async function compileEntry(
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
 
+  const ssgSource = sourceCode.replace(
+    /import\s+(\w+)\s+from\s+["'][^"']*\.module\.css["'];?\s*/g,
+    (_, name) => `const ${name} = new Proxy({},{get:(_,k)=>k});`,
+  );
+
   let esbuild: any;
   try {
     esbuild = projectRequire("esbuild");
@@ -58,7 +63,7 @@ async function compileEntry(
     return;
   }
 
-  const result = await esbuild.transform(sourceCode, {
+  const result = await esbuild.transform(ssgSource, {
     loader: path.extname(entry.filePath).slice(1) as "tsx" | "jsx",
     format: "esm",
     jsx: "automatic",
@@ -93,8 +98,9 @@ async function compileEntry(
     html = unwrapHtmlEntities(html);
 
     const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
+    const cssContents = readCssAssets(entry.kebabName, manifest, options.themeRoot);
 
-    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
+    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, cssContents, {
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
     });
@@ -129,6 +135,25 @@ function resolveScriptAsset(kebabName: string, manifest: Manifest): string | nul
   if (!file) return null;
 
   return path.basename(file);
+}
+
+function readCssAssets(kebabName: string, manifest: Manifest, themeRoot: string): string[] {
+  const manifestKey = `shopify:entry:${kebabName}`;
+  const entryChunk = manifest[manifestKey];
+  if (!entryChunk) return [];
+
+  const css = entryChunk.css;
+  if (!css || !Array.isArray(css)) return [];
+
+  const assetsDir = path.resolve(themeRoot, "assets");
+  return css.map((file) => {
+    const cssPath = path.join(assetsDir, file);
+    try {
+      return fs.readFileSync(cssPath, "utf-8");
+    } catch {
+      return "";
+    }
+  }).filter(Boolean);
 }
 
 function pathToFileURL(filePath: string): string {

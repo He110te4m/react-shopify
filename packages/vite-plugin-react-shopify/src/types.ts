@@ -23,26 +23,44 @@ export interface ImportMapOptions {
 
 export type ShopifyBlockType = "template" | "section" | "block";
 
-export interface ShopifyMeta {
-  type?: ShopifyBlockType;
-  name: string;
-  tag?: string;
-  class?: string;
-  limit?: number;
-  settings?: SchemaSetting[];
-  blocks?: { type: string; name?: string; settings?: SchemaSetting[] }[];
-  max_blocks?: number;
-  presets?: PresetDefinition[];
-  enabled_on?: Record<string, string>[];
-  disabled_on?: Record<string, string>[];
-  templates?: string[];
-}
+export type SettingValue = string | number | boolean;
 
-export interface SchemaSetting {
-  type: string;
+export type InputSettings = Record<string, SettingValue>;
+
+export type SettingType =
+  | "text"
+  | "textarea"
+  | "richtext"
+  | "inline_richtext"
+  | "number"
+  | "range"
+  | "checkbox"
+  | "select"
+  | "radio"
+  | "text_alignment"
+  | "image_picker"
+  | "video_url"
+  | "product"
+  | "collection"
+  | "page"
+  | "link_list"
+  | "blog"
+  | "article"
+  | "color"
+  | "color_background"
+  | "font_picker"
+  | "url"
+  | "html"
+  | "liquid"
+  | "header"
+  | "paragraph"
+  | "line_break";
+
+export interface SettingSchema {
+  type: SettingType;
   id: string;
   label: string;
-  default?: string | number | boolean;
+  default?: SettingValue;
   info?: string;
   placeholder?: string;
   options?: { value: string; label: string }[];
@@ -52,10 +70,28 @@ export interface SchemaSetting {
   unit?: string;
 }
 
+/** @deprecated Use {@link SettingSchema} instead */
+export type SchemaSetting = SettingSchema;
+
+export interface ShopifyMeta {
+  type?: ShopifyBlockType;
+  name: string;
+  tag?: string;
+  class?: string;
+  limit?: number;
+  settings?: SettingSchema[];
+  blocks?: { type: string; name?: string; settings?: SettingSchema[] }[];
+  max_blocks?: number;
+  presets?: PresetDefinition[];
+  enabled_on?: Record<string, string>[];
+  disabled_on?: Record<string, string>[];
+  templates?: string[];
+}
+
 export interface PresetDefinition {
   name: string;
   category?: string;
-  settings?: Record<string, string | number | boolean>;
+  settings?: InputSettings;
   blocks?: PresetBlock[];
 }
 
@@ -63,7 +99,7 @@ export interface PresetBlock {
   type: string;
   id?: string;
   static?: boolean;
-  settings?: Record<string, string | number | boolean>;
+  settings?: InputSettings;
   blocks?: PresetBlock[];
 }
 

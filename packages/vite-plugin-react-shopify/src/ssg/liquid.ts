@@ -13,6 +13,7 @@ export function assembleLiquidFile(
   html: string,
   entry: SSGEntry,
   scriptAsset: string | null,
+  cssContents: string[],
   options: AssembleOptions,
 ): string {
   const type = entry.meta.type ?? entry.targetType;
@@ -33,6 +34,15 @@ export function assembleLiquidFile(
       break;
   }
 
+  if (cssContents.length > 0) {
+    parts.push(
+      "",
+      "{% stylesheet %}",
+      ...cssContents.map((c) => c.trim()),
+      "{% endstylesheet %}",
+    );
+  }
+
   if (scriptAsset) {
     parts.push(
       "",
@@ -45,11 +55,17 @@ export function assembleLiquidFile(
   return parts.join("\n") + "\n";
 }
 
+const hasBlocks = (entry: SSGEntry): boolean =>
+  !!entry.meta.blocks && entry.meta.blocks.length > 0;
+
+const SETTINGS_SECTION = `  <script type="application/json" data-ssg-props>{{ section.settings | json }}</script>`;
+const SETTINGS_BLOCK = `  <script type="application/json" data-ssg-props>{{ block.settings | json }}</script>`;
+
 function buildSection(html: string, entry: SSGEntry): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
-  return [
+  const lines: string[] = [
     "",
     "{% liquid",
     `  assign el_id = 'shopify-' | append: section.id`,
@@ -59,20 +75,25 @@ function buildSection(html: string, entry: SSGEntry): string[] {
     `  id="{{ el_id }}"`,
     `  data-section-id="{{ section.id }}"`,
     `  data-ssg-component="${entry.kebabName}"`,
-    cls ? `  class="${cls}"` : "",
+  ];
+  if (cls) lines.push(`  class="${cls}"`);
+  lines.push(
     `>`,
+    SETTINGS_SECTION,
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
     `  </div>`,
-    `</${tag}>`,
-  ];
+  );
+  if (hasBlocks(entry)) lines.push(`  {% content_for 'blocks' %}`);
+  lines.push(`</${tag}>`);
+  return lines;
 }
 
 function buildBlock(html: string, entry: SSGEntry): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
-  return [
+  const lines: string[] = [
     "",
     `{%- doc -%}`,
     `  @name ${entry.meta.name}`,
@@ -87,14 +108,19 @@ function buildBlock(html: string, entry: SSGEntry): string[] {
     `  id="{{ el_id }}"`,
     `  data-section-id="{{ section.id }}"`,
     `  data-ssg-component="${entry.kebabName}"`,
-    cls ? `  class="${cls}"` : "",
+  ];
+  if (cls) lines.push(`  class="${cls}"`);
+  lines.push(
     `  {{ block.shopify_attributes }}`,
     `>`,
+    SETTINGS_BLOCK,
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
     `  </div>`,
-    `</${tag}>`,
-  ];
+  );
+  if (hasBlocks(entry)) lines.push(`  {% content_for 'blocks' %}`);
+  lines.push(`</${tag}>`);
+  return lines;
 }
 
 export function getOutputPath(
