@@ -23,7 +23,6 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
       const fileName = path.basename(filePath, path.extname(filePath));
       const componentName = fileName;
       const kebabName = toKebabCase(fileName);
-
       const targetType: ShopifyBlockType = TYPE_BY_DIR[dir] ?? "section";
 
       entries.push({
@@ -31,9 +30,7 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
         componentName,
         kebabName,
         targetType,
-        meta: {
-          name: componentName,
-        },
+        meta: { name: componentName },
       });
     }
   }

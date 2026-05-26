@@ -1,42 +1,56 @@
 import path from "node:path";
-import { normalizePath } from "vite";
-import type { Options, SSGOptions } from "./types";
+import type { Options, SSGOptions, ImportMapOptions } from "./types";
 
-export interface ResolvedOptions extends Required<Omit<Options, "ssg">> {
-  ssg: Required<SSGOptions>;
+export interface ResolvedOptions {
+  themeRoot: string;
+  sourceCodeDir: string;
+  snippetFile: string;
+  ssg: ResolvedSSGOptions;
+  importMap: Required<ImportMapOptions>;
 }
 
-export const resolveOptions = (options: Options): ResolvedOptions => {
+export interface ResolvedSSGOptions {
+  directories: string[];
+  prefix: Required<NonNullable<SSGOptions["prefix"]>>;
+  outputName: string;
+}
+
+const defaultImportMap: Required<ImportMapOptions> = {
+  react: "https://esm.sh/react@19",
+  reactDomClient: "https://esm.sh/react-dom@19/client",
+};
+
+const defaultPrefix: Required<NonNullable<SSGOptions["prefix"]>> = {
+  template: "page.react-",
+  section: "section.react-",
+  block: "block.react-",
+};
+
+export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   const themeRoot = options.themeRoot ?? "./";
   const sourceCodeDir = options.sourceCodeDir ?? "frontend";
-  const entrypointsDir =
-    options.entrypointsDir ?? normalizePath(path.join(sourceCodeDir, "entrypoints"));
-  const additionalEntrypoints = options.additionalEntrypoints ?? [];
-  const snippetFile = options.snippetFile ?? "vite-tag.liquid";
-  const versionNumbers = options.versionNumbers ?? false;
-  const tunnel = options.tunnel ?? false;
-  const themeHotReload = options.themeHotReload ?? true;
+  const snippetFile = options.snippetFile ?? "shopify-importmap.liquid";
 
-  const ssg: Required<SSGOptions> = {
-    enabled: options.ssg?.enabled ?? false,
+  const ssg: ResolvedSSGOptions = {
     directories: options.ssg?.directories ?? ["sections", "blocks", "templates"],
     prefix: {
-      template: options.ssg?.prefix?.template ?? "page.react-",
-      section: options.ssg?.prefix?.section ?? "section.react-",
-      block: options.ssg?.prefix?.block ?? "block.react-",
+      template: options.ssg?.prefix?.template ?? defaultPrefix.template,
+      section: options.ssg?.prefix?.section ?? defaultPrefix.section,
+      block: options.ssg?.prefix?.block ?? defaultPrefix.block,
     },
     outputName: options.ssg?.outputName ?? "",
   };
 
+  const importMap: Required<ImportMapOptions> = {
+    react: options.importMap?.react ?? defaultImportMap.react,
+    reactDomClient: options.importMap?.reactDomClient ?? defaultImportMap.reactDomClient,
+  };
+
   return {
-    themeRoot,
+    themeRoot: path.resolve(themeRoot),
     sourceCodeDir,
-    entrypointsDir,
-    additionalEntrypoints,
     snippetFile,
-    versionNumbers,
-    tunnel,
-    themeHotReload,
     ssg,
+    importMap,
   };
 };

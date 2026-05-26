@@ -1,35 +1,40 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { Manifest } from "vite";
 import type { ResolvedOptions } from "../options";
 import type { SSGEntry } from "../types";
 import { scanEntries } from "./scanner";
 import { stripReactLiquidTags, unwrapHtmlEntities } from "./post-process";
-import { assembleLiquidFile, getOutputPath } from "./liquid-structure";
-import { generateHydrateEntry } from "./hydrate-entry";
+import { assembleLiquidFile, getOutputPath } from "./liquid";
 
-export async function compileAllEntries(options: ResolvedOptions): Promise<void> {
+export async function compileAllEntries(
+  options: ResolvedOptions,
+  manifest: Manifest,
+): Promise<void> {
   const entries = scanEntries(options);
-
   if (entries.length === 0) return;
 
   const projectRoot = path.resolve(options.themeRoot);
+  const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
 
   for (const entry of entries) {
     try {
-      await compileEntry(entry, options, projectRoot);
+      await compileEntry(entry, options, manifest, projectRoot, sourceDir);
     } catch (err) {
-      console.error(`[vite-plugin-shopify-ssg] Failed to compile ${entry.filePath}:`, err);
+      console.error(`[vite-plugin-shopify] Failed to compile ${entry.filePath}:`, err);
     }
   }
 
-  console.log(`[vite-plugin-shopify-ssg] Compiled ${entries.length} entries`);
+  console.log(`[vite-plugin-shopify] Compiled ${entries.length} entries`);
 }
 
 async function compileEntry(
   entry: SSGEntry,
   options: ResolvedOptions,
+  manifest: Manifest,
   projectRoot: string,
+  sourceDir: string,
 ): Promise<void> {
   const projectRequire = createRequire(path.join(projectRoot, "package.json"));
 
@@ -39,14 +44,19 @@ async function compileEntry(
     createElement = projectRequire("react").createElement;
     renderToStaticMarkup = projectRequire("react-dom/server").renderToStaticMarkup;
   } catch {
-    console.warn(
-      `[vite-plugin-shopify-ssg] react not found in project. Make sure react and react-dom are installed.`,
-    );
+    console.warn(`[vite-plugin-shopify] react/react-dom not found, skipping SSR`);
     return;
   }
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
-  const esbuild = projectRequire("esbuild");
+
+  let esbuild: any;
+  try {
+    esbuild = projectRequire("esbuild");
+  } catch {
+    console.warn(`[vite-plugin-shopify] esbuild not found, skipping SSR`);
+    return;
+  }
 
   const result = await esbuild.transform(sourceCode, {
     loader: path.extname(entry.filePath).slice(1) as "tsx" | "jsx",
@@ -56,7 +66,7 @@ async function compileEntry(
   });
 
   const ts = Date.now();
-  const tmpFile = entry.filePath + "." + ts + ".ssg-tmp.mjs";
+  const tmpFile = path.join(sourceDir, ".ssg-tmp-" + ts + ".mjs");
   fs.writeFileSync(tmpFile, result.code);
 
   try {
@@ -67,7 +77,7 @@ async function compileEntry(
 
     if (!Component) {
       console.warn(
-        `[vite-plugin-shopify-ssg] No default export found in ${entry.filePath}, skipping`,
+        `[vite-plugin-shopify] No default export found in ${entry.filePath}, skipping`,
       );
       return;
     }
@@ -82,10 +92,11 @@ async function compileEntry(
     html = stripReactLiquidTags(html);
     html = unwrapHtmlEntities(html);
 
-    const liquidContent = assembleLiquidFile(html, entry, {
+    const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
+
+    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
-      sourceCodeDir: options.sourceCodeDir,
     });
 
     const outputPath = getOutputPath(entry, {
@@ -100,8 +111,6 @@ async function compileEntry(
     }
 
     fs.writeFileSync(outputPath, liquidContent);
-
-    generateHydrateEntry(entry, options);
   } finally {
     try {
       fs.unlinkSync(tmpFile);
@@ -109,6 +118,17 @@ async function compileEntry(
       /* ignore */
     }
   }
+}
+
+function resolveScriptAsset(kebabName: string, manifest: Manifest): string | null {
+  const manifestKey = `shopify:entry:${kebabName}`;
+  const entryChunk = manifest[manifestKey];
+  if (!entryChunk) return null;
+
+  const file = entryChunk.file;
+  if (!file) return null;
+
+  return path.basename(file);
 }
 
 function pathToFileURL(filePath: string): string {

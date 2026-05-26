@@ -1,25 +1,18 @@
 import { Plugin } from "vite";
-
 import { resolveOptions } from "./options";
 import type { Options } from "./types";
 import shopifyConfig from "./config";
-import shopifyHtml from "./html";
-import shopifyLiquidNoRefresh from "./liquid-no-refresh";
-import shopifyReactRefresh from "./react-refresh";
+import shopifyEntries from "./entries";
 import shopifySSG from "./ssg";
 
 const vitePluginShopify = (options: Options = {}): Plugin[] => {
   const resolvedOptions = resolveOptions(options);
 
-  const plugins = [
+  return [
     shopifyConfig(resolvedOptions),
-    shopifyHtml(resolvedOptions),
-    shopifyLiquidNoRefresh(),
-    shopifyReactRefresh(),
+    shopifyEntries(resolvedOptions),
     shopifySSG(resolvedOptions),
   ];
-
-  return plugins;
 };
 
 export default vitePluginShopify;
@@ -33,6 +26,5 @@ export type {
   PresetBlock,
   ShopifyBlockType,
   SSGEntry,
-  DevServerUrl,
-  FrontendURLResult,
+  ImportMapOptions,
 } from "./types";

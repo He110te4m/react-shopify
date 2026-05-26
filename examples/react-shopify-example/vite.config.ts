@@ -6,7 +6,6 @@ export default {
       themeRoot: ".",
       sourceCodeDir: "frontend",
       ssg: {
-        enabled: true,
         directories: ["sections", "blocks", "templates"],
       },
     }),

@@ -1,104 +1,76 @@
 import path from "node:path";
-import { Plugin, UserConfig, normalizePath } from "vite";
-import glob from "fast-glob";
+import { Plugin, UserConfig } from "vite";
 import createDebugger from "debug";
-
 import type { ResolvedOptions } from "./options";
 
 const debug = createDebugger("vite-plugin-shopify:config");
 
-// Plugin for setting necessary Vite config to support Shopify plugin functionality
 export default function shopifyConfig(options: ResolvedOptions): Plugin {
+  const isDebug = process.env.VITE_SHOPIFY_DEBUG === "true";
+
   return {
-    name: "vite-plugin-shopify-config",
+    name: "vite-plugin-shopify:config",
     config(config: UserConfig): UserConfig {
-      const host = config.server?.host ?? "localhost";
-      const port = config.server?.port ?? 5173;
-      const https = config.server?.https;
-      const origin = config.server?.origin ?? "__shopify_vite_placeholder__";
-      const defaultAliases: Record<string, string> = {
-        "~": path.resolve(options.sourceCodeDir),
-        "@": path.resolve(options.sourceCodeDir),
-      };
+      const sourceDirAbs = path.resolve(options.themeRoot, options.sourceCodeDir);
 
-      const input = glob.sync(
-        [
-          normalizePath(path.join(options.entrypointsDir, "**/*")),
-          ...options.additionalEntrypoints,
-        ],
-        { onlyFiles: true },
-      );
-
-      const generatedConfig: UserConfig = {
-        // Use relative base path so to load imported assets from Shopify CDN
+      const generated: UserConfig = {
         base: config.base ?? "./",
-        // Do not use "public" directory
         publicDir: config.publicDir ?? false,
         build: {
-          // Output files to "assets" directory
           outDir: config.build?.outDir ?? path.join(options.themeRoot, "assets"),
-          // Do not use subfolder for static assets
           assetsDir: config.build?.assetsDir ?? "",
-          // Configure bundle entry points
+          emptyOutDir: config.build?.emptyOutDir ?? false,
+          manifest: config.build?.manifest ?? true,
+          minify: config.build?.minify ?? (isDebug ? false : undefined),
+          sourcemap: config.build?.sourcemap ?? (isDebug ? true : undefined),
           rollupOptions: {
-            input: config.build?.rollupOptions?.input ?? input,
+            ...config.build?.rollupOptions,
+            external: [
+              ...(Array.isArray(config.build?.rollupOptions?.external)
+                ? (config.build.rollupOptions.external as string[])
+                : []),
+              "react",
+              "react-dom/client",
+            ],
+            output: {
+              ...config.build?.rollupOptions?.output,
+              entryFileNames: "[name]-[hash].js",
+              chunkFileNames: "[name]-[hash].js",
+              assetFileNames: "[name]-[hash][extname]",
+            },
           },
-          // Output manifest file for backend integration
-          manifest: typeof config.build?.manifest === "string" ? config.build.manifest : true,
         },
         resolve: {
-          // Provide import alias to source code dir for convenience
           alias: Array.isArray(config.resolve?.alias)
             ? [
-                ...(config.resolve?.alias ?? []),
-                ...Object.keys(defaultAliases).map((alias) => ({
-                  find: alias,
-                  replacement: defaultAliases[alias],
-                })),
+                ...config.resolve.alias,
+                { find: "~", replacement: sourceDirAbs },
+                { find: "@", replacement: sourceDirAbs },
               ]
             : {
-                ...defaultAliases,
-                ...config.resolve?.alias,
+                "~": sourceDirAbs,
+                "@": sourceDirAbs,
+                ...(config.resolve?.alias as Record<string, string>),
               },
         },
         server: {
-          host,
-          https,
-          port,
-          origin,
-          hmr:
-            config.server?.hmr === false
-              ? false
-              : {
-                  ...(config.server?.hmr === true ? {} : config.server?.hmr),
-                },
-          allowedHosts: config.server?.allowedHosts ?? [
-            ...(typeof options.tunnel === "string"
-              ? (() => {
-                  try {
-                    return [new URL(options.tunnel).hostname];
-                  } catch {
-                    throw new Error(`Invalid tunnel URL: ${options.tunnel}`);
-                  }
-                })()
-              : options.tunnel
-                ? [".trycloudflare.com"]
-                : []),
-          ],
+          host: config.server?.host ?? "localhost",
+          https: config.server?.https,
+          port: config.server?.port ?? 5173,
           cors: config.server?.cors ?? {
-            origin: config.server?.origin ?? [
-              /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/, // allows localhost (default)
-              /\.myshopify\.com$/, // allows myshopify.com URLs
+            origin: [
+              /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/,
+              /\.myshopify\.com$/,
             ],
           },
         },
+        css: {
+          modules: config.css?.modules,
+        },
       };
 
-      debug(generatedConfig);
-
-      // Return partial config (recommended)
-      // See: https://vitejs.dev/guide/api-plugin.html#config
-      return generatedConfig;
+      debug(generated);
+      return generated;
     },
   };
 }
