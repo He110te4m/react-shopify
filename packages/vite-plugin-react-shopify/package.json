@@ -33,7 +33,11 @@
     "dev": "tsup --watch",
     "build": "tsup && cp dev-server-index.html dist/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release": "bumpp && pnpm publish",
+    "release:patch": "bumpp --patch",
+    "release:minor": "bumpp --minor",
+    "release:major": "bumpp --major"
   },
   "dependencies": {
     "debug": "^4.4.0",
@@ -42,6 +46,7 @@
   "devDependencies": {
     "@types/debug": "^4.1.0",
     "@types/node": "^22.0.0",
+    "bumpp": "^11.1.0",
     "tsup": "^8.5.1",
     "typescript": "^5.8.0",
     "vite": "^8.0.14",

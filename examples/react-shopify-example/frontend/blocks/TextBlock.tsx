@@ -14,11 +14,11 @@ const settings = [
     id: "text_style",
     label: "Text Style",
     options: [
-      { value: "text--title", label: "Title" },
-      { value: "text--subtitle", label: "Subtitle" },
-      { value: "text--normal", label: "Normal" },
+      { value: "ssg-text--title", label: "Title" },
+      { value: "ssg-text--subtitle", label: "Subtitle" },
+      { value: "", label: "Normal" },
     ],
-    default: "text--title",
+    default: "ssg-text--title",
   },
   {
     type: "text_alignment",
@@ -34,19 +34,15 @@ export const shopifyMeta = {
   presets: [{ name: "Text (React)" }],
 } satisfies ShopifyMeta;
 
-const STYLE_MAP: Record<string, string> = {
-  "text--title": "ssg-text--title",
-  "text--subtitle": "ssg-text--subtitle",
-};
-
 export default function TextBlock() {
   const s = useShopifySettings();
   const text = (s.text as string) || "Text";
+  const text_style = (s.text_style as string) || "ssg-text--title";
   const alignment = (s.alignment as string) || "left";
 
   return (
     <div
-      className={`ssg-text`}
+      className={`ssg-text ${text_style}`}
       style={{ "--ssg-text-align": alignment } as React.CSSProperties}
     >
       {text}
