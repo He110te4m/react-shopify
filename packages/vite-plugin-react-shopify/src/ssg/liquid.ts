@@ -63,6 +63,13 @@ const hasBlocks = (entry: SSGEntry): boolean =>
 const SETTINGS_SECTION = `  <script type="application/json" data-ssg-props>{{ section.settings | json }}</script>`;
 const SETTINGS_BLOCK = `  <script type="application/json" data-ssg-props>{{ block.settings | json }}</script>`;
 
+function buildParamsBridge(params: string[]): string {
+  const entries = params
+    .map((p) => `    "${p}": {{ ${p} | json }}`)
+    .join(",\n");
+  return `  <script type="application/json" data-ssg-params>\n  {\n${entries}\n  }\n  </script>`;
+}
+
 function buildSection(html: string, entry: SSGEntry): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
@@ -78,6 +85,11 @@ function buildSection(html: string, entry: SSGEntry): string[] {
   lines.push(
     `>`,
     SETTINGS_SECTION,
+  );
+  if (entry.meta.params?.length) {
+    lines.push(buildParamsBridge(entry.meta.params));
+  }
+  lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
     `  </div>`,
@@ -108,6 +120,11 @@ function buildBlock(html: string, entry: SSGEntry): string[] {
     `  {{ block.shopify_attributes }}`,
     `>`,
     SETTINGS_BLOCK,
+  );
+  if (entry.meta.params?.length) {
+    lines.push(buildParamsBridge(entry.meta.params));
+  }
+  lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
     `  </div>`,

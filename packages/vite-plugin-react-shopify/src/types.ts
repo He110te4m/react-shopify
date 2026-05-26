@@ -300,6 +300,7 @@ export interface ShopifyMeta {
   tag?: string;
   class?: string;
   limit?: number;
+  params?: string[];
   settings?: SettingSchema[];
   blocks?: { type: string; name?: string; settings?: SettingSchema[] }[];
   max_blocks?: number;
