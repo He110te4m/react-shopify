@@ -1,0 +1,7 @@
+{
+  "indentStyle": "space",
+  "indentSize": 2,
+  "quoteStyle": "single",
+  "trailingComma": "all",
+  "arrowFunctionParentheses": "always"
+}

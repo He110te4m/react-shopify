@@ -1,0 +1,10 @@
+{
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "plugins": ["typescript", "import", "unicorn"],
+  "rules": {
+    "typescript/no-explicit-any": "off"
+  }
+}
