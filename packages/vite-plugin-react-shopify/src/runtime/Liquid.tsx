@@ -1,9 +1,7 @@
-export function Liquid({ code }: { code: string }): any {
-  return {
-    $$typeof: Symbol.for("react.element"),
-    type: "react-liquid",
-    props: { dangerouslySetInnerHTML: { __html: code } },
-    key: null,
-    ref: null,
-  };
+import { createElement } from "react";
+
+export function Liquid({ code }: { code: string }) {
+  return createElement("react-liquid", {
+    dangerouslySetInnerHTML: { __html: code },
+  });
 }

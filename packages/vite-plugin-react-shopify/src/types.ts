@@ -2,6 +2,7 @@ export interface Options {
   themeRoot?: string;
   sourceCodeDir?: string;
   snippetFile?: string;
+  buildDir?: string;
   ssg?: SSGOptions;
   importMap?: ImportMapOptions;
 }

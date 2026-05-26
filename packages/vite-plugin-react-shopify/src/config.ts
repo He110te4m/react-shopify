@@ -17,7 +17,7 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
         base: config.base ?? "./",
         publicDir: config.publicDir ?? false,
         build: {
-          outDir: config.build?.outDir ?? path.join(options.themeRoot, "assets"),
+          outDir: config.build?.outDir ?? path.join(options.themeRoot, options.buildDir),
           assetsDir: config.build?.assetsDir ?? "",
           emptyOutDir: config.build?.emptyOutDir ?? false,
           manifest: config.build?.manifest ?? true,

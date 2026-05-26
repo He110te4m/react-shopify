@@ -7,6 +7,7 @@ const DISCLAIMER =
 interface AssembleOptions {
   prefix: { template: string; section: string; block: string };
   outputName?: string;
+  buildDir: string;
 }
 
 export function assembleLiquidFile(
@@ -44,9 +45,10 @@ export function assembleLiquidFile(
   }
 
   if (scriptAsset) {
+    const assetPath = getAssetRelativePath(options.buildDir, scriptAsset);
     parts.push(
       "",
-      `<script type="module" src="{{ '${scriptAsset}' | asset_url }}"></script>`,
+      `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`,
     );
   }
 
@@ -67,12 +69,8 @@ function buildSection(html: string, entry: SSGEntry): string[] {
 
   const lines: string[] = [
     "",
-    "{% liquid",
-    `  assign el_id = 'shopify-' | append: section.id`,
-    "%}",
-    "",
     `<${tag}`,
-    `  id="{{ el_id }}"`,
+    `  id="{{ section.id }}"`,
     `  data-section-id="{{ section.id }}"`,
     `  data-ssg-component="${entry.kebabName}"`,
   ];
@@ -100,12 +98,8 @@ function buildBlock(html: string, entry: SSGEntry): string[] {
     `  @context theme-block`,
     `{%- enddoc -%}`,
     "",
-    "{% liquid",
-    `  assign el_id = 'shopify-' | append: section.id | append: '-' | append: block.id`,
-    "%}",
-    "",
     `<${tag}`,
-    `  id="{{ el_id }}"`,
+    `  id="{{ block.id }}"`,
     `  data-section-id="{{ section.id }}"`,
     `  data-ssg-component="${entry.kebabName}"`,
   ];
@@ -138,6 +132,12 @@ export function getOutputPath(
 }
 
 import path from "node:path";
+
+function getAssetRelativePath(buildDir: string, filename: string): string {
+  if (!buildDir.startsWith("assets/")) return filename;
+  const prefix = buildDir.slice("assets/".length);
+  return prefix ? `${prefix}/${filename}` : filename;
+}
 
 function resolveFileName(
   entry: SSGEntry,

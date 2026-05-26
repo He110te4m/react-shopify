@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
 
 export const shopifyMeta = {
   name: "Counter (React)",
@@ -29,17 +30,12 @@ export const shopifyMeta = {
   ],
 } satisfies ShopifyMeta;
 
-interface CounterProps {
-  title?: string;
-  initial_count?: number;
-  step?: string;
-}
+export default function Counter() {
+  const s = useShopifySettings();
+  const title = (s.title as string) || "Counter";
+  const initial_count = Number(s.initial_count) || 0;
+  const step = (s.step as string) || "1";
 
-export default function Counter({
-  title = "Counter",
-  initial_count = 0,
-  step = "1",
-}: CounterProps) {
   const stepNum = Number(step) || 1;
   const [count, setCount] = useState(initial_count);
 

@@ -5,12 +5,13 @@ export default {
     vitePluginShopify({
       themeRoot: ".",
       sourceCodeDir: "frontend",
+      buildDir: "assets/build",
       ssg: {
         directories: ["sections", "blocks", "templates"],
       },
     }),
   ],
   build: {
-    emptyOutDir: false,
+    emptyOutDir: true,
   },
 };

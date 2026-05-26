@@ -50,10 +50,15 @@ async function compileEntry(
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
 
-  const ssgSource = sourceCode.replace(
-    /import\s+(\w+)\s+from\s+["'][^"']*\.module\.css["'];?\s*/g,
-    (_, name) => `const ${name} = new Proxy({},{get:(_,k)=>k});`,
-  );
+  const ssgSource = sourceCode
+    .replace(
+      /import\s+(\w+)\s+from\s+["'][^"']*\.module\.css["'];?\s*/g,
+      (_, name) => `const ${name} = new Proxy({},{get:(_,k)=>k});`,
+    )
+    .replace(
+      /import\s+["'][^"']*\.css["'];?\s*/g,
+      "",
+    );
 
   let esbuild: any;
   try {
@@ -91,6 +96,8 @@ async function compileEntry(
       entry.meta = { ...entry.meta, ...shopifyMeta };
     }
 
+    (globalThis as any).__shopify_ssg_target = entry.targetType;
+
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
 
@@ -98,11 +105,12 @@ async function compileEntry(
     html = unwrapHtmlEntities(html);
 
     const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
-    const cssContents = readCssAssets(entry.kebabName, manifest, options.themeRoot);
+    const cssContents = readCssAssets(entry.kebabName, manifest, options.buildDir, options.themeRoot);
 
     const liquidContent = assembleLiquidFile(html, entry, scriptAsset, cssContents, {
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
+      buildDir: options.buildDir,
     });
 
     const outputPath = getOutputPath(entry, {
@@ -137,7 +145,7 @@ function resolveScriptAsset(kebabName: string, manifest: Manifest): string | nul
   return path.basename(file);
 }
 
-function readCssAssets(kebabName: string, manifest: Manifest, themeRoot: string): string[] {
+function readCssAssets(kebabName: string, manifest: Manifest, buildDir: string, themeRoot: string): string[] {
   const manifestKey = `shopify:entry:${kebabName}`;
   const entryChunk = manifest[manifestKey];
   if (!entryChunk) return [];
@@ -145,7 +153,7 @@ function readCssAssets(kebabName: string, manifest: Manifest, themeRoot: string)
   const css = entryChunk.css;
   if (!css || !Array.isArray(css)) return [];
 
-  const assetsDir = path.resolve(themeRoot, "assets");
+  const assetsDir = path.resolve(themeRoot, buildDir);
   return css.map((file) => {
     const cssPath = path.join(assetsDir, file);
     try {

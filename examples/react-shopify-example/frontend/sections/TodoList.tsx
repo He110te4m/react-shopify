@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
 
 export const shopifyMeta = {
   name: "Todo List (React)",
@@ -17,10 +18,7 @@ export const shopifyMeta = {
     {
       name: "Todo List (Shopping)",
       category: "Demo",
-      settings: {
-        title: "Shopping List",
-        placeholder: "Add item...",
-      },
+      settings: { title: "Shopping List", placeholder: "Add item..." },
     },
   ],
 } satisfies ShopifyMeta;
@@ -31,17 +29,13 @@ interface Todo {
   done: boolean;
 }
 
-interface TodoListProps {
-  title?: string;
-  placeholder?: string;
-}
-
 let nextId = 1;
 
-export default function TodoList({
-  title = "Todo List",
-  placeholder = "What needs to be done?",
-}: TodoListProps) {
+export default function TodoList() {
+  const s = useShopifySettings();
+  const title = (s.title as string) || "Todo List";
+  const placeholder = (s.placeholder as string) || "What needs to be done?";
+
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
 

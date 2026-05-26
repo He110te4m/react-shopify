@@ -58,7 +58,7 @@ my-theme/
 ├── templates/
 ├── snippets/
 │   └── shopify-importmap.liquid  ← 自动生成的 importmap
-└── assets/                   ← Vite 构建产物
+└── assets/                   ← Vite 构建产物（可通过 buildDir 配置子目录）
 ```
 
 源码放在 `frontend/` 下，按 Shopify 类型分目录。构建后生成对应的 `.liquid` 文件到主题根目录的 `sections/`、`blocks/`、`templates/` 下。
@@ -239,6 +239,7 @@ vitePluginShopify({
   themeRoot: ".",              // 主题根目录
   sourceCodeDir: "frontend",   // React 源码目录（相对于 themeRoot）
   snippetFile: "shopify-importmap.liquid", // importmap 片段文件名
+  buildDir: "assets",          // Vite 构建产物输出目录（相对于 themeRoot）
 
   // === SSG 配置 ===
   ssg: {
@@ -346,3 +347,4 @@ export default function Section() {
 4. **Template 类型不包裹**：`type: "template"` 的组件 HTML 直接输出，不添加 section/block 外层结构，适用于整页模板
 5. **Section 必须有预设才能通过编辑器添加**：没有 `presets` 的 section 需要手动在 JSON 模板中引用，编辑器无法直接添加
 6. **`{% content_for 'blocks' %}` 自动插入**：当 `shopifyMeta.blocks` 非空时，插件自动在生成的 Liquid 中插入子 block 渲染标签
+7. **构建产物默认输出到 `assets/`**：如需与其他静态资源隔离，可设置 `buildDir: "assets/build"` 将产物输出到子目录，然后在 `.gitignore` 中添加 `assets/build/` 忽略该目录

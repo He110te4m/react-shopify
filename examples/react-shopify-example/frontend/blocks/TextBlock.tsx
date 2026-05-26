@@ -1,5 +1,6 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import styles from "./TextBlock.module.css";
+import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+import "./TextBlock.css";
 
 const settings = [
   {
@@ -33,26 +34,19 @@ export const shopifyMeta = {
   presets: [{ name: "Text (React)" }],
 } satisfies ShopifyMeta;
 
-interface TextBlockProps {
-  text?: string;
-  text_style?: string;
-  alignment?: string;
-}
-
 const STYLE_MAP: Record<string, string> = {
-  "text--title": styles["ssg-text--title"],
-  "text--subtitle": styles["ssg-text--subtitle"],
-  "text--normal": styles["ssg-text--normal"],
+  "text--title": "ssg-text--title",
+  "text--subtitle": "ssg-text--subtitle",
 };
 
-export default function TextBlock({
-  text = "Text",
-  text_style = "text--title",
-  alignment = "left",
-}: TextBlockProps) {
+export default function TextBlock() {
+  const s = useShopifySettings();
+  const text = (s.text as string) || "Text";
+  const alignment = (s.alignment as string) || "left";
+
   return (
     <div
-      className={`${styles["ssg-text"]} ${STYLE_MAP[text_style] ?? ""}`}
+      className={`ssg-text`}
       style={{ "--ssg-text-align": alignment } as React.CSSProperties}
     >
       {text}

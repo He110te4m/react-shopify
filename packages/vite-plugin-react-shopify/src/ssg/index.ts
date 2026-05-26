@@ -16,7 +16,7 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
     async closeBundle() {
       const manifestPath = path.resolve(
         options.themeRoot,
-        "assets",
+        options.buildDir,
         ".vite",
         "manifest.json",
       );

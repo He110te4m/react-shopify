@@ -5,6 +5,7 @@ export interface ResolvedOptions {
   themeRoot: string;
   sourceCodeDir: string;
   snippetFile: string;
+  buildDir: string;
   ssg: ResolvedSSGOptions;
   importMap: Required<ImportMapOptions>;
 }
@@ -30,6 +31,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   const themeRoot = options.themeRoot ?? "./";
   const sourceCodeDir = options.sourceCodeDir ?? "frontend";
   const snippetFile = options.snippetFile ?? "shopify-importmap.liquid";
+  const buildDir = options.buildDir ?? "assets";
 
   const ssg: ResolvedSSGOptions = {
     directories: options.ssg?.directories ?? ["sections", "blocks", "templates"],
@@ -50,6 +52,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
     themeRoot: path.resolve(themeRoot),
     sourceCodeDir,
     snippetFile,
+    buildDir,
     ssg,
     importMap,
   };

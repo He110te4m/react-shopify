@@ -17,10 +17,7 @@ release
 *.zip
 
 # Vite build output
-assets/*-*.js
-assets/*-*.css
-assets/*.map
-assets/.vite/
+assets/build/
 
 # Shopify importmap snippet (auto-generated)
 snippets/shopify-importmap.liquid

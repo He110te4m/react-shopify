@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     "runtime/Liquid": "src/runtime/Liquid.tsx",
     "runtime/Liquid.client": "src/runtime/Liquid.client.tsx",
+    "runtime/settings": "src/runtime/settings.tsx",
   },
   format: ["esm"],
   dts: true,

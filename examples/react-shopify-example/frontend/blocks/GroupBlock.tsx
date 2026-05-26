@@ -1,5 +1,6 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import styles from "./GroupBlock.module.css";
+import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+import "./GroupBlock.css";
 
 export const shopifyMeta = {
   name: "Group (React)",
@@ -58,25 +59,20 @@ export const shopifyMeta = {
   ],
 } satisfies ShopifyMeta;
 
-interface GroupBlockProps {
-  layout_direction?: string;
-  alignment?: string;
-  padding?: number;
-}
-
 const DIR_MAP: Record<string, string> = {
-  "group--horizontal": styles["ssg-group--horizontal"],
-  "group--vertical": styles["ssg-group--vertical"],
+  "group--horizontal": "ssg-group--horizontal",
+  "group--vertical": "ssg-group--vertical",
 };
 
-export default function GroupBlock({
-  layout_direction = "group--vertical",
-  alignment = "flex-start",
-  padding = 0,
-}: GroupBlockProps) {
+export default function GroupBlock() {
+  const s = useShopifySettings();
+  const layout_direction = (s.layout_direction as string) || "group--vertical";
+  const alignment = (s.alignment as string) || "flex-start";
+  const padding = Number(s.padding ?? 0);
+
   return (
     <div
-      className={`${styles["ssg-group"]} ${DIR_MAP[layout_direction] ?? ""}`}
+      className={`ssg-group ${DIR_MAP[layout_direction] ?? ""}`}
       style={{
         padding:
           layout_direction === "group--horizontal"
