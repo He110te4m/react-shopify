@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { Plugin, Manifest } from "vite";
 import type { ResolvedOptions } from "../options";
+import { logger } from "../logger";
 import { compileAllEntries } from "./compiler";
+
+const log = logger("ssg");
 
 export default function shopifySSG(options: ResolvedOptions): Plugin {
   return {
@@ -22,17 +25,19 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
       );
 
       if (!fs.existsSync(manifestPath)) {
-        console.warn("[vite-plugin-shopify] No manifest.json found, skipping SSG");
+        log.warn("No manifest.json found, skipping SSG");
         return;
       }
 
+      log.debug("reading manifest from %s", manifestPath);
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as Manifest;
 
-      console.log("[vite-plugin-shopify] Starting SSG compilation...");
+      log.info("Starting SSG compilation...");
       await compileAllEntries(options, manifest);
-      console.log("[vite-plugin-shopify] SSG compilation complete");
+      log.info("SSG compilation complete");
 
       writeImportMapSnippet(options);
+      log.debug("wrote import map snippet");
     },
 
     resolveId(id) {

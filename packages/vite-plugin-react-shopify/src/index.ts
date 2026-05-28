@@ -1,12 +1,17 @@
 import { Plugin } from "vite";
 import { resolveOptions } from "./options";
 import type { Options } from "./types";
+import { enableDebug } from "./logger";
 import shopifyConfig from "./config";
 import shopifyEntries from "./entries";
 import shopifySSG from "./ssg";
 
 const vitePluginShopify = (options: Options = {}): Plugin[] => {
   const resolvedOptions = resolveOptions(options);
+
+  if (resolvedOptions.debug || process.env.DEBUG?.includes("vite-plugin-shopify")) {
+    enableDebug();
+  }
 
   return [
     shopifyConfig(resolvedOptions),

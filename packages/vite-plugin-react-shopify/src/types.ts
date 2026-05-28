@@ -3,6 +3,7 @@ export interface Options {
   sourceCodeDir?: string;
   snippetFile?: string;
   buildDir?: string;
+  debug?: boolean;
   ssg?: SSGOptions;
   importMap?: ImportMapOptions;
 }

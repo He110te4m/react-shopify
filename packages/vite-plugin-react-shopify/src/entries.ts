@@ -3,7 +3,10 @@ import { Plugin } from "vite";
 import { normalizePath } from "vite";
 import type { ResolvedOptions } from "./options";
 import type { SSGEntry } from "./types";
+import { logger } from "./logger";
 import { scanEntries } from "./ssg/scanner";
+
+const log = logger("entries");
 
 export default function shopifyEntries(options: ResolvedOptions): Plugin {
   let entries: SSGEntry[] = [];
@@ -13,6 +16,12 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
 
     config(config) {
       entries = scanEntries(options);
+
+      const byType: Record<string, number> = {};
+      for (const e of entries) {
+        byType[e.targetType] = (byType[e.targetType] || 0) + 1;
+      }
+      log.debug("scanned %d entries: %s", entries.length, JSON.stringify(byType));
 
       if (entries.length === 0) return {};
 

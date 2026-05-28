@@ -298,6 +298,9 @@ vitePluginShopify({
   snippetFile: "shopify-importmap.liquid", // importmap 片段文件名
   buildDir: "assets",          // Vite 构建产物输出目录（相对于 themeRoot）
 
+  // === 调试 ===
+  debug: false,                // 启用详细日志输出
+
   // === SSG 配置 ===
   ssg: {
     directories: ["sections", "blocks", "templates"], // 扫描的目录
@@ -393,6 +396,63 @@ export default function Section() {
 ```liquid
 {% render 'shopify-importmap' %}
 ```
+
+---
+
+## 调试
+
+插件提供了两种方式启用详细日志输出，方便诊断构建问题。
+
+### 方式一：插件选项
+
+```ts
+vitePluginShopify({
+  debug: true,
+});
+```
+
+### 方式二：环境变量
+
+```bash
+DEBUG=vite-plugin-shopify:* npx vite build
+```
+
+两种方式效果相同，都会输出详细的构建过程信息。
+
+### Debug 输出示例
+
+启用 debug 模式后，构建过程会输出：
+
+```
+vite-plugin-shopify:entries scanned 5 entries: {"section":3,"block":2}
+vite-plugin-shopify:ssg:compiler found 5 entries to compile
+vite-plugin-shopify:ssg:compiler entry counter has 1 CSS files
+vite-plugin-shopify:ssg:compiler entry hello-world has 1 CSS files
+vite-plugin-shopify:ssg:compiler generated shared CSS snippet react-css-SharedCard (used by 2 entries)
+vite-plugin-shopify:ssg:compiler compiling counter (type=section, css inline=0, css snippets=1)
+vite-plugin-shopify:ssg:compiler bundling counter via esbuild
+vite-plugin-shopify:ssg:compiler esbuild bundle took 53ms
+...
+[vite-plugin-shopify] Starting SSG compilation...
+[vite-plugin-shopify] Compiled 5 entries
+[vite-plugin-shopify] SSG compilation complete
+```
+
+### 日志级别
+
+| 级别 | 触发条件 | 可见性 |
+|------|----------|--------|
+| `info` | 始终可见 | 构建阶段摘要、完成计数 |
+| `warn` | 始终可见 | 缺少依赖、跳过的组件 |
+| `error` | 始终可见 | 编译失败的组件及堆栈 |
+| `debug` | 仅 debug 模式 | 入口扫描结果、CSS 分发、esbuild 耗时、配置详情 |
+
+### 诊断场景
+
+- **组件未被识别** → 开启 debug，检查 `scanned entries` 输出，确认文件和目录命名
+- **CSS 未生效** → 开启 debug，检查 `has CSS files` 和 `css inline/snippets` 统计
+- **SSG 渲染失败** → `error` 级别自动输出完整错误堆栈
+- **构建缓慢** → 开启 debug，检查每个组件的 `esbuild bundle took Xms`
 
 ---
 

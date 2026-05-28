@@ -6,6 +6,7 @@ export interface ResolvedOptions {
   sourceCodeDir: string;
   snippetFile: string;
   buildDir: string;
+  debug: boolean;
   ssg: ResolvedSSGOptions;
   importMap: Required<ImportMapOptions>;
 }
@@ -53,6 +54,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
     sourceCodeDir,
     snippetFile,
     buildDir,
+    debug: options.debug ?? false,
     ssg,
     importMap,
   };

@@ -4,9 +4,12 @@ import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import type { ResolvedOptions } from "../options";
 import type { SSGEntry } from "../types";
+import { logger } from "../logger";
 import { scanEntries } from "./scanner";
 import { stripReactLiquidTags, unwrapHtmlEntities } from "./post-process";
 import { assembleLiquidFile, getOutputPath } from "./liquid";
+
+const log = logger("ssg:compiler");
 
 const SNIPPET_PREFIX = "react-css";
 
@@ -16,6 +19,8 @@ export async function compileAllEntries(
 ): Promise<void> {
   const entries = scanEntries(options);
   if (entries.length === 0) return;
+
+  log.debug("found %d entries to compile", entries.length);
 
   const projectRoot = path.resolve(options.themeRoot);
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
@@ -31,6 +36,7 @@ export async function compileAllEntries(
     for (const f of files) {
       cssRefCount.set(f, (cssRefCount.get(f) || 0) + 1);
     }
+    log.debug("entry %s has %d CSS files", entry.kebabName, files.length);
   }
 
   // Phase 2: Generate snippet files for shared CSS
@@ -52,8 +58,9 @@ export async function compileAllEntries(
         const cssContent = fs.readFileSync(cssPath, "utf-8");
         fs.mkdirSync(path.dirname(snippetPath), { recursive: true });
         fs.writeFileSync(snippetPath, `{% stylesheet %}\n${cssContent.trim()}\n{% endstylesheet %}\n`);
+        log.debug("generated shared CSS snippet %s (used by %d entries)", snippetName, count);
       } catch {
-        /* ignore missing CSS file */
+        log.warn("failed to write CSS snippet for %s", cssFile);
       }
     }
   }
@@ -69,13 +76,16 @@ export async function compileAllEntries(
 
       const cssInline = readCssFileContents(cssInlineFiles, options.buildDir, options.themeRoot);
 
+      log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
+        entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
+
       await compileEntry(entry, options, manifest, projectRoot, sourceDir, cssInline, cssSnippets);
     } catch (err) {
-      console.error(`[vite-plugin-shopify] Failed to compile ${entry.filePath}:`, err);
+      log.error("Failed to compile %s:", entry.filePath, err);
     }
   }
 
-  console.log(`[vite-plugin-shopify] Compiled ${entries.length} entries`);
+  log.info("Compiled %d entries", entries.length);
 
   const tmpDir = path.join(sourceDir, ".ssg-tmp");
   try {
@@ -102,7 +112,7 @@ async function compileEntry(
     createElement = projectRequire("react").createElement;
     renderToStaticMarkup = projectRequire("react-dom/server").renderToStaticMarkup;
   } catch {
-    console.warn(`[vite-plugin-shopify] react/react-dom not found, skipping SSR`);
+    log.warn("react/react-dom not found, skipping SSR for %s", entry.kebabName);
     return;
   }
 
@@ -112,7 +122,7 @@ async function compileEntry(
   try {
     esbuild = projectRequire("esbuild");
   } catch {
-    console.warn(`[vite-plugin-shopify] esbuild not found, skipping SSR`);
+    log.warn("esbuild not found, skipping SSR for %s", entry.kebabName);
     return;
   }
 
@@ -120,6 +130,9 @@ async function compileEntry(
   const tmpDir = path.join(sourceDir, ".ssg-tmp");
   fs.mkdirSync(tmpDir, { recursive: true });
   const tmpFile = path.join(tmpDir, `.ssg-entry-${ts}.mjs`);
+
+  log.debug("bundling %s via esbuild", entry.kebabName);
+  const startBundled = Date.now();
 
   await esbuild.build({
     stdin: {
@@ -166,6 +179,8 @@ async function compileEntry(
     ],
   });
 
+  log.debug("esbuild bundle took %dms", Date.now() - startBundled);
+
   try {
     const mod = await import(pathToFileURL(tmpFile));
 
@@ -173,9 +188,7 @@ async function compileEntry(
     const shopifyMeta = mod.shopifyMeta;
 
     if (!Component) {
-      console.warn(
-        `[vite-plugin-shopify] No default export found in ${entry.filePath}, skipping`,
-      );
+      log.warn("No default export found in %s, skipping", entry.filePath);
       return;
     }
 

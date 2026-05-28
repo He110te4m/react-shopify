@@ -1,12 +1,11 @@
 import path from "node:path";
 import { Plugin, UserConfig } from "vite";
-import createDebugger from "debug";
+import { logger } from "./logger";
 import type { ResolvedOptions } from "./options";
 
-const debug = createDebugger("vite-plugin-shopify:config");
+const log = logger("config");
 
 export default function shopifyConfig(options: ResolvedOptions): Plugin {
-  const isDebug = process.env.VITE_SHOPIFY_DEBUG === "true";
 
   return {
     name: "vite-plugin-shopify:config",
@@ -21,8 +20,8 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
           assetsDir: config.build?.assetsDir ?? "",
           emptyOutDir: config.build?.emptyOutDir ?? false,
           manifest: config.build?.manifest ?? true,
-          minify: config.build?.minify ?? (isDebug ? false : undefined),
-          sourcemap: config.build?.sourcemap ?? (isDebug ? true : undefined),
+          minify: config.build?.minify ?? (options.debug ? false : undefined),
+          sourcemap: config.build?.sourcemap ?? (options.debug ? true : undefined),
           rollupOptions: {
             ...config.build?.rollupOptions,
             external: [
@@ -69,7 +68,7 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
         },
       };
 
-      debug(generated);
+      log.debug("generated config: %O", generated);
       return generated;
     },
   };
