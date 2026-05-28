@@ -7,6 +7,7 @@ export interface ResolvedOptions {
   snippetFile: string;
   buildDir: string;
   debug: boolean;
+  hash: boolean;
   ssg: ResolvedSSGOptions;
   importMap: Required<ImportMapOptions>;
 }
@@ -55,6 +56,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
     snippetFile,
     buildDir,
     debug: options.debug ?? false,
+    hash: options.hash ?? false,
     ssg,
     importMap,
   };

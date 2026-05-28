@@ -4,6 +4,7 @@ export interface Options {
   snippetFile?: string;
   buildDir?: string;
   debug?: boolean;
+  hash?: boolean;
   ssg?: SSGOptions;
   importMap?: ImportMapOptions;
 }

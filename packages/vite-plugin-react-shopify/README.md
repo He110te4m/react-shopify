@@ -40,6 +40,30 @@ export default function HelloWorld() {
 
 构建后生成 `sections/react-hello-world.liquid`。
 
+### 开发
+
+使用 `vite build --watch` 进行本地开发。Vite 8 的 Rolldown 内置增量构建缓存，文件变更时仅重新构建受影响的模块。
+
+```bash
+# 终端 1: 启动 Vite 构建监听
+pnpm dev    # → vite build --watch
+
+# 终端 2: 启动 Shopify 主题开发
+shopify theme dev
+```
+
+Vite 监听文件变化 → 增量构建 → 写入磁盘 → Shopify CLI 检测到变化 → 推送主题 → 编辑器热更新。watch 模式下产物不压缩、附带 inline sourcemap，方便在浏览器中调试。
+
+```json
+// package.json
+{
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build"
+  }
+}
+```
+
 ---
 
 ## 目录结构
@@ -298,6 +322,9 @@ vitePluginShopify({
   snippetFile: "shopify-importmap.liquid", // importmap 片段文件名
   buildDir: "assets",          // Vite 构建产物输出目录（相对于 themeRoot）
 
+  // === 构建配置 ===
+  hash: false,                 // 产物文件名是否包含 content hash，默认 false
+
   // === 调试 ===
   debug: false,                // 启用详细日志输出
 
@@ -335,6 +362,7 @@ vitePluginShopify({
 - 组件文件名通过 `toKebabCase` 转换为 kebab-case：
   - `HelloWorld` → `hello-world`
   - `FAQSection` → `faq-section`
+- JS 产物默认使用稳定文件名（如 `assets/build/hello-world.js`），设置 `hash: true` 后启用 content hash（如 `assets/build/hello-world-aBc123.js`）
 
 ### 自定义命名（`outputName`）
 
@@ -465,3 +493,5 @@ vite-plugin-shopify:ssg:compiler esbuild bundle took 53ms
 5. **Section 必须有预设才能通过编辑器添加**：没有 `presets` 的 section 需要手动在 JSON 模板中引用，编辑器无法直接添加
 6. **`{% content_for 'blocks' %}` 自动插入**：当 `shopifyMeta.blocks` 非空时，插件自动在生成的 Liquid 中插入子 block 渲染标签
 7. **构建产物默认输出到 `assets/`**：如需与其他静态资源隔离，可设置 `buildDir: "assets/build"` 将产物输出到子目录，然后在 `.gitignore` 中添加 `assets/build/` 忽略该目录
+8. **Watch 模式自动关闭压缩**：`vite build --watch` 时自动设置 `minify: false` 并启用 inline sourcemap，方便在浏览器中调试。生产构建（`vite build`）则使用正常压缩
+9. **增量构建依赖 Rolldown 缓存**：watch 模式下 Rolldown 的 `ScanStageCache` 自动缓存模块图，文件变更时仅重新扫描变更模块，大幅加速构建。首次启动执行全量构建，后续为增量构建

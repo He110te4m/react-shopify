@@ -5,12 +5,22 @@ import type { ResolvedOptions } from "./options";
 
 const log = logger("config");
 
-export default function shopifyConfig(options: ResolvedOptions): Plugin {
+function isWatchMode(): boolean {
+  return process.argv.includes("--watch") || process.env.SHOPIFY_DEV_WATCH === "1";
+}
 
+export default function shopifyConfig(options: ResolvedOptions): Plugin {
   return {
     name: "vite-plugin-shopify:config",
     config(config: UserConfig): UserConfig {
       const sourceDirAbs = path.resolve(options.themeRoot, options.sourceCodeDir);
+      const watch = isWatchMode();
+
+      const entryFileNames = options.hash ? "[name]-[hash].js" : "[name].js";
+      const chunkFileNames = options.hash ? "[name]-[hash].js" : "[name].js";
+      const assetFileNames = options.hash ? "[name]-[hash][extname]" : "[name][extname]";
+
+      log.debug("hash=%s watch=%s", options.hash, watch);
 
       const generated: UserConfig = {
         base: config.base ?? "./",
@@ -20,8 +30,8 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
           assetsDir: config.build?.assetsDir ?? "",
           emptyOutDir: config.build?.emptyOutDir ?? false,
           manifest: config.build?.manifest ?? true,
-          minify: config.build?.minify ?? (options.debug ? false : undefined),
-          sourcemap: config.build?.sourcemap ?? (options.debug ? true : undefined),
+          minify: config.build?.minify ?? (watch || options.debug ? false : undefined),
+          sourcemap: config.build?.sourcemap ?? (watch || options.debug ? "inline" : undefined),
           rollupOptions: {
             ...config.build?.rollupOptions,
             external: [
@@ -33,9 +43,9 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
             ],
             output: {
               ...config.build?.rollupOptions?.output,
-              entryFileNames: "[name]-[hash].js",
-              chunkFileNames: "[name]-[hash].js",
-              assetFileNames: "[name]-[hash][extname]",
+              entryFileNames,
+              chunkFileNames,
+              assetFileNames,
             },
           },
         },
