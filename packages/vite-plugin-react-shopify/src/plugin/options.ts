@@ -27,6 +27,7 @@ const defaultPrefix: Required<NonNullable<SSGOptions["prefix"]>> = {
   template: "page.react-",
   section: "react-",
   block: "react-",
+  snippet: "react-",
 };
 
 export const resolveOptions = (options: Options = {}): ResolvedOptions => {
@@ -36,11 +37,12 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   const buildDir = options.buildDir ?? "assets";
 
   const ssg: ResolvedSSGOptions = {
-    directories: options.ssg?.directories ?? ["sections", "blocks", "templates"],
+    directories: options.ssg?.directories ?? ["sections", "blocks", "templates", "snippets"],
     prefix: {
       template: options.ssg?.prefix?.template ?? defaultPrefix.template,
       section: options.ssg?.prefix?.section ?? defaultPrefix.section,
       block: options.ssg?.prefix?.block ?? defaultPrefix.block,
+      snippet: options.ssg?.prefix?.snippet ?? defaultPrefix.snippet,
     },
     outputName: options.ssg?.outputName ?? "",
   };

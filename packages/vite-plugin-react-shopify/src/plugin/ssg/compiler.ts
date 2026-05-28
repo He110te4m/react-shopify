@@ -11,7 +11,7 @@ import { assembleLiquidFile, getOutputPath } from "./liquid";
 
 const log = logger("ssg:compiler");
 
-const SNIPPET_PREFIX = "react-css";
+const SNIPPET_PREFIX = "css";
 
 export async function compileAllEntries(
   options: ResolvedOptions,

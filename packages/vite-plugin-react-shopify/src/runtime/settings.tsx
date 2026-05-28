@@ -10,6 +10,7 @@ export function useShopifySettings<T = Record<string, any>>(): T {
 
   if (typeof (globalThis as any).window === "undefined") {
     const target = (globalThis as any).__shopify_ssg_target || "section";
+    if (target === "snippet") return {} as T;
     const prefix = target === "block" ? "block" : "section";
     return new Proxy(
       {},

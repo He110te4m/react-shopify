@@ -8,6 +8,7 @@ const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   templates: "template",
   sections: "section",
   blocks: "block",
+  snippets: "snippet",
 };
 
 export function scanEntries(options: ResolvedOptions): SSGEntry[] {

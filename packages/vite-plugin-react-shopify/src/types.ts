@@ -15,6 +15,7 @@ export interface SSGOptions {
     template?: string;
     section?: string;
     block?: string;
+    snippet?: string;
   };
   outputName?: string;
 }
@@ -24,7 +25,7 @@ export interface ImportMapOptions {
   reactDomClient?: string;
 }
 
-export type ShopifyBlockType = "template" | "section" | "block";
+export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
 
 export type SettingValue = string | number | boolean;
 
