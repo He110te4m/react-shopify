@@ -8,6 +8,8 @@ import { scanEntries } from "./scanner";
 import { stripReactLiquidTags, unwrapHtmlEntities } from "./post-process";
 import { assembleLiquidFile, getOutputPath } from "./liquid";
 
+const SNIPPET_PREFIX = "react-css";
+
 export async function compileAllEntries(
   options: ResolvedOptions,
   manifest: Manifest,
@@ -18,15 +20,69 @@ export async function compileAllEntries(
   const projectRoot = path.resolve(options.themeRoot);
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
 
+  // Phase 1: Collect all CSS files per entry & count references
+  const entryCssFiles = new Map<string, string[]>();
+  const cssRefCount = new Map<string, number>();
+
+  for (const entry of entries) {
+    const manifestKey = `shopify:entry:${entry.kebabName}`;
+    const files = collectCssFiles(manifestKey, manifest);
+    entryCssFiles.set(entry.kebabName, files);
+    for (const f of files) {
+      cssRefCount.set(f, (cssRefCount.get(f) || 0) + 1);
+    }
+  }
+
+  // Phase 2: Generate snippet files for shared CSS
+  const cssSnippetMap = new Map<string, string>(); // cssFile → snippetName
+  for (const [cssFile, count] of cssRefCount) {
+    if (count > 1) {
+      const snippetName = `${SNIPPET_PREFIX}-${getCssBaseName(cssFile)}`;
+      cssSnippetMap.set(cssFile, snippetName);
+      const snippetPath = path.join(
+        path.resolve(options.themeRoot),
+        "snippets",
+        `${snippetName}.liquid`,
+      );
+      const cssPath = path.join(
+        path.resolve(options.themeRoot, options.buildDir),
+        cssFile,
+      );
+      try {
+        const cssContent = fs.readFileSync(cssPath, "utf-8");
+        fs.mkdirSync(path.dirname(snippetPath), { recursive: true });
+        fs.writeFileSync(snippetPath, `{% stylesheet %}\n${cssContent.trim()}\n{% endstylesheet %}\n`);
+      } catch {
+        /* ignore missing CSS file */
+      }
+    }
+  }
+
+  // Phase 3: Compile each entry with categorized CSS
   for (const entry of entries) {
     try {
-      await compileEntry(entry, options, manifest, projectRoot, sourceDir);
+      const cssFiles = entryCssFiles.get(entry.kebabName) || [];
+      const cssSnippets = cssFiles
+        .filter((f) => cssSnippetMap.has(f))
+        .map((f) => cssSnippetMap.get(f)!);
+      const cssInlineFiles = cssFiles.filter((f) => !cssSnippetMap.has(f));
+
+      const cssInline = readCssFileContents(cssInlineFiles, options.buildDir, options.themeRoot);
+
+      await compileEntry(entry, options, manifest, projectRoot, sourceDir, cssInline, cssSnippets);
     } catch (err) {
       console.error(`[vite-plugin-shopify] Failed to compile ${entry.filePath}:`, err);
     }
   }
 
   console.log(`[vite-plugin-shopify] Compiled ${entries.length} entries`);
+
+  const tmpDir = path.join(sourceDir, ".ssg-tmp");
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 }
 
 async function compileEntry(
@@ -35,6 +91,8 @@ async function compileEntry(
   manifest: Manifest,
   projectRoot: string,
   sourceDir: string,
+  cssInline: string[],
+  cssSnippets: string[],
 ): Promise<void> {
   const projectRequire = createRequire(path.join(projectRoot, "package.json"));
 
@@ -50,16 +108,6 @@ async function compileEntry(
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
 
-  const ssgSource = sourceCode
-    .replace(
-      /import\s+(\w+)\s+from\s+["'][^"']*\.module\.css["'];?\s*/g,
-      (_, name) => `const ${name} = new Proxy({},{get:(_,k)=>k});`,
-    )
-    .replace(
-      /import\s+["'][^"']*\.css["'];?\s*/g,
-      "",
-    );
-
   let esbuild: any;
   try {
     esbuild = projectRequire("esbuild");
@@ -68,16 +116,55 @@ async function compileEntry(
     return;
   }
 
-  const result = await esbuild.transform(ssgSource, {
-    loader: path.extname(entry.filePath).slice(1) as "tsx" | "jsx",
+  const ts = Date.now();
+  const tmpDir = path.join(sourceDir, ".ssg-tmp");
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpFile = path.join(tmpDir, `.ssg-entry-${ts}.mjs`);
+
+  await esbuild.build({
+    stdin: {
+      contents: sourceCode,
+      resolveDir: path.dirname(entry.filePath),
+      loader: path.extname(entry.filePath).slice(1) as "tsx" | "jsx",
+    },
+    outfile: tmpFile,
+    bundle: true,
     format: "esm",
     jsx: "automatic",
-    sourcefile: entry.filePath,
+    platform: "node",
+    external: [
+      "react",
+      "react-dom",
+      "react-dom/*",
+      "vite-plugin-react-shopify",
+      "vite-plugin-react-shopify/*",
+    ],
+    write: true,
+    allowOverwrite: true,
+    plugins: [
+      {
+        name: "ssg-strip-css",
+        setup(build: any) {
+          build.onResolve({ filter: /\.module\.css$/ }, (args: any) => ({
+            namespace: "ssg-css-module",
+            path: args.path,
+          }));
+          build.onResolve({ filter: /\.css$/ }, (args: any) => ({
+            namespace: "ssg-css-plain",
+            path: args.path,
+          }));
+          build.onLoad({ filter: /.*/, namespace: "ssg-css-module" }, () => ({
+            contents: "export default new Proxy({},{get:(_,k)=>k});",
+            loader: "js",
+          }));
+          build.onLoad({ filter: /.*/, namespace: "ssg-css-plain" }, () => ({
+            contents: "",
+            loader: "js",
+          }));
+        },
+      },
+    ],
   });
-
-  const ts = Date.now();
-  const tmpFile = path.join(sourceDir, ".ssg-tmp-" + ts + ".mjs");
-  fs.writeFileSync(tmpFile, result.code);
 
   try {
     const mod = await import(pathToFileURL(tmpFile));
@@ -105,9 +192,8 @@ async function compileEntry(
     html = unwrapHtmlEntities(html);
 
     const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
-    const cssContents = readCssAssets(entry.kebabName, manifest, options.buildDir, options.themeRoot);
 
-    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, cssContents, {
+    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, { inline: cssInline, snippets: cssSnippets }, {
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
@@ -145,23 +231,59 @@ function resolveScriptAsset(kebabName: string, manifest: Manifest): string | nul
   return path.basename(file);
 }
 
-function readCssAssets(kebabName: string, manifest: Manifest, buildDir: string, themeRoot: string): string[] {
-  const manifestKey = `shopify:entry:${kebabName}`;
-  const entryChunk = manifest[manifestKey];
-  if (!entryChunk) return [];
+function collectCssFiles(manifestKey: string, manifest: Manifest): string[] {
+  const collected = new Set<string>();
+  const visited = new Set<string>();
+  collectCssFilesRecursive(manifestKey, manifest, collected, visited);
+  return [...collected];
+}
 
-  const css = entryChunk.css;
-  if (!css || !Array.isArray(css)) return [];
+function collectCssFilesRecursive(
+  chunkKey: string,
+  manifest: Manifest,
+  collected: Set<string>,
+  visited: Set<string>,
+): void {
+  if (visited.has(chunkKey)) return;
+  visited.add(chunkKey);
 
+  const chunk = manifest[chunkKey];
+  if (!chunk) return;
+
+  if (chunk.css && Array.isArray(chunk.css)) {
+    for (const cssFile of chunk.css) {
+      collected.add(cssFile);
+    }
+  }
+
+  if (chunk.imports && Array.isArray(chunk.imports)) {
+    for (const imported of chunk.imports) {
+      collectCssFilesRecursive(imported, manifest, collected, visited);
+    }
+  }
+}
+
+function readCssFileContents(cssFiles: string[], buildDir: string, themeRoot: string): string[] {
   const assetsDir = path.resolve(themeRoot, buildDir);
-  return css.map((file) => {
-    const cssPath = path.join(assetsDir, file);
+  return cssFiles.map((file) => {
     try {
-      return fs.readFileSync(cssPath, "utf-8");
+      return fs.readFileSync(path.join(assetsDir, file), "utf-8");
     } catch {
       return "";
     }
   }).filter(Boolean);
+}
+
+function getCssBaseName(cssFile: string): string {
+  const name = cssFile.replace(/\.css$/, "");
+  const lastHyphen = name.lastIndexOf("-");
+  if (lastHyphen > 0) {
+    const possibleHash = name.slice(lastHyphen + 1);
+    if (/^[A-Za-z0-9_-]{8,}$/.test(possibleHash)) {
+      return name.slice(0, lastHyphen);
+    }
+  }
+  return name;
 }
 
 function pathToFileURL(filePath: string): string {

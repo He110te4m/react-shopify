@@ -1,4 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import SharedCard from "../components/SharedCard/SharedCard";
 
 export const shopifyMeta = {
   name: "Hello World (React)",
@@ -27,30 +28,27 @@ export default function HelloWorld() {
       </section>
 
       <section className="highlights">
-        <div className="highlight">
-          <h3>React + Shopify</h3>
-          <p className="highlight-description">
+        <SharedCard title="React + Shopify" accentColor="#6c63ff">
+          <p>
             Write sections, blocks, and templates as React components. The SSG
             compiler converts them to Shopify Liquid files at build time.
           </p>
-        </div>
+        </SharedCard>
 
-        <div className="highlight">
-          <h3>Type-Safe Schemas</h3>
-          <p className="highlight-description">
+        <SharedCard title="Type-Safe Schemas" accentColor="#00b894">
+          <p>
             Define your Shopify section schema as a TypeScript object using the
             shopifyMeta export. Settings, presets, and blocks are all
             type-checked.
           </p>
-        </div>
+        </SharedCard>
 
-        <div className="highlight">
-          <h3>Hot Reload</h3>
-          <p className="highlight-description">
+        <SharedCard title="Hot Reload" accentColor="#fdcb6e">
+          <p>
             Changes to React components trigger automatic rebuilds. The theme
             refreshes instantly with @shopify/theme-hot-reload.
           </p>
-        </div>
+        </SharedCard>
       </section>
     </main>
   );

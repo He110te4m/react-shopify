@@ -1,0 +1,59 @@
+.SharedCard-card {
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  background: var(--color-background, #fff);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.SharedCard-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.SharedCard-card--expanded {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.SharedCard-cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.SharedCard-cardTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.SharedCard-cardToggle {
+  background: none;
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+  color: inherit;
+  transition: background 0.15s ease;
+}
+
+.SharedCard-cardToggle:hover {
+  background: var(--color-border, #f0f0f0);
+}
+
+.SharedCard-cardBody {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary, #555);
+}
+
+.SharedCard-accentLine {
+  height: 3px;
+  border-radius: 2px;
+  margin-bottom: 0.75rem;
+}

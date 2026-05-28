@@ -25,4 +25,5 @@ snippets/shopify-importmap.liquid
 # SSG compiled Liquid files (auto-generated)
 sections/react-*.liquid
 blocks/react-*.liquid
+snippets/react-*.liquid
 templates/page.react-*.liquid

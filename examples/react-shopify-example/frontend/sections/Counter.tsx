@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
 import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+import SharedCard from "../components/SharedCard/SharedCard";
 
 const settings = [
   { type: "text", id: "title", label: "Title", default: "Counter" },
@@ -42,8 +43,7 @@ export default function Counter() {
   const [count, setCount] = useState(initial_count);
 
   return (
-    <div className="counter-section">
-      <h2 className="counter-title">{title}</h2>
+    <SharedCard title={title} accentColor="#e17055">
       <p className="counter-value">{count}</p>
       <div className="counter-buttons">
         <button
@@ -68,6 +68,6 @@ export default function Counter() {
           +{step}
         </button>
       </div>
-    </div>
+    </SharedCard>
   );
 }
