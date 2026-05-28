@@ -7,7 +7,6 @@ export interface ResolvedOptions {
   snippetFile: string;
   buildDir: string;
   debug: boolean;
-  hash: boolean;
   ssg: ResolvedSSGOptions;
   importMap: Required<ImportMapOptions>;
 }
@@ -16,12 +15,8 @@ export interface ResolvedSSGOptions {
   directories: string[];
   prefix: Required<NonNullable<SSGOptions["prefix"]>>;
   outputName: string;
+  cssPrefix: string;
 }
-
-const defaultImportMap: Required<ImportMapOptions> = {
-  react: "https://esm.sh/react@19",
-  reactDomClient: "https://esm.sh/react-dom@19/client",
-};
 
 const defaultPrefix: Required<NonNullable<SSGOptions["prefix"]>> = {
   template: "page.react-",
@@ -29,6 +24,16 @@ const defaultPrefix: Required<NonNullable<SSGOptions["prefix"]>> = {
   block: "react-",
   snippet: "react-",
 };
+
+function assetRef(buildDir: string, filename: string): string {
+  if (buildDir === "assets") return filename;
+  const sub = buildDir.startsWith("assets/") ? buildDir.slice(7) : buildDir;
+  return `${sub}/${filename}`;
+}
+
+function liquidAssetUrl(ref: string): string {
+  return `{{ '${ref}' | asset_url }}`;
+}
 
 export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   const themeRoot = options.themeRoot ?? "./";
@@ -45,11 +50,12 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
       snippet: options.ssg?.prefix?.snippet ?? defaultPrefix.snippet,
     },
     outputName: options.ssg?.outputName ?? "",
+    cssPrefix: options.ssg?.cssPrefix ?? "css",
   };
 
   const importMap: Required<ImportMapOptions> = {
-    react: options.importMap?.react ?? defaultImportMap.react,
-    reactDomClient: options.importMap?.reactDomClient ?? defaultImportMap.reactDomClient,
+    react: options.importMap?.react ?? liquidAssetUrl(assetRef(buildDir, "react.js")),
+    reactDomClient: options.importMap?.reactDomClient ?? liquidAssetUrl(assetRef(buildDir, "react-dom.js")),
   };
 
   return {
@@ -58,7 +64,6 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
     snippetFile,
     buildDir,
     debug: options.debug ?? false,
-    hash: options.hash ?? false,
     ssg,
     importMap,
   };

@@ -26,4 +26,5 @@ snippets/shopify-importmap.liquid
 sections/react-*.liquid
 blocks/react-*.liquid
 snippets/react-*.liquid
+snippets/css-*.liquid
 templates/page.react-*.liquid

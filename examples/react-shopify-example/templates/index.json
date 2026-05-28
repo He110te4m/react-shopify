@@ -12,9 +12,48 @@
     "main": {
       "type": "hello-world",
       "settings": {}
+    },
+    "react_hello_world_iinCCE": {
+      "type": "react-hello-world",
+      "name": "Hello World React Template",
+      "settings": {}
+    },
+    "react_counter_NyQTzT": {
+      "type": "react-counter",
+      "name": "Counter (Default)",
+      "settings": {
+        "title": "Counter",
+        "initial_count": 0,
+        "step": "1"
+      }
+    },
+    "react_todo_list_FrdqkC": {
+      "type": "react-todo-list",
+      "name": "Todo List (Shopping)",
+      "settings": {
+        "title": "Shopping List",
+        "placeholder": "Add item..."
+      }
+    },
+    "react_settings_tracker_test_UyLCHw": {
+      "type": "react-settings-tracker-test",
+      "name": "Tracker Test (Default)",
+      "settings": {
+        "title": "默认标题",
+        "description": "",
+        "show_banner": true,
+        "banner_position": "top",
+        "font_size": 16,
+        "accent_color": "#6366f1",
+        "effect_only_text": "effect value"
+      }
     }
   },
   "order": [
-    "main"
+    "main",
+    "react_hello_world_iinCCE",
+    "react_counter_NyQTzT",
+    "react_todo_list_FrdqkC",
+    "react_settings_tracker_test_UyLCHw"
   ]
 }

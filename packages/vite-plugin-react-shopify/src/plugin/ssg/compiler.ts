@@ -11,8 +11,6 @@ import { assembleLiquidFile, getOutputPath } from "./liquid";
 
 const log = logger("ssg:compiler");
 
-const SNIPPET_PREFIX = "css";
-
 export async function compileAllEntries(
   options: ResolvedOptions,
   manifest: Manifest,
@@ -43,7 +41,7 @@ export async function compileAllEntries(
   const cssSnippetMap = new Map<string, string>(); // cssFile → snippetName
   for (const [cssFile, count] of cssRefCount) {
     if (count > 1) {
-      const snippetName = `${SNIPPET_PREFIX}-${getCssBaseName(cssFile)}`;
+      const snippetName = `${options.ssg.cssPrefix}-${getCssBaseName(cssFile)}`;
       cssSnippetMap.set(cssFile, snippetName);
       const snippetPath = path.join(
         path.resolve(options.themeRoot),
@@ -198,8 +196,16 @@ async function compileEntry(
 
     (globalThis as any).__shopify_ssg_target = entry.targetType;
 
+    const trackedSettings = new Set<string>();
+    const trackedParams = new Set<string>();
+    (globalThis as any).__shopify_ssg_track_settings = trackedSettings;
+    (globalThis as any).__shopify_ssg_track_params = trackedParams;
+
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
+
+    delete (globalThis as any).__shopify_ssg_track_settings;
+    delete (globalThis as any).__shopify_ssg_track_params;
 
     html = stripReactLiquidTags(html);
     html = unwrapHtmlEntities(html);
@@ -210,7 +216,7 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
-    });
+    }, [...trackedSettings], [...trackedParams]);
 
     const outputPath = getOutputPath(entry, {
       prefix: options.ssg.prefix,

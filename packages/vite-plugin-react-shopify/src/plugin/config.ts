@@ -16,11 +16,7 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
       const sourceDirAbs = path.resolve(options.themeRoot, options.sourceCodeDir);
       const watch = isWatchMode();
 
-      const entryFileNames = options.hash ? "[name]-[hash].js" : "[name].js";
-      const chunkFileNames = options.hash ? "[name]-[hash].js" : "[name].js";
-      const assetFileNames = options.hash ? "[name]-[hash][extname]" : "[name][extname]";
-
-      log.debug("hash=%s watch=%s", options.hash, watch);
+      log.debug("watch=%s", watch);
 
       const generated: UserConfig = {
         base: config.base ?? "./",
@@ -28,24 +24,33 @@ export default function shopifyConfig(options: ResolvedOptions): Plugin {
         build: {
           outDir: config.build?.outDir ?? path.join(options.themeRoot, options.buildDir),
           assetsDir: config.build?.assetsDir ?? "",
-          emptyOutDir: config.build?.emptyOutDir ?? false,
+          emptyOutDir: config.build?.emptyOutDir ?? true,
           manifest: config.build?.manifest ?? true,
           minify: config.build?.minify ?? (watch || options.debug ? false : undefined),
           sourcemap: config.build?.sourcemap ?? (watch || options.debug ? "inline" : undefined),
-          rollupOptions: {
-            ...config.build?.rollupOptions,
-            external: [
-              ...(Array.isArray(config.build?.rollupOptions?.external)
-                ? (config.build.rollupOptions.external as string[])
-                : []),
-              "react",
-              "react-dom/client",
-            ],
+          rolldownOptions: {
+            ...(config.build?.rolldownOptions ?? config.build?.rollupOptions),
+            external: Array.isArray((config.build?.rolldownOptions ?? config.build?.rollupOptions)?.external)
+              ? ((config.build?.rolldownOptions ?? config.build?.rollupOptions)!.external as string[])
+              : [],
             output: {
-              ...config.build?.rollupOptions?.output,
-              entryFileNames,
-              chunkFileNames,
-              assetFileNames,
+              ...(config.build?.rolldownOptions ?? config.build?.rollupOptions)?.output,
+              entryFileNames: "[name]-[hash].js",
+              chunkFileNames(chunkInfo: any) {
+                if (["react", "react-dom"].includes(chunkInfo.name)) {
+                  return `${chunkInfo.name}.js`;
+                }
+                return "[name]-[hash].js";
+              },
+              assetFileNames: "[name]-[hash][extname]",
+              manualChunks(id) {
+                if (id.includes("/node_modules/react-dom/")) {
+                  return "react-dom";
+                }
+                if (id.includes("/node_modules/react/") || id.includes("/node_modules/scheduler/")) {
+                  return "react";
+                }
+              },
             },
           },
         },

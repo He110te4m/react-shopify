@@ -16,6 +16,8 @@ export function assembleLiquidFile(
   scriptAsset: string | null,
   cssContents: { inline: string[]; snippets: string[] },
   options: AssembleOptions,
+  accessedSettings: string[] = [],
+  accessedParams: string[] = [],
 ): string {
   const type = entry.meta.type ?? entry.targetType;
   const parts = [DISCLAIMER];
@@ -25,16 +27,16 @@ export function assembleLiquidFile(
       parts.push(html);
       break;
     case "section":
-      parts.push(...buildSection(html, entry));
+      parts.push(...buildSection(html, entry, accessedSettings));
       break;
     case "block":
-      parts.push(...buildBlock(html, entry));
+      parts.push(...buildBlock(html, entry, accessedSettings, accessedParams));
       break;
     case "snippet":
-      parts.push(...buildSnippet(html, entry));
+      parts.push(...buildSnippet(html, entry, accessedParams));
       break;
     default:
-      parts.push(...buildSection(html, entry));
+      parts.push(...buildSection(html, entry, accessedSettings));
       break;
   }
 
@@ -69,17 +71,24 @@ export function assembleLiquidFile(
 const hasBlocks = (entry: SSGEntry): boolean =>
   !!entry.meta.blocks && entry.meta.blocks.length > 0;
 
-const SETTINGS_SECTION = `  <script type="application/json" data-ssg-props>{{ section.settings | json }}</script>`;
-const SETTINGS_BLOCK = `  <script type="application/json" data-ssg-props>{{ block.settings | json }}</script>`;
+function buildSettingsBridge(prefix: string, keys: string[]): string {
+  if (keys.length === 0) return "";
+  const entries = keys
+    .map((k) => `    "${k}": {{ ${prefix}.settings.${k} | json }}`)
+    .join(",\n");
+  return `  <script type="application/json" data-ssg-props>\n  {\n${entries}\n  }\n  </script>`;
+}
 
-function buildParamsBridge(params: string[]): string {
-  const entries = params
+function buildParamsBridge(params: string[], accessedParams?: string[]): string {
+  const keys = accessedParams && accessedParams.length > 0 ? accessedParams : params;
+  if (keys.length === 0) return "";
+  const entries = keys
     .map((p) => `    "${p}": {{ ${p} | json }}`)
     .join(",\n");
   return `  <script type="application/json" data-ssg-params>\n  {\n${entries}\n  }\n  </script>`;
 }
 
-function buildSection(html: string, entry: SSGEntry): string[] {
+function buildSection(html: string, entry: SSGEntry, accessedSettings: string[]): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
@@ -91,13 +100,9 @@ function buildSection(html: string, entry: SSGEntry): string[] {
     `  data-ssg-component="${entry.kebabName}"`,
   ];
   if (cls) lines.push(`  class="${cls}"`);
-  lines.push(
-    `>`,
-    SETTINGS_SECTION,
-  );
-  if (entry.meta.params?.length) {
-    lines.push(buildParamsBridge(entry.meta.params));
-  }
+  lines.push(`>`);
+  const settingsBridge = buildSettingsBridge("section", accessedSettings);
+  if (settingsBridge) lines.push(settingsBridge);
   lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
@@ -108,7 +113,7 @@ function buildSection(html: string, entry: SSGEntry): string[] {
   return lines;
 }
 
-function buildBlock(html: string, entry: SSGEntry): string[] {
+function buildBlock(html: string, entry: SSGEntry, accessedSettings: string[], accessedParams: string[]): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
@@ -128,11 +133,11 @@ function buildBlock(html: string, entry: SSGEntry): string[] {
   lines.push(
     `  {{ block.shopify_attributes }}`,
     `>`,
-    SETTINGS_BLOCK,
   );
-  if (entry.meta.params?.length) {
-    lines.push(buildParamsBridge(entry.meta.params));
-  }
+  const settingsBridge = buildSettingsBridge("block", accessedSettings);
+  if (settingsBridge) lines.push(settingsBridge);
+  const paramsBridge = buildParamsBridge(entry.meta.params || [], accessedParams);
+  if (paramsBridge) lines.push(paramsBridge);
   lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
@@ -143,14 +148,13 @@ function buildBlock(html: string, entry: SSGEntry): string[] {
   return lines;
 }
 
-function buildSnippet(html: string, entry: SSGEntry): string[] {
+function buildSnippet(html: string, entry: SSGEntry, accessedParams: string[]): string[] {
   const lines: string[] = [
     "",
     `<div data-ssg-component="${entry.kebabName}">`,
   ];
-  if (entry.meta.params?.length) {
-    lines.push(buildParamsBridge(entry.meta.params));
-  }
+  const paramsBridge = buildParamsBridge(entry.meta.params || [], accessedParams);
+  if (paramsBridge) lines.push(paramsBridge);
   lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,

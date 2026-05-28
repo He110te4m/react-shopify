@@ -41,6 +41,7 @@ export type {
   ColorSchemeRole,
   ColorSchemeGroupSetting,
   InferSettings,
+  AssertNoEmptyDefaults,
 } from "./types";
 
 export type {

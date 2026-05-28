@@ -1,4 +1,7 @@
 import type { SettingSchema, ShopifyMeta } from "../../types";
+import { logger } from "../logger";
+
+const log = logger("schema-gen");
 
 function serializeSetting(setting: SettingSchema): Record<string, unknown> {
   const s: Record<string, unknown> = { type: setting.type };
@@ -7,6 +10,12 @@ function serializeSetting(setting: SettingSchema): Record<string, unknown> {
   if ("label" in setting) s.label = setting.label;
 
   if ("default" in setting && setting.default !== undefined) {
+    if (setting.default === "") {
+      log.warn(
+        `Setting "${'id' in setting ? setting.id : '(no id)'}" has empty string default. ` +
+        `Use a non-empty string or remove the default.`,
+      );
+    }
     s.default = setting.default;
   }
   if ("info" in setting && setting.info) s.info = setting.info;

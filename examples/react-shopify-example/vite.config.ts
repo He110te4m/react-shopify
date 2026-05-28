@@ -7,7 +7,7 @@ export default {
       sourceCodeDir: "frontend",
       buildDir: "assets/build",
       ssg: {
-        directories: ["sections", "blocks", "templates"],
+        directories: ["sections", "blocks", "templates", "snippets"],
       },
     }),
   ],

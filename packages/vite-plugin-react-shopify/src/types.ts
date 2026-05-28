@@ -4,7 +4,6 @@ export interface Options {
   snippetFile?: string;
   buildDir?: string;
   debug?: boolean;
-  hash?: boolean;
   ssg?: SSGOptions;
   importMap?: ImportMapOptions;
 }
@@ -18,6 +17,7 @@ export interface SSGOptions {
     snippet?: string;
   };
   outputName?: string;
+  cssPrefix?: string;
 }
 
 export interface ImportMapOptions {
@@ -294,6 +294,27 @@ export type SettingSchema = InputSettingSchema | SidebarSetting;
 
 /** @deprecated Use {@link SettingSchema} instead */
 export type SchemaSetting = SettingSchema;
+
+/**
+ * Type-level assertion: prevents settings with empty-string defaults.
+ *
+ * @example
+ * ```ts
+ * const settings = [...] as const satisfies SettingSchema[];
+ * type __noEmptyCheck = AssertNoEmptyDefaults<typeof settings>;
+ * // TypeScript will show `never` if any setting has `default: ""`
+ * declare const __assert: __noEmptyCheck;
+ * ```
+ */
+type IsEmptyStringDefault<T> = T extends { default: "" } ? true : false;
+
+type EmptyDefaultsExist<T extends readonly any[]> =
+  true extends { [K in keyof T]: IsEmptyStringDefault<T[K]> }[number] ? true : false;
+
+export type AssertNoEmptyDefaults<T extends readonly SettingSchema[]> =
+  EmptyDefaultsExist<T> extends true
+    ? never
+    : true;
 
 // ── Shopify meta ────────────────────────────────────────────────────────
 

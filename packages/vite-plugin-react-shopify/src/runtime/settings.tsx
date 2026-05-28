@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext } from "react";
 
 const SettingsContext = createContext<Record<string, any>>({});
 
@@ -16,7 +16,10 @@ export function useShopifySettings<T = Record<string, any>>(): T {
       {},
       {
         get(_, key) {
-          return `{{ ${prefix}.settings.${String(key)} }}`;
+          const s = String(key);
+          const tracker = (globalThis as any).__shopify_ssg_track_settings as Set<string> | undefined;
+          if (tracker?.add) tracker.add(s);
+          return `{{ ${prefix}.settings.${s} }}`;
         },
       },
     ) as T;
@@ -38,7 +41,10 @@ export function useShopifyParams<T = Record<string, any>>(): T {
       {},
       {
         get(_, key) {
-          return `{{ ${String(key)} }}`;
+          const s = String(key);
+          const tracker = (globalThis as any).__shopify_ssg_track_params as Set<string> | undefined;
+          if (tracker?.add) tracker.add(s);
+          return `{{ ${s} }}`;
         },
       },
     ) as T;
