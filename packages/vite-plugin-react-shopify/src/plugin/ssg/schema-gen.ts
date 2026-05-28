@@ -1,4 +1,4 @@
-import type { SettingSchema, ShopifyMeta } from "../types";
+import type { SettingSchema, ShopifyMeta } from "../../types";
 
 function serializeSetting(setting: SettingSchema): Record<string, unknown> {
   const s: Record<string, unknown> = { type: setting.type };

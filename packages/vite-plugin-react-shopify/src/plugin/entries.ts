@@ -2,7 +2,7 @@ import path from "node:path";
 import { Plugin } from "vite";
 import { normalizePath } from "vite";
 import type { ResolvedOptions } from "./options";
-import type { SSGEntry } from "./types";
+import type { SSGEntry } from "../types";
 import { logger } from "./logger";
 import { scanEntries } from "./ssg/scanner";
 

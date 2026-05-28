@@ -3,7 +3,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import type { ResolvedOptions } from "../options";
-import type { SSGEntry } from "../types";
+import type { SSGEntry } from "../../types";
 import { logger } from "../logger";
 import { scanEntries } from "./scanner";
 import { stripReactLiquidTags, unwrapHtmlEntities } from "./post-process";

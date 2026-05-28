@@ -2,7 +2,7 @@ import path from "node:path";
 import glob from "fast-glob";
 import { normalizePath } from "vite";
 import type { ResolvedOptions } from "../options";
-import type { SSGEntry, ShopifyBlockType } from "../types";
+import type { SSGEntry, ShopifyBlockType } from "../../types";
 
 const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   templates: "template",

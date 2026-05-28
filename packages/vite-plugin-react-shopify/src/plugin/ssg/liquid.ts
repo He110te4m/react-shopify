@@ -1,4 +1,4 @@
-import type { SSGEntry } from "../types";
+import type { SSGEntry } from "../../types";
 import { generateSchema } from "./schema-gen";
 
 const DISCLAIMER =

@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Options, SSGOptions, ImportMapOptions } from "./types";
+import type { Options, SSGOptions, ImportMapOptions } from "../types";
 
 export interface ResolvedOptions {
   themeRoot: string;
