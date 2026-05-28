@@ -5,8 +5,9 @@ tsconfig.json
 vite.config.ts
 pnpm-lock.yaml
 index.html
-assets/.vite/*
+assets/build/.vite/*
 assets/*.map
+assets/build/*.map
 .gitignore
 .gitattributes
 .shopifyignore
