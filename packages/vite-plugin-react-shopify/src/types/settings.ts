@@ -1,36 +1,3 @@
-export interface Options {
-  themeRoot?: string;
-  sourceCodeDir?: string;
-  snippetFile?: string;
-  buildDir?: string;
-  debug?: boolean;
-  ssg?: SSGOptions;
-  importMap?: ImportMapOptions;
-}
-
-export interface SSGOptions {
-  directories?: string[];
-  prefix?: {
-    template?: string;
-    section?: string;
-    block?: string;
-    snippet?: string;
-  };
-  outputName?: string;
-  cssPrefix?: string;
-}
-
-export interface ImportMapOptions {
-  react?: string;
-  reactDomClient?: string;
-}
-
-export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
-
-export type SettingValue = string | number | boolean;
-
-export type InputSettings = Record<string, SettingValue>;
-
 // ── Base ────────────────────────────────────────────────────────────────
 
 interface BaseSettingSchema {
@@ -38,6 +5,12 @@ interface BaseSettingSchema {
   label: string;
   info?: string;
 }
+
+// ── Value types ─────────────────────────────────────────────────────────
+
+export type SettingValue = string | number | boolean;
+
+export type InputSettings = Record<string, SettingValue>;
 
 // ── Basic input settings ────────────────────────────────────────────────
 
@@ -315,49 +288,6 @@ export type AssertNoEmptyDefaults<T extends readonly SettingSchema[]> =
   EmptyDefaultsExist<T> extends true
     ? never
     : true;
-
-// ── Shopify meta ────────────────────────────────────────────────────────
-
-export interface ShopifyMeta {
-  type?: ShopifyBlockType;
-  name: string;
-  tag?: string;
-  class?: string;
-  limit?: number;
-  params?: string[];
-  settings?: SettingSchema[];
-  blocks?: { type: string; name?: string; settings?: SettingSchema[] }[];
-  max_blocks?: number;
-  presets?: PresetDefinition[];
-  enabled_on?: Record<string, string>[];
-  disabled_on?: Record<string, string>[];
-  templates?: string[];
-}
-
-export interface PresetDefinition {
-  name: string;
-  category?: string;
-  settings?: InputSettings;
-  blocks?: PresetBlock[];
-}
-
-export interface PresetBlock {
-  type: string;
-  id?: string;
-  static?: boolean;
-  settings?: InputSettings;
-  blocks?: PresetBlock[];
-}
-
-// ── SSG ──────────────────────────────────────────────────────────────────
-
-export interface SSGEntry {
-  filePath: string;
-  componentName: string;
-  kebabName: string;
-  targetType: ShopifyBlockType;
-  meta: Required<Pick<ShopifyMeta, "name">> & ShopifyMeta;
-}
 
 // ── Utility ─────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
-import type { SettingSchema, ShopifyMeta } from "../../types";
-import { logger } from "../logger";
+import type { SettingSchema, ShopifyMeta } from "../types";
+import { logger } from "../core/logger";
 
 const log = logger("schema-gen");
 

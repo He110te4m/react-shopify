@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { autoFixAdjacentText } from "./hydration-fix";
+import { autoFixAdjacentText } from "../ssg/hydration-fix";
 
 describe("autoFixAdjacentText", () => {
   it("fixes text followed by expression", () => {

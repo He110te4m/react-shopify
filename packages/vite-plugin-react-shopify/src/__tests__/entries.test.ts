@@ -44,8 +44,6 @@ document.addEventListener('shopify:section:unload', (e) => { sweep(e.target) });
 
 describe("hydration entry — isolation analysis", () => {
   it("reads liquid data from :scope > script[data-ssg-liquid]", () => {
-    // The `:scope > script[...]` selector ensures only the DIRECT child script
-    // is read, not scripts from nested sections/blocks.
     expect(entriesModule).toContain(":scope > script[data-ssg-liquid]");
   });
 
@@ -54,7 +52,6 @@ describe("hydration entry — isolation analysis", () => {
   });
 
   it("hydrate function reads liquid data before creating root", () => {
-    // The `hydrate` function code: readLiquidData → then hydrateRoot inside the same function
     const fnMatch = entriesModule.match(/function hydrate\([^)]*\)\s*\{([^}]+)\}/s);
     expect(fnMatch).not.toBeNull();
     const fnBody = fnMatch![1];
@@ -65,27 +62,21 @@ describe("hydration entry — isolation analysis", () => {
   });
 
   it("handles missing data-ssg-liquid gracefully", () => {
-    // readLiquidData returns {} when script is not found
     expect(entriesModule).toContain("if (!script) return {}");
   });
 
   it("handles JSON parse failure gracefully", () => {
-    // try/catch around JSON.parse
     expect(entriesModule).toContain("try {");
   });
 });
 
 describe("nested section+block isolation", () => {
   it("uses :scope to limit script query to own wrapper", () => {
-    // When a section contains blocks, each block has its own data-ssg-liquid.
-    // The :scope selector prevents the section from reading block data.
     const selector = ":scope > script[data-ssg-liquid]";
     expect(entriesModule).toContain(selector);
   });
 
   it("does not interfere with sibling hydration containers", () => {
-    // Each section/block gets its own data-ssg-hydrate container.
-    // The hydrateRoot for section A doesn't touch section B's DOM.
     expect(entriesModule).toContain(":scope > [data-ssg-hydrate]");
   });
 

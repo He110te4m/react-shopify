@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unwrapHtmlEntities } from "./post-process";
+import { unwrapHtmlEntities } from "../ssg/post-process";
 
 describe("post-process", () => {
   describe("unwrapHtmlEntities", () => {

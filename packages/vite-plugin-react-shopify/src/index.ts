@@ -1,10 +1,10 @@
 import { Plugin } from "vite";
-import { resolveOptions } from "./plugin/options";
+import { resolveOptions } from "./core/options";
 import type { Options } from "./types";
-import { enableDebug } from "./plugin/logger";
-import shopifyConfig from "./plugin/config";
-import shopifyEntries from "./plugin/entries";
-import shopifySSG from "./plugin/ssg";
+import { enableDebug } from "./core/logger";
+import shopifyConfig from "./core/config";
+import shopifyEntries from "./core/entries";
+import shopifySSG from "./ssg";
 
 const vitePluginShopify = (options: Options = {}): Plugin[] => {
   const resolvedOptions = resolveOptions(options);

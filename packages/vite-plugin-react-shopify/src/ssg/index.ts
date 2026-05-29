@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Plugin, Manifest } from "vite";
-import type { ResolvedOptions } from "../options";
-import { logger } from "../logger";
+import type { ResolvedOptions } from "../core/options";
+import { logger } from "../core/logger";
 import { compileAllEntries } from "./compiler";
 
 const log = logger("ssg");
@@ -85,5 +85,3 @@ function writeImportMapSnippet(options: ResolvedOptions): void {
 
   fs.writeFileSync(snippetPath, content);
 }
-
-export { compileAllEntries } from "./compiler";

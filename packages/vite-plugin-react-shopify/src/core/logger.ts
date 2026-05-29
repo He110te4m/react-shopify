@@ -11,7 +11,6 @@ export function enableDebug() {
   createDebugger.enable(existing ? `${existing},${NAMESPACE}:*` : `${NAMESPACE}:*`);
 }
 
-
 export function logger(ns: string) {
   const dbg = createDebugger(`${NAMESPACE}:${ns}`);
 

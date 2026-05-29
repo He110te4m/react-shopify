@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { assembleLiquidFile, getOutputPath } from "./liquid";
-import type { SSGEntry } from "../../types";
+import { assembleLiquidFile } from "../ssg/liquid-assembler";
+import { getOutputPath } from "../ssg/liquid-paths";
+import type { SSGEntry } from "../types";
 
 function makeEntry(overrides: Partial<SSGEntry> = {}): SSGEntry {
   return {
@@ -66,7 +67,6 @@ describe("assembleLiquidFile", () => {
       ["section.settings.title"],
     );
 
-    // Should contain valid-looking JSON with Liquid filter
     expect(result).toMatch(/\{\s*"section\.settings\.title":\s*\{\{\s*section\.settings\.title\s*\|\s*json\s*\}\}\s*\}/);
   });
 
@@ -81,9 +81,7 @@ describe("assembleLiquidFile", () => {
       ["section.settings.title", "section.settings.description"],
     );
 
-    // After the last entry, there should be no comma before the closing }
-    expect(result).not.toMatch(/,(\s*)\}/); // no trailing comma
-    // But entries ARE separated by commas
+    expect(result).not.toMatch(/,(\s*)\}/);
     expect(result).toContain('"section.settings.title":');
     expect(result).toContain('"section.settings.description":');
   });
@@ -99,8 +97,6 @@ describe("assembleLiquidFile", () => {
       ["section.settings.title"],
     );
 
-    // After json }} filter, should be whitespace then closing }
-    // No comma between }} and }
     expect(result).toMatch(/\|\s*json\s*\}\}\s*\n\s*\}/);
   });
 
@@ -251,7 +247,6 @@ describe("assembleLiquidFile — bridge isolation", () => {
       ["block.settings.color"],
     );
 
-    // Each has its own data-ssg-liquid with its own expressions
     expect(sectionResult).toContain("section.settings.title");
     expect(sectionResult).not.toContain("block.settings.color");
 
