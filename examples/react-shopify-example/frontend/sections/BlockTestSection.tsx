@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useSectionSettings, useLiquidValues, parseLiquidNumber } from "vite-plugin-react-shopify/runtime";
+import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
 
 const settings = [
   { type: "text", id: "title", label: "Section Title", default: "Block Test Section" },
@@ -41,19 +41,16 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function BlockTestSection() {
-  const { value: title } = useSectionSettings("title");
-  const { value: layout } = useSectionSettings("layout");
-  const { value: borderColor } = useSectionSettings("border_color");
-  const { values: s } = useLiquidValues({
-    initial: "section.settings.initial_count",
-  });
+  const [title] = useLiquidValue("section.settings.title");
+  const [layout] = useLiquidValue("section.settings.layout");
+  const [borderColor] = useLiquidValue("section.settings.border_color");
+  const [initialCount] = useLiquidValue("section.settings.initial_count", "number");
 
-  const initialCount = parseLiquidNumber(s.initial, 0);
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(initialCount);
 
   useEffect(() => {
     setCount(initialCount);
-  }, []);
+  }, [initialCount]);
 
   return (
     <section
@@ -97,7 +94,7 @@ export default function BlockTestSection() {
             fontSize: "1rem",
           }}
         >
-          {`-1`}
+          -1
         </button>
         <button
           type="button"
@@ -127,7 +124,7 @@ export default function BlockTestSection() {
             fontSize: "1rem",
           }}
         >
-          {`+1`}
+          +1
         </button>
       </div>
     </section>

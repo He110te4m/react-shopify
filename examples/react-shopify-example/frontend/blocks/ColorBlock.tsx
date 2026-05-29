@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useBlockSettings } from "vite-plugin-react-shopify/runtime";
+import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
 
 const settings = [
   { type: "text", id: "label", label: "Label", default: "Block" },
@@ -24,9 +24,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ColorBlock() {
-  const { value: label } = useBlockSettings("label");
-  const { value: color } = useBlockSettings("color");
-  const { value: heightRaw } = useBlockSettings("height");
+  const [label] = useLiquidValue("block.settings.label");
+  const [color] = useLiquidValue("block.settings.color");
+  const [heightRaw] = useLiquidValue("block.settings.height");
 
   const [expanded, setExpanded] = useState(true);
   const [clickCount, setClickCount] = useState(0);

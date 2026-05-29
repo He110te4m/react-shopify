@@ -1,5 +1,5 @@
 export {
-  useLiquid,
+  useLiquidValue,
   useLiquidValues,
   useSectionSettings,
   useBlockSettings,
@@ -8,5 +8,7 @@ export {
   parseLiquidBoolean,
   parseLiquidNumber,
 } from "./hooks";
+
+export type { LiquidTypeMode } from "./hooks";
 
 export { LiquidDataContext, LiquidDataProvider } from "./provider";

@@ -2,12 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const g = globalThis as any;
 
-// Mock React's useContext to return an empty object.
-// In real use, useContext would be called inside a React render tree;
-// here we're testing just the SSR tracking logic.
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
-  return { ...react, useContext: vi.fn(() => ({})) };
+  return { ...react, useContext: vi.fn(() => ({})), useState: vi.fn((v: any) => [v, vi.fn()]), useEffect: vi.fn(), useMemo: vi.fn((fn: () => any) => fn()) };
 });
 
 async function importHooks() {
@@ -25,17 +22,17 @@ describe("runtime hooks — SSR path", () => {
     delete g.__shopify_ssg_target;
   });
 
-  it("useLiquid tracks expression and returns Liquid placeholder", async () => {
-    const { useLiquid } = await importHooks();
-    const result = useLiquid("section.settings.title");
-    expect(result.value).toBe("{{ section.settings.title }}");
+  it("useLiquidValue tracks expression and returns Liquid placeholder", async () => {
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.title");
+    expect(val).toBe("{{ section.settings.title }}");
     expect(g.__shopify_ssg_liquid_track.has("section.settings.title")).toBe(true);
   });
 
-  it("useLiquid tracks nested expressions", async () => {
-    const { useLiquid } = await importHooks();
-    useLiquid("section.settings.product.name");
-    useLiquid("section.settings.product.price");
+  it("useLiquidValue tracks nested expressions", async () => {
+    const { useLiquidValue } = await importHooks();
+    useLiquidValue("section.settings.product.name");
+    useLiquidValue("section.settings.product.price");
     expect(g.__shopify_ssg_liquid_track.has("section.settings.product.name")).toBe(true);
     expect(g.__shopify_ssg_liquid_track.has("section.settings.product.price")).toBe(true);
     expect(g.__shopify_ssg_liquid_track.size).toBe(2);
@@ -47,7 +44,7 @@ describe("runtime hooks — SSR path", () => {
       title: "section.settings.title",
       price: "section.settings.price",
     });
-    expect(result.values).toEqual({
+    expect(result).toEqual({
       title: "{{ section.settings.title }}",
       price: "{{ section.settings.price }}",
     });
@@ -61,14 +58,14 @@ describe("runtime hooks — SSR path", () => {
     expect(g.__shopify_ssg_liquid_track.size).toBe(1);
   });
 
-  it("useSectionSettings delegates to useLiquid with section prefix", async () => {
+  it("useSectionSettings delegates with section prefix", async () => {
     const { useSectionSettings } = await importHooks();
     const result = useSectionSettings("title");
     expect(result.value).toBe("{{ section.settings.title }}");
     expect(g.__shopify_ssg_liquid_track.has("section.settings.title")).toBe(true);
   });
 
-  it("useBlockSettings delegates to useLiquid with block prefix", async () => {
+  it("useBlockSettings delegates with block prefix", async () => {
     const { useBlockSettings } = await importHooks();
     const result = useBlockSettings("color");
     expect(result.value).toBe("{{ block.settings.color }}");
@@ -91,28 +88,28 @@ describe("runtime hooks — SSR path", () => {
 
   it("returns placeholder even when tracker is not set", async () => {
     delete g.__shopify_ssg_liquid_track;
-    const { useLiquid } = await importHooks();
-    const result = useLiquid("section.settings.title");
-    expect(result.value).toBe("{{ section.settings.title }}");
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.title");
+    expect(val).toBe("{{ section.settings.title }}");
   });
 
   it("handles blank expression", async () => {
-    const { useLiquid } = await importHooks();
-    const result = useLiquid("");
-    expect(result.value).toBe("{{  }}");
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("");
+    expect(val).toBe("{{  }}");
   });
 
   it("useLiquidValues with empty map returns empty object", async () => {
     const { useLiquidValues } = await importHooks();
     const result = useLiquidValues({});
-    expect(result.values).toEqual({});
+    expect(result).toEqual({});
     expect(g.__shopify_ssg_liquid_track.size).toBe(0);
   });
 
   it("tracks expression containing special Liquid characters", async () => {
-    const { useLiquid } = await importHooks();
+    const { useLiquidValue } = await importHooks();
     const expr = "collection.products | where: 'available'";
-    useLiquid(expr);
+    useLiquidValue(expr);
     expect(g.__shopify_ssg_liquid_track.has(expr)).toBe(true);
   });
 });

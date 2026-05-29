@@ -1,5 +1,5 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useBlockSettings } from "vite-plugin-react-shopify/runtime";
+import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
 import "./TextBlock.css";
 
 const settings = [
@@ -25,9 +25,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function TextBlock() {
-  const { value: text } = useBlockSettings("text");
-  const { value: textStyle } = useBlockSettings("text_style");
-  const { value: alignment } = useBlockSettings("alignment");
+  const [text] = useLiquidValue("block.settings.text");
+  const [textStyle] = useLiquidValue("block.settings.text_style");
+  const [alignment] = useLiquidValue("block.settings.alignment");
 
   return (
     <div

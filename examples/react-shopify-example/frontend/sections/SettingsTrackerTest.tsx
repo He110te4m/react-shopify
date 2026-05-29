@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useSectionSettings, useLiquidValues, parseLiquidBoolean } from "vite-plugin-react-shopify/runtime";
+import { useLiquidValue, useLiquidValues } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   name: "Settings Tracker Test",
@@ -20,13 +20,12 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function SettingsTrackerTest() {
-  const { value: title } = useSectionSettings("title");
-  const { value: description } = useSectionSettings("description");
-  const { value: showBannerRaw } = useSectionSettings("show_banner");
-  const { value: bannerPosition } = useSectionSettings("banner_position");
-  const showBanner = parseLiquidBoolean(showBannerRaw);
+  const [title] = useLiquidValue("section.settings.title");
+  const [description] = useLiquidValue("section.settings.description");
+  const [showBanner] = useLiquidValue("section.settings.show_banner", "boolean");
+  const [bannerPosition] = useLiquidValue("section.settings.banner_position");
 
-  const { values: unused } = useLiquidValues({
+  const unused = useLiquidValues({
     effect_only_text: "section.settings.effect_only_text",
   });
 
@@ -50,7 +49,7 @@ export default function SettingsTrackerTest() {
         <ul>
           <li>{`title = ${title}`}</li>
           <li>{`description = ${description}`}</li>
-          <li>{`show_banner = ${String(showBannerRaw)}`}</li>
+          <li>{`show_banner = ${String(showBanner)}`}</li>
           <li>{`banner_position = ${bannerPosition}`}</li>
         </ul>
         <h3>useEffect 测试（hydrate 后可见）:</h3>

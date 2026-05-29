@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useSnippetParams, useLiquidValues } from "vite-plugin-react-shopify/runtime";
+import { useLiquidValue, useLiquidValues } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   type: "snippet" as const,
@@ -9,9 +9,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ParamsSnippetTest() {
-  const { value: title } = useSnippetParams("product_title");
-  const { value: price } = useSnippetParams("product_price");
-  const { values: p } = useLiquidValues({
+  const [title] = useLiquidValue("product_title");
+  const [price] = useLiquidValue("product_price");
+  const p = useLiquidValues({
     image: "product_image",
     badge: "product_badge",
   });
