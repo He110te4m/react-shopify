@@ -32,7 +32,7 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
         componentName,
         kebabName,
         targetType,
-        meta: { name: componentName },
+        meta: { name: deriveName(fileName) },
       });
     }
   }
@@ -46,4 +46,15 @@ export function toKebabCase(str: string): string {
     .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
+}
+
+export function deriveName(fileName: string): string {
+  const readable = fileName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2")
+    .replace(/[-_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return readable.length > 25 ? readable.slice(0, 25) : readable;
 }

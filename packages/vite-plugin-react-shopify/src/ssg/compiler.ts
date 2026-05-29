@@ -9,6 +9,7 @@ import { bundleEntry } from "./bundler";
 import { renderEntry, resolveScriptAsset } from "./renderer";
 import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
+import { validateShopifyMeta } from "../validate";
 
 const log = logger("ssg:compiler");
 
@@ -66,8 +67,9 @@ async function compileEntry(
     const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot);
     if (!renderResult) return;
 
-    const { html, trackedExpressions, entryMeta } = renderResult;
-    entry.meta = entryMeta;
+    const { html, trackedExpressions } = renderResult;
+
+    validateShopifyMeta(entry.meta, { kebabName: entry.kebabName, filePath: entry.filePath });
 
     // Categorize CSS
     const cssFiles = entryCssFiles.get(entry.kebabName) || [];

@@ -4,7 +4,7 @@ export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
 
 export interface ShopifyMeta {
   type?: ShopifyBlockType;
-  name: string;
+  name?: string;
   tag?: string;
   class?: string;
   limit?: number;

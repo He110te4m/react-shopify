@@ -35,7 +35,7 @@ export function renderEntry(
     }
 
     if (shopifyMeta) {
-      entry.meta = { ...entry.meta, ...shopifyMeta };
+      entry.meta = { ...entry.meta, ...shopifyMeta, name: shopifyMeta.name ?? entry.meta.name };
     }
 
     const projectRequire = createRequire(path.join(projectRoot, "package.json"));

@@ -19,7 +19,7 @@ const settings = [
 ] as const satisfies SettingSchema[];
 
 export const shopifyMeta = {
-  name: "Block Test Section (React)",
+  name: "Block Test Section",
   settings,
   blocks: [
     { type: "react-color-block" },

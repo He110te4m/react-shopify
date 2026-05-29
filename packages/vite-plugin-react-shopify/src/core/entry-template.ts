@@ -1,5 +1,4 @@
 import type { SSGEntry } from "../types/ssg";
-import { normalizePath } from "vite";
 
 export function generateEntryModule(entry: SSGEntry, componentRel: string): string {
   const { kebabName } = entry;

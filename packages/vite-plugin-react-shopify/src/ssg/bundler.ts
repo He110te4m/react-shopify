@@ -103,5 +103,3 @@ export async function bundleEntry(
   log.debug("esbuild bundle took %dms", Date.now() - startBundled);
   return { tmpFile };
 }
-
-export { autoFixAdjacentText } from "./hydration-fix";

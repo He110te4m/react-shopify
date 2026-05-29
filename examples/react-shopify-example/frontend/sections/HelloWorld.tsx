@@ -10,7 +10,7 @@ export const shopifyMeta = {
     { type: "color", id: "accent_color", label: "Accent Color", default: "#6c63ff" },
   ],
   presets: [
-    { name: "Hello World React Template", category: "Demo" },
+    { name: "Hello World (React)", category: "Demo" },
   ],
 } satisfies ShopifyMeta;
 
