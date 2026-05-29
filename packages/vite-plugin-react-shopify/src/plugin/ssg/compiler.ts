@@ -8,6 +8,7 @@ import { logger } from "../logger";
 import { scanEntries } from "./scanner";
 import { unwrapHtmlEntities, normalizeVoidElements, normalizeStyleAttributes } from "./post-process";
 import { assembleLiquidFile, getOutputPath } from "./liquid";
+import { autoFixAdjacentText } from "./hydration-fix";
 
 const log = logger("ssg:compiler");
 
@@ -116,6 +117,10 @@ async function compileEntry(
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
 
+  // Auto-fix hydration issues in source before bundling
+  const { result: fixedSource, fixCount } = autoFixAdjacentText(sourceCode, entry.filePath);
+  const finalSource = fixCount > 0 ? fixedSource : sourceCode;
+
   let esbuild: any;
   try {
     esbuild = projectRequire("esbuild");
@@ -134,7 +139,7 @@ async function compileEntry(
 
   await esbuild.build({
     stdin: {
-      contents: sourceCode,
+      contents: finalSource,
       resolveDir: path.dirname(entry.filePath),
       loader: path.extname(entry.filePath).slice(1) as "tsx" | "jsx",
     },
@@ -153,6 +158,23 @@ async function compileEntry(
     write: true,
     allowOverwrite: true,
     plugins: [
+      {
+        name: "ssg-hydration-fix",
+        setup(build: any) {
+          build.onLoad({ filter: /\.(tsx|jsx)$/ }, (args: any) => {
+            try {
+              const source = fs.readFileSync(args.path, "utf-8");
+              const { result, fixCount } = autoFixAdjacentText(source, args.path);
+              if (fixCount > 0) {
+                return { contents: result, loader: args.path.endsWith(".tsx") ? "tsx" : "jsx" };
+              }
+            } catch {
+              /* pass through to default loader */
+            }
+            return undefined;
+          });
+        },
+      },
       {
         name: "ssg-strip-css",
         setup(build: any) {
