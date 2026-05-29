@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { LiquidDataContext } from "./provider";
 
 function useLiquidRaw(expr: string): string | undefined {
@@ -102,17 +102,16 @@ function useLiquidValues<T extends Record<string, string>, const Types extends T
 ): InferValues<T, Types> {
   const raw = useLiquidRawValues(map);
   const keys = Object.keys(map) as (keyof T & string)[];
+  const rawDep = keys.map((k) => raw[k]).join("\0");
 
-  const defaultVals = useMemo(() => {
+  const [parsed, setParsed] = useState(() => {
     const vals = {} as Record<string, string | number | boolean | undefined>;
     for (const k of keys) {
       const mode: LiquidTypeMode = (types as Record<string, LiquidTypeMode>)?.[k] ?? "string";
       vals[k] = mode === "number" ? 0 : mode === "boolean" ? false : raw[k];
     }
     return vals;
-  }, []);
-
-  const [parsed, setParsed] = useState(defaultVals);
+  });
 
   useEffect(() => {
     setParsed((prev) => {
@@ -131,7 +130,7 @@ function useLiquidValues<T extends Record<string, string>, const Types extends T
       }
       return changed ? next : prev;
     });
-  }, []);
+  }, [rawDep]);
 
   return parsed as InferValues<T, Types>;
 }

@@ -4,7 +4,7 @@ const g = globalThis as any;
 
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
-  return { ...react, useContext: vi.fn(() => ({})), useState: vi.fn((v: any) => [v, vi.fn()]), useEffect: vi.fn(), useMemo: vi.fn((fn: () => any) => fn()) };
+  return { ...react, useContext: vi.fn(() => ({})), useState: vi.fn((v: any) => [typeof v === "function" ? v() : v, vi.fn()]), useEffect: vi.fn() };
 });
 
 async function importHooks() {
