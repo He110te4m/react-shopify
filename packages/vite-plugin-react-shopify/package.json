@@ -29,7 +29,9 @@
   },
   "dependencies": {
     "debug": "^4.4.0",
-    "fast-glob": "^3.3.0"
+    "fast-glob": "^3.3.0",
+    "oxc-parser": "^0.133.0",
+    "oxc-walker": "^1.0.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",

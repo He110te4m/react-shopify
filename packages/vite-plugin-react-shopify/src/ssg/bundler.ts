@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { logger } from "../core/logger";
-import { autoFixAdjacentText } from "./hydration-fix";
+import { autoFixAdjacentText } from "../hydration-fix";
 
 const log = logger("ssg:bundler");
 
@@ -69,8 +69,8 @@ export async function bundleEntry(
               if (fixCount > 0) {
                 return { contents: result, loader: args.path.endsWith(".tsx") ? "tsx" : "jsx" };
               }
-            } catch {
-              /* pass through to default loader */
+            } catch (e) {
+              log.debug("SSG hydration-fix failed for %s: %s", args.path, e);
             }
             return undefined;
           });

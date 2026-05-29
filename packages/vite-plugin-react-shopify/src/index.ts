@@ -5,6 +5,7 @@ import { enableDebug } from "./core/logger";
 import shopifyConfig from "./core/config";
 import shopifyEntries from "./core/entries";
 import shopifySSG from "./ssg";
+import hydrationFix from "./hydration-fix/vite-plugin";
 
 const vitePluginShopify = (options: Options = {}): Plugin[] => {
   const resolvedOptions = resolveOptions(options);
@@ -14,6 +15,7 @@ const vitePluginShopify = (options: Options = {}): Plugin[] => {
   }
 
   return [
+    hydrationFix(resolvedOptions),
     shopifyConfig(resolvedOptions),
     shopifyEntries(resolvedOptions),
     shopifySSG(resolvedOptions),

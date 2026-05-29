@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { autoFixAdjacentText } from "../ssg/hydration-fix";
+import { autoFixAdjacentText } from "../hydration-fix";
 
 describe("autoFixAdjacentText", () => {
   it("fixes text followed by expression", () => {
@@ -77,22 +77,58 @@ describe("autoFixAdjacentText", () => {
     expect(result).toContain("`text${expr}`");
   });
 
-  it("does NOT touch elements with child JSX tags", () => {
+  it("fixes adjacent text+expr before child JSX tags", () => {
     const { result, fixCount } = autoFixAdjacentText(
       `<div>text{expr}<span>child</span></div>`, "test.tsx",
     );
-    expect(fixCount).toBe(0);
+    // "text{expr}" is an adjacent text+expression — should be fixed
+    // The <span>child</span> child JSXElement should be left unchanged
+    expect(fixCount).toBe(1);
+    expect(result).toContain("`text${expr}`");
+    expect(result).toContain("<span>child</span>");
   });
 
-  it("fixes multiple elements in the same source", () => {
-    const { result, fixCount } = autoFixAdjacentText(
-      `<button>-{step}</button>\n<li>title = {title}</li>\n<h1>{title}</h1>\n<p>Reset</p>`,
-      "test.tsx",
-    );
+  it("fixes multiple JSX elements in a component", () => {
+    const src = [
+      `export default function Test() {`,
+      `  return (`,
+      `    <>`,
+      `      <button>-{step}</button>`,
+      `      <li>title = {title}</li>`,
+      `      <h1>{title}</h1>`,
+      `      <p>Reset</p>`,
+      `    </>`,
+      `  );`,
+      `}`,
+    ].join("\n");
+    const { result, fixCount } = autoFixAdjacentText(src, "test.tsx");
     expect(fixCount).toBe(2);
     expect(result).toContain('{`-${step}`}');
     expect(result).toContain("`title = ${title}`");
     expect(result).toContain("<h1>{title}</h1>");
     expect(result).toContain("<p>Reset</p>");
+  });
+
+  it("fixes multi-line JSX with arrow function in attrs", () => {
+    const src = [
+      `<button type="button" onClick={() => setCount((c) => c - stepNum)}>`,
+      `  -{s.step}`,
+      `</button>`,
+    ].join("\n");
+    const { result, fixCount } = autoFixAdjacentText(src, "test.tsx");
+    expect(fixCount).toBe(1);
+    expect(result).toContain('{`-${s.step}`}');
+    expect(result).toContain("onClick={() => setCount((c) => c - stepNum)}");
+  });
+
+  it("fixes multi-line JSX text+expression followed by text", () => {
+    const src = [
+      `<span>`,
+      `  {count} items`,
+      `</span>`,
+    ].join("\n");
+    const { result, fixCount } = autoFixAdjacentText(src, "test.tsx");
+    expect(fixCount).toBe(1);
+    expect(result).toContain("`${count} items`");
   });
 });
