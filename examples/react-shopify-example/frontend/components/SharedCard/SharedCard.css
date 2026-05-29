@@ -56,4 +56,5 @@
   height: 3px;
   border-radius: 2px;
   margin-bottom: 0.75rem;
+  background-color: var(--accent, #6c63ff);
 }

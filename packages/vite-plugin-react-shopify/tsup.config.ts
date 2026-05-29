@@ -3,9 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
-    "runtime/Liquid": "src/runtime/Liquid.tsx",
-    "runtime/Liquid.client": "src/runtime/Liquid.client.tsx",
-    "runtime/settings": "src/runtime/settings.tsx",
+    "runtime/index": "src/runtime/index.ts",
   },
   format: ["esm"],
   dts: true,

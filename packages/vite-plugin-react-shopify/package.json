@@ -13,20 +13,8 @@
       "default": "./dist/index.js"
     },
     "./runtime": {
-      "types": "./dist/runtime/Liquid.d.ts",
-      "default": "./dist/runtime/Liquid.js"
-    },
-    "./runtime/Liquid": {
-      "types": "./dist/runtime/Liquid.d.ts",
-      "default": "./dist/runtime/Liquid.js"
-    },
-    "./runtime/Liquid.client": {
-      "types": "./dist/runtime/Liquid.client.d.ts",
-      "default": "./dist/runtime/Liquid.client.js"
-    },
-    "./runtime/settings": {
-      "types": "./dist/runtime/settings.d.ts",
-      "default": "./dist/runtime/settings.js"
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
     }
   },
   "scripts": {

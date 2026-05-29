@@ -27,6 +27,33 @@
         "step": "1"
       }
     },
+    "react_block_test_AbCdEf": {
+      "type": "react-block-test-section",
+      "settings": {
+        "title": "Block Test Section",
+        "layout": "vertical",
+        "border_color": "#e5e5e5"
+      },
+      "blocks": {
+        "react_color_block_X1": {
+          "type": "react-color-block",
+          "settings": { "label": "Block A", "color": "#6c63ff", "height": 60 }
+        },
+        "react_color_block_X2": {
+          "type": "react-color-block",
+          "settings": { "label": "Block B", "color": "#00b894", "height": 80 }
+        },
+        "react_color_block_X3": {
+          "type": "react-color-block",
+          "settings": { "label": "Block C", "color": "#e17055", "height": 100 }
+        }
+      },
+      "block_order": [
+        "react_color_block_X1",
+        "react_color_block_X2",
+        "react_color_block_X3"
+      ]
+    },
     "react_todo_list_FrdqkC": {
       "type": "react-todo-list",
       "name": "Todo List (Shopping)",
@@ -53,6 +80,7 @@
     "main",
     "react_hello_world_iinCCE",
     "react_counter_NyQTzT",
+    "react_block_test_AbCdEf",
     "react_todo_list_FrdqkC",
     "react_settings_tracker_test_UyLCHw"
   ]

@@ -1,14 +1,9 @@
-import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
-import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
+import { useBlockSettings } from "vite-plugin-react-shopify/runtime";
 import "./TextBlock.css";
 
 const settings = [
-  {
-    type: "text",
-    id: "text",
-    label: "Text",
-    default: "Text",
-  },
+  { type: "text", id: "text", label: "Text", default: "Text" },
   {
     type: "select",
     id: "text_style",
@@ -20,12 +15,7 @@ const settings = [
     ],
     default: "ssg-text--title",
   },
-  {
-    type: "text_alignment",
-    id: "alignment",
-    label: "Alignment",
-    default: "left",
-  },
+  { type: "text_alignment", id: "alignment", label: "Alignment", default: "left" },
 ] as const satisfies SettingSchema[];
 
 export const shopifyMeta = {
@@ -35,14 +25,13 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function TextBlock() {
-  const s = useShopifySettings<InferSettings<typeof settings>>();
-  const text = s.text || "Text";
-  const text_style = s.text_style || "ssg-text--title";
-  const alignment = s.alignment || "left";
+  const { value: text } = useBlockSettings("text");
+  const { value: textStyle } = useBlockSettings("text_style");
+  const { value: alignment } = useBlockSettings("alignment");
 
   return (
     <div
-      className={`ssg-text ${text_style}`}
+      className={`ssg-text ${textStyle ?? ""}`}
       style={{ "--ssg-text-align": alignment } as React.CSSProperties}
     >
       {text}

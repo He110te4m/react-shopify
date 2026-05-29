@@ -10,73 +10,68 @@ pnpm build     # 生产构建
 pnpm dev       # watch 模式开发
 ```
 
-构建后检查生成的 Liquid 文件和 `assets/build/` 下的 JS 产物。
-
 ---
 
 ## 测试用例清单（`frontend/`）
 
-### Sections（`frontend/sections/`）
+### Sections
 
-| 文件 | 测试场景 | 关键点 |
-|------|----------|--------|
-| `HelloWorld.tsx` | 最简 Section，无 settings，共享组件 | `shopifyMeta` 最小定义；使用 `SharedCard` 组件 |
-| `Counter.tsx` | Settings 完整用法，客户端交互 | `useShopifySettings` + `InferSettings`；`text`/`number`/`select` 类型；`useState` 交互 |
-| `TodoList.tsx` | 复杂客户端状态，预设覆盖 | `useState` 管理列表 CRUD；presets 中覆盖 `settings` 默认值；表单交互 |
-| `SettingsTrackerTest.tsx` | **Settings 按需追踪验证** | 8 个 input settings，组件 render body 只访问 4 个 → 验证 bridge JSON 只含 4 个字段；`effect_only_text` 仅在 `useEffect` 中访问 → 验证 SSR 未追踪、hydration 后为 `undefined` |
+| 文件 | 测试场景 | 关键 API |
+|------|----------|----------|
+| `HelloWorld.tsx` | Settings 基础用法，共享组件 | `useSectionSettings` + `SharedCard` |
+| `Counter.tsx` | 客户端交互，Liquid 数值处理 | `useSectionSettings` + `useLiquidValues` + `parseLiquidNumber`；`useState(0)` + `useEffect` 同步 |
+| `TodoList.tsx` | 复杂客户端状态 | `useSectionSettings`；`useState` 管理列表 CRUD；controlled input |
+| `SettingsTrackerTest.tsx` | Settings 按需追踪验证 | `useSectionSettings` + `parseLiquidBoolean`；`hidden` 属性条件显示 |
+| `BlockTestSection.tsx` | **嵌套 Section+Block 水合** | `useSectionSettings` + `useLiquidValues`；`{% content_for 'blocks' %}`；交互计数器 |
 
-### Blocks（`frontend/blocks/`）
+### Blocks
 
-| 文件 | 测试场景 | 关键点 |
-|------|----------|--------|
-| `TextBlock.tsx` | Block 基础，CSS 内联 | Block 生成 `{%- doc -%}` 和 `{{ block.shopify_attributes }}`；CSS 内联到 `{% stylesheet %}`；`text_alignment` 类型 |
-| `GroupBlock.tsx` | Block 子嵌套，Range settings | `blocks: [{ type: "@theme" }]` → 生成 `{% content_for 'blocks' %}`；`range` 类型（min/max/step/unit）；presets 分组 |
+| 文件 | 测试场景 | 关键 API |
+|------|----------|----------|
+| `TextBlock.tsx` | Block 基础，CSS 内联 | `useBlockSettings` |
+| `GroupBlock.tsx` | Block 嵌套，Range settings | `useBlockSettings`；`blocks: [{ type: "@theme" }]` |
+| `ColorBlock.tsx` | **子 Block 交互水合** | `useBlockSettings`；`useState` toggle + click counter；CSS 变量传值 |
 
-### Snippets（`frontend/snippets/`）
+### Snippets
 
-| 文件 | 测试场景 | 关键点 |
-|------|----------|--------|
-| `ParamsSnippetTest.tsx` | **Params 按需追踪验证** | 4 个 params 定义，只用 2 个 → 验证 bridge 只含 2 个字段；无 `{% schema %}`；`useShopifyParams`；`useEffect` 检测未追踪 params |
+| 文件 | 测试场景 | 关键 API |
+|------|----------|----------|
+| `ParamsSnippetTest.tsx` | Params 追踪验证 | `useSnippetParams` + `useLiquidValues`；无 `{% schema %}` |
 
-### Components（`frontend/components/`）
+### Components（共享）
 
-| 文件 | 测试场景 | 关键点 |
-|------|----------|--------|
-| `SharedCard/SharedCard.tsx` | 共享组件 + CSS 提取 | 不生成独立 Liquid；CSS 被多入口引用 → 提取为 `snippets/css-SharedCard.liquid`；`useState` 折叠展开 |
+| 文件 | 说明 |
+|------|------|
+| `SharedCard/SharedCard.tsx` | 可折叠卡片组件，CSS 多入口共享 → 提取为 snippet |
 
 ---
 
 ## 测试验证清单
 
-构建后检查以下内容：
+### 水合无错误
 
-### Settings 追踪（`SettingsTrackerTest`）
+- [ ] 浏览器 Console 无 React hydration error（`#418`、`#422` 等）
+- [ ] Counter 按钮交互正常（`-`、`+`、`Reset`）
+- [ ] TodoList 添加/删除/勾选交互正常
+- [ ] SettingsTrackerTest 的 `show_banner` checkbox 切换正常
+- [ ] BlockTestSection 内计数器交互正常
+- [ ] ColorBlock 展开/折叠 + 点击计数交互正常
 
-- [ ] `sections/react-settings-tracker-test.liquid` 中 `data-ssg-props` 仅含 `title`、`description`、`show_banner`、`banner_position` 四个字段
-- [ ] `font_size`、`accent_color`、`image`、`effect_only_text` 不出现在 bridge JSON 中
-- [ ] 无 `data-ssg-params`（Section 不支持 params）
-- [ ] 浏览器加载后 `useEffect` 输出：`font_size/accent_color/image/effect_only_text` 均为 `undefined`
+### 嵌套 Section+Block
 
-### Params 追踪（`ParamsSnippetTest`）
+- [ ] BlockTestSection 渲染 3 个 ColorBlock
+- [ ] 每个 ColorBlock 有独立的 `data-ssg-liquid` 和 `data-ssg-hydrate`
+- [ ] ColorBlock 的 `useBlockSettings` 读取正确的 block 级 settings
+- [ ] BlockTestSection 的 `useSectionSettings` 读取正确的 section 级 settings
+- [ ] Section 和 Block 的交互互不干扰
 
-- [ ] `snippets/react-params-snippet-test.liquid` 中 `data-ssg-params` 仅含 `product_title`、`product_price`
-- [ ] `product_image`、`product_badge` 不出现在 bridge 中
-- [ ] 无 `{% schema %}` 块
-- [ ] 无 `data-ssg-props`
+### Settings 追踪
 
-### Block 特性（`TextBlock`、`GroupBlock`）
-
-- [ ] 生成的 Liquid 包含 `{%- doc -%}` 和 `{{ block.shopify_attributes }}`
-- [ ] `GroupBlock` 包含 `{% content_for 'blocks' %}`
-- [ ] Block 级 CSS 内联在 `{% stylesheet %}` 中
-
-### 共享组件（`SharedCard`）
-
-- [ ] `SharedCard.css` 被提取到 `snippets/css-SharedCard.liquid`
-- [ ] `HelloWorld` 和 `Counter` 的 Liquid 中通过 `{% render 'css-SharedCard' %}` 引用
+- [ ] `react-settings-tracker-test.liquid` 中 `data-ssg-liquid` 仅含 render body 中访问的字段
 
 ### 构建产物
 
-- [ ] 所有 JS 文件含 content hash（如 `hello-world-DfPDnyCi.js`）
-- [ ] 公共 chunk 含 hash（如 `jsx-runtime-Chh81ZAy.js`）
+- [ ] 9 个 entry（sections: HelloWorld, Counter, TodoList, SettingsTrackerTest, BlockTestSection；blocks: TextBlock, GroupBlock, ColorBlock；snippet: ParamsSnippetTest）
+- [ ] 所有 JS 文件含 content hash
+- [ ] 共享 CSS 提取为 `snippets/css-SharedCard.liquid`
 - [ ] importmap snippet 生成在 `snippets/shopify-importmap.liquid`

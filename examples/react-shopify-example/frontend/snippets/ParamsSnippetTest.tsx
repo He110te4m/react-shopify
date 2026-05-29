@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useShopifyParams } from "vite-plugin-react-shopify/runtime/settings";
+import { useSnippetParams, useLiquidValues } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   type: "snippet" as const,
@@ -9,30 +9,23 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ParamsSnippetTest() {
-  const p = useShopifyParams<{
-    product_title?: string;
-    product_price?: string;
-    product_image?: string;
-    product_badge?: string;
-  }>();
+  const { value: title } = useSnippetParams("product_title");
+  const { value: price } = useSnippetParams("product_price");
+  const { values: p } = useLiquidValues({
+    image: "product_image",
+    badge: "product_badge",
+  });
 
   const [unusedParamsDetected, setUnusedParamsDetected] = useState<string[]>([]);
 
   useEffect(() => {
     const unused: string[] = [];
-    const paramsObj = p as Record<string, any>;
-
-    for (const key of ["product_image", "product_badge"]) {
-      const val = paramsObj[key];
-      const label = val === undefined ? "undefined" : JSON.stringify(val);
-      unused.push(`${key}=${label}`);
-    }
-
+    if (p.image === undefined) unused.push("product_image=undefined (useEffect中访问，SSR未追踪)");
+    else unused.push(`product_image=${p.image}`);
+    if (p.badge === undefined) unused.push("product_badge=undefined (useEffect中访问，SSR未追踪)");
+    else unused.push(`product_badge=${p.badge}`);
     setUnusedParamsDetected(unused);
   }, []);
-
-  const title = p.product_title || "Untitled";
-  const price = p.product_price || "0";
 
   return (
     <div className="params-snippet-test">
@@ -40,15 +33,13 @@ export default function ParamsSnippetTest() {
       <span className="snippet-price">{price}</span>
 
       <div className="snippet-debug" style={{ fontSize: "12px", color: "#666", marginTop: "8px" }}>
-        <div>SSR追踪到的 params: title、price</div>
+        <div>SSR跟踪到的 params: product_title、product_price</div>
         <div>
           useEffect中检测未使用的params:
           {unusedParamsDetected.length === 0
             ? " (hydrate后显示)"
             : unusedParamsDetected.map((item) => (
-                <span key={item} style={{ display: "block", marginLeft: "16px" }}>
-                  {item}
-                </span>
+                <span key={item} style={{ display: "block", marginLeft: "16px" }}>{item}</span>
               ))}
         </div>
       </div>

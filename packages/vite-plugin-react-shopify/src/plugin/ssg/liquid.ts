@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { SSGEntry } from "../../types";
 import { generateSchema } from "./schema-gen";
 
@@ -16,8 +17,7 @@ export function assembleLiquidFile(
   scriptAsset: string | null,
   cssContents: { inline: string[]; snippets: string[] },
   options: AssembleOptions,
-  accessedSettings: string[] = [],
-  accessedParams: string[] = [],
+  trackedExpressions: string[] = [],
 ): string {
   const type = entry.meta.type ?? entry.targetType;
   const parts = [DISCLAIMER];
@@ -27,16 +27,16 @@ export function assembleLiquidFile(
       parts.push(html);
       break;
     case "section":
-      parts.push(...buildSection(html, entry, accessedSettings));
+      parts.push(...buildSection(html, entry, trackedExpressions));
       break;
     case "block":
-      parts.push(...buildBlock(html, entry, accessedSettings, accessedParams));
+      parts.push(...buildBlock(html, entry, trackedExpressions));
       break;
     case "snippet":
-      parts.push(...buildSnippet(html, entry, accessedParams));
+      parts.push(...buildSnippet(html, entry, trackedExpressions));
       break;
     default:
-      parts.push(...buildSection(html, entry, accessedSettings));
+      parts.push(...buildSection(html, entry, trackedExpressions));
       break;
   }
 
@@ -71,24 +71,28 @@ export function assembleLiquidFile(
 const hasBlocks = (entry: SSGEntry): boolean =>
   !!entry.meta.blocks && entry.meta.blocks.length > 0;
 
-function buildSettingsBridge(prefix: string, keys: string[]): string {
-  if (keys.length === 0) return "";
-  const entries = keys
-    .map((k) => `    "${k}": {{ ${prefix}.settings.${k} | json }}`)
-    .join(",\n");
-  return `  <script type="application/json" data-ssg-props>\n  {\n${entries}\n  }\n  </script>`;
+function buildLiquidBridge(trackedExpressions: string[]): string {
+  if (trackedExpressions.length === 0) return "";
+
+  const entries = trackedExpressions.map((expr, i) => {
+    const comma = i < trackedExpressions.length - 1 ? "," : "";
+    return `    "${expr}": {{ ${expr} | json }}${comma}`;
+  });
+
+  return [
+    '  <script type="application/json" data-ssg-liquid>',
+    "  {",
+    entries.join("\n"),
+    "  }",
+    "  </script>",
+  ].join("\n");
 }
 
-function buildParamsBridge(params: string[], accessedParams?: string[]): string {
-  const keys = accessedParams && accessedParams.length > 0 ? accessedParams : params;
-  if (keys.length === 0) return "";
-  const entries = keys
-    .map((p) => `    "${p}": {{ ${p} | json }}`)
-    .join(",\n");
-  return `  <script type="application/json" data-ssg-params>\n  {\n${entries}\n  }\n  </script>`;
-}
-
-function buildSection(html: string, entry: SSGEntry, accessedSettings: string[]): string[] {
+function buildSection(
+  html: string,
+  entry: SSGEntry,
+  trackedExpressions: string[],
+): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
@@ -101,19 +105,24 @@ function buildSection(html: string, entry: SSGEntry, accessedSettings: string[])
   ];
   if (cls) lines.push(`  class="${cls}"`);
   lines.push(`>`);
-  const settingsBridge = buildSettingsBridge("section", accessedSettings);
-  if (settingsBridge) lines.push(settingsBridge);
+
+  const liquidBridge = buildLiquidBridge(trackedExpressions);
+  if (liquidBridge) lines.push(liquidBridge);
+
   lines.push(
-    `  <div data-ssg-hydrate>`,
-    `    ${html}`,
-    `  </div>`,
+    `  <div data-ssg-hydrate>${html}</div>`,
   );
+
   if (hasBlocks(entry)) lines.push(`  {% content_for 'blocks' %}`);
   lines.push(`</${tag}>`);
   return lines;
 }
 
-function buildBlock(html: string, entry: SSGEntry, accessedSettings: string[], accessedParams: string[]): string[] {
+function buildBlock(
+  html: string,
+  entry: SSGEntry,
+  trackedExpressions: string[],
+): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
 
@@ -134,27 +143,32 @@ function buildBlock(html: string, entry: SSGEntry, accessedSettings: string[], a
     `  {{ block.shopify_attributes }}`,
     `>`,
   );
-  const settingsBridge = buildSettingsBridge("block", accessedSettings);
-  if (settingsBridge) lines.push(settingsBridge);
-  const paramsBridge = buildParamsBridge(entry.meta.params || [], accessedParams);
-  if (paramsBridge) lines.push(paramsBridge);
+
+  const liquidBridge = buildLiquidBridge(trackedExpressions);
+  if (liquidBridge) lines.push(liquidBridge);
+
   lines.push(
-    `  <div data-ssg-hydrate>`,
-    `    ${html}`,
-    `  </div>`,
+    `  <div data-ssg-hydrate>${html}</div>`,
   );
+
   if (hasBlocks(entry)) lines.push(`  {% content_for 'blocks' %}`);
   lines.push(`</${tag}>`);
   return lines;
 }
 
-function buildSnippet(html: string, entry: SSGEntry, accessedParams: string[]): string[] {
+function buildSnippet(
+  html: string,
+  entry: SSGEntry,
+  trackedExpressions: string[],
+): string[] {
   const lines: string[] = [
     "",
     `<div data-ssg-component="${entry.kebabName}">`,
   ];
-  const paramsBridge = buildParamsBridge(entry.meta.params || [], accessedParams);
-  if (paramsBridge) lines.push(paramsBridge);
+
+  const liquidBridge = buildLiquidBridge(trackedExpressions);
+  if (liquidBridge) lines.push(liquidBridge);
+
   lines.push(
     `  <div data-ssg-hydrate>`,
     `    ${html}`,
@@ -183,8 +197,6 @@ function typeToDir(type: string): string {
   if (type === "block") return "blocks";
   return `${type}s`;
 }
-
-import path from "node:path";
 
 function getAssetRelativePath(buildDir: string, filename: string): string {
   if (!buildDir.startsWith("assets/")) return filename;

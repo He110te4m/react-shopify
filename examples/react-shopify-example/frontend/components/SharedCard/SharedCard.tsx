@@ -18,7 +18,7 @@ export default function SharedCard({ title, accentColor = "#6c63ff", children }:
     <div className={`SharedCard-card${expanded ? " SharedCard-card--expanded" : ""}`}>
       <div
         className="SharedCard-accentLine"
-        style={{ backgroundColor: accentColor }}
+        style={{ "--accent": accentColor } as React.CSSProperties}
       />
       <div className="SharedCard-cardHeader" onClick={toggle}>
         <h3 className="SharedCard-cardTitle">{title}</h3>

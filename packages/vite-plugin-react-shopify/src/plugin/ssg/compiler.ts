@@ -6,7 +6,7 @@ import type { ResolvedOptions } from "../options";
 import type { SSGEntry } from "../../types";
 import { logger } from "../logger";
 import { scanEntries } from "./scanner";
-import { stripReactLiquidTags, unwrapHtmlEntities } from "./post-process";
+import { unwrapHtmlEntities, normalizeVoidElements, normalizeStyleAttributes } from "./post-process";
 import { assembleLiquidFile, getOutputPath } from "./liquid";
 
 const log = logger("ssg:compiler");
@@ -196,18 +196,16 @@ async function compileEntry(
 
     (globalThis as any).__shopify_ssg_target = entry.targetType;
 
-    const trackedSettings = new Set<string>();
-    const trackedParams = new Set<string>();
-    (globalThis as any).__shopify_ssg_track_settings = trackedSettings;
-    (globalThis as any).__shopify_ssg_track_params = trackedParams;
+    const trackedExpressions = new Set<string>();
+    (globalThis as any).__shopify_ssg_liquid_track = trackedExpressions;
 
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
 
-    delete (globalThis as any).__shopify_ssg_track_settings;
-    delete (globalThis as any).__shopify_ssg_track_params;
+    delete (globalThis as any).__shopify_ssg_liquid_track;
 
-    html = stripReactLiquidTags(html);
+    html = normalizeVoidElements(html);
+    html = normalizeStyleAttributes(html);
     html = unwrapHtmlEntities(html);
 
     const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
@@ -216,7 +214,7 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
-    }, [...trackedSettings], [...trackedParams]);
+    }, [...trackedExpressions]);
 
     const outputPath = getOutputPath(entry, {
       prefix: options.ssg.prefix,

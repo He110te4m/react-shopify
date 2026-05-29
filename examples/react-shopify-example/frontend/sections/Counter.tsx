@@ -1,6 +1,6 @@
-import { useState } from "react";
-import type { ShopifyMeta, SettingSchema, InferSettings } from "vite-plugin-react-shopify";
-import { useShopifySettings } from "vite-plugin-react-shopify/runtime/settings";
+import { useState, useEffect } from "react";
+import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
+import { useSectionSettings, useLiquidValues, parseLiquidNumber } from "vite-plugin-react-shopify/runtime";
 import SharedCard from "../components/SharedCard/SharedCard";
 
 const settings = [
@@ -25,47 +25,40 @@ export const shopifyMeta = {
   settings,
   presets: [
     { name: "Counter (Default)", category: "Demo" },
-    {
-      name: "Counter (Step 5)",
-      category: "Demo",
-      settings: { step: "5", initial_count: 10 },
-    },
+    { name: "Counter (Step 5)", category: "Demo", settings: { step: "5", initial_count: 10 } },
   ],
 } satisfies ShopifyMeta;
 
 export default function Counter() {
-  const s = useShopifySettings<InferSettings<typeof settings>>();
-  const title = s.title || "Counter";
-  const initial_count = s.initial_count || 0;
-  const step = s.step || "1";
+  const { value: title } = useSectionSettings("title");
+  const { values: s } = useLiquidValues({
+    initial: "section.settings.initial_count",
+    step: "section.settings.step",
+  });
 
-  const stepNum = Number(step) || 1;
-  const [count, setCount] = useState(initial_count);
+  const stepNum = parseLiquidNumber(s.step, 1);
+  const initialCount = parseLiquidNumber(s.initial, 0);
+
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    // After hydration, sync to the Shopify setting value.
+    // During SSR, useState is always 0 so the DOM has <p>0</p> → hydration match.
+    setCount(initialCount);
+  }, []);
 
   return (
-    <SharedCard title={title} accentColor="#e17055">
+    <SharedCard title={title ?? "Counter"} accentColor="#e17055">
       <p className="counter-value">{count}</p>
       <div className="counter-buttons">
-        <button
-          type="button"
-          className="counter-btn counter-btn--dec"
-          onClick={() => setCount((c) => c - stepNum)}
-        >
-          -{step}
+        <button type="button" className="counter-btn counter-btn--dec" onClick={() => setCount((c) => c - stepNum)}>
+          {`-${s.step}`}
         </button>
-        <button
-          type="button"
-          className="counter-btn counter-btn--reset"
-          onClick={() => setCount(initial_count)}
-        >
+        <button type="button" className="counter-btn counter-btn--reset" onClick={() => setCount(initialCount)}>
           Reset
         </button>
-        <button
-          type="button"
-          className="counter-btn counter-btn--inc"
-          onClick={() => setCount((c) => c + stepNum)}
-        >
-          +{step}
+        <button type="button" className="counter-btn counter-btn--inc" onClick={() => setCount((c) => c + stepNum)}>
+          {`+${s.step}`}
         </button>
       </div>
     </SharedCard>
