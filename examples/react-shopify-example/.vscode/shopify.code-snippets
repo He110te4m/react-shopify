@@ -1,0 +1,276 @@
+{
+  "React Section": {
+    "prefix": "shopify-section",
+    "description": "Initialize a React Shopify Section with shopifyMeta and useLiquidValue",
+    "body": [
+      "import type { ShopifyMeta, SettingSchema } from \"vite-plugin-react-shopify\";",
+      "import { useLiquidValue } from \"vite-plugin-react-shopify/runtime\";",
+      "",
+      "const settings = [",
+      "  {",
+      "    type: \"text\",",
+      "    id: \"${1:title}\",",
+      "    label: \"${2:Title}\",",
+      "    default: \"${3:Hello, World!}\",",
+      "  },",
+      "  $0",
+      "] as const satisfies SettingSchema[];",
+      "",
+      "export const shopifyMeta = {",
+      "  name: \"${4:Section Name}\",",
+      "  settings,",
+      "  presets: [",
+      "    { name: \"${4:Section Name}\", category: \"${5:Custom}\" },",
+      "  ],",
+      "} satisfies ShopifyMeta;",
+      "",
+      "export default function ${6:${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/}}() {",
+      "  const [${1:title}] = useLiquidValue(\"section.settings.${1:title}\");",
+      "",
+      "  return (",
+      "    <section>",
+      "      {${1:title}}",
+      "    </section>",
+      "  );",
+      "}",
+      ""
+    ]
+  },
+
+  "React Section with Blocks": {
+    "prefix": "shopify-section-blocks",
+    "description": "Initialize a React Shopify Section that supports nested blocks",
+    "body": [
+      "import type { ShopifyMeta, SettingSchema } from \"vite-plugin-react-shopify\";",
+      "import { useLiquidValue } from \"vite-plugin-react-shopify/runtime\";",
+      "",
+      "const settings = [",
+      "  {",
+      "    type: \"text\",",
+      "    id: \"${1:title}\",",
+      "    label: \"${2:Title}\",",
+      "    default: \"${3:Section Title}\",",
+      "  },",
+      "  $0",
+      "] as const satisfies SettingSchema[];",
+      "",
+      "export const shopifyMeta = {",
+      "  name: \"${4:Section Name}\",",
+      "  settings,",
+      "  blocks: [",
+      "    { type: \"${5:block-type}\" },",
+      "    { type: \"@theme\" },",
+      "  ],",
+      "  max_blocks: ${6:8},",
+      "  presets: [",
+      "    {",
+      "      name: \"${4:Section Name}\",",
+      "      category: \"${7:Custom}\",",
+      "      settings: { ${1:title}: \"${3:Section Title}\" },",
+      "      blocks: [",
+      "        { type: \"${5:block-type}\" },",
+      "      ],",
+      "    },",
+      "  ],",
+      "} satisfies ShopifyMeta;",
+      "",
+      "export default function ${8:${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/}}() {",
+      "  const [${1:title}] = useLiquidValue(\"section.settings.${1:title}\");",
+      "",
+      "  return (",
+      "    <section>",
+      "      {${1:title}}",
+      "    </section>",
+      "  );",
+      "}",
+      ""
+    ]
+  },
+
+  "React Block": {
+    "prefix": "shopify-block",
+    "description": "Initialize a React Shopify Theme Block with shopifyMeta and block.settings",
+    "body": [
+      "import type { ShopifyMeta, SettingSchema } from \"vite-plugin-react-shopify\";",
+      "import { useLiquidValue } from \"vite-plugin-react-shopify/runtime\";",
+      "",
+      "const settings = [",
+      "  {",
+      "    type: \"text\",",
+      "    id: \"${1:text}\",",
+      "    label: \"${2:Text}\",",
+      "    default: \"${3:Default}\",",
+      "  },",
+      "  $0",
+      "] as const satisfies SettingSchema[];",
+      "",
+      "export const shopifyMeta = {",
+      "  name: \"${4:Block Name}\",",
+      "  settings,",
+      "  presets: [",
+      "    { name: \"${4:Block Name}\"${5:, category: \"Custom\"} },",
+      "  ],",
+      "} satisfies ShopifyMeta;",
+      "",
+      "export default function ${6:${TM_FILENAME_BASE/(.*)/${1:/pascalcase}/}}() {",
+      "  const [${1:text}] = useLiquidValue(\"block.settings.${1:text}\");",
+      "",
+      "  return (",
+      "    <div>",
+      "      {${1:text}}",
+      "    </div>",
+      "  );",
+      "}",
+      ""
+    ]
+  },
+
+  "useLiquidValue (string)": {
+    "prefix": "use-liquid",
+    "description": "useLiquidValue hook for string settings",
+    "body": "const [${1:id}] = useLiquidValue(\"${2|section,block|}.settings.${1:id}\");"
+  },
+
+  "useLiquidValue (number)": {
+    "prefix": "use-liquid-number",
+    "description": "useLiquidValue hook for number/range settings",
+    "body": "const [${1:id}] = useLiquidValue(\"${2|section,block|}.settings.${1:id}\", \"number\");"
+  },
+
+  "useLiquidValue (boolean)": {
+    "prefix": "use-liquid-bool",
+    "description": "useLiquidValue hook for checkbox settings",
+    "body": "const [${1:id}] = useLiquidValue(\"${2|section,block|}.settings.${1:id}\", \"boolean\");"
+  },
+
+  "Setting: text": {
+    "prefix": "setting-text",
+    "description": "Shopify text input setting",
+    "body": "{ type: \"text\", id: \"${1:id}\", label: \"${2:Label}\", default: \"${3:Default}\" }"
+  },
+
+  "Setting: textarea": {
+    "prefix": "setting-textarea",
+    "description": "Shopify textarea setting",
+    "body": "{ type: \"textarea\", id: \"${1:id}\", label: \"${2:Label}\", default: \"${3:Default text}\" }"
+  },
+
+  "Setting: number": {
+    "prefix": "setting-number",
+    "description": "Shopify number input setting",
+    "body": "{ type: \"number\", id: \"${1:id}\", label: \"${2:Label}\", default: ${3:0} }"
+  },
+
+  "Setting: range": {
+    "prefix": "setting-range",
+    "description": "Shopify range slider setting",
+    "body": "{ type: \"range\", id: \"${1:id}\", label: \"${2:Label}\", default: ${3:50}, min: ${4:0}, max: ${5:100}, step: ${6:1}, unit: \"${7:px}\" }"
+  },
+
+  "Setting: select": {
+    "prefix": "setting-select",
+    "description": "Shopify select/dropdown setting",
+    "body": [
+      "{",
+      "  type: \"select\",",
+      "  id: \"${1:id}\",",
+      "  label: \"${2:Label}\",",
+      "  default: \"${3:value}\",",
+      "  options: [",
+      "    { value: \"${3:value}\", label: \"${4:Option Label}\" },",
+      "    { value: \"${5:value2}\", label: \"${6:Option Label 2}\" },",
+      "  ],",
+      "}"
+    ]
+  },
+
+  "Setting: checkbox": {
+    "prefix": "setting-checkbox",
+    "description": "Shopify checkbox setting",
+    "body": "{ type: \"checkbox\", id: \"${1:id}\", label: \"${2:Label}\", default: ${3:false} }"
+  },
+
+  "Setting: color": {
+    "prefix": "setting-color",
+    "description": "Shopify color picker setting",
+    "body": "{ type: \"color\", id: \"${1:id}\", label: \"${2:Label}\", default: \"${3:#6c63ff}\" }"
+  },
+
+  "Setting: image_picker": {
+    "prefix": "setting-image",
+    "description": "Shopify image picker setting",
+    "body": "{ type: \"image_picker\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: link_list": {
+    "prefix": "setting-menu",
+    "description": "Shopify link_list (menu) setting",
+    "body": "{ type: \"link_list\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: header": {
+    "prefix": "setting-header",
+    "description": "Shopify header setting (visual divider in sidebar)",
+    "body": "{ type: \"header\", content: \"${1:Section Header}\" }"
+  },
+
+  "Setting: paragraph": {
+    "prefix": "setting-paragraph",
+    "description": "Shopify paragraph setting (info text in sidebar)",
+    "body": "{ type: \"paragraph\", content: \"${1:Help text for the merchant}\" }"
+  },
+
+  "Setting: text_alignment": {
+    "prefix": "setting-alignment",
+    "description": "Shopify text alignment setting",
+    "body": "{ type: \"text_alignment\", id: \"${1:id}\", label: \"${2:Label}\", default: \"${3|left,center,right|}\" }"
+  },
+
+  "Setting: url": {
+    "prefix": "setting-url",
+    "description": "Shopify URL setting",
+    "body": "{ type: \"url\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: richtext": {
+    "prefix": "setting-richtext",
+    "description": "Shopify richtext setting",
+    "body": "{ type: \"richtext\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: product": {
+    "prefix": "setting-product",
+    "description": "Shopify product setting",
+    "body": "{ type: \"product\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: collection": {
+    "prefix": "setting-collection",
+    "description": "Shopify collection setting",
+    "body": "{ type: \"collection\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: video_url": {
+    "prefix": "setting-video-url",
+    "description": "Shopify video_url setting",
+    "body": "{ type: \"video_url\", id: \"${1:id}\", label: \"${2:Label}\", accept: [\"${3|youtube,vimeo|}\"] }"
+  },
+
+  "Setting: font_picker": {
+    "prefix": "setting-font",
+    "description": "Shopify font_picker setting",
+    "body": "{ type: \"font_picker\", id: \"${1:id}\", label: \"${2:Label}\", default: \"${3:helvetica}\" }"
+  },
+
+  "Setting: color_scheme": {
+    "prefix": "setting-color-scheme",
+    "description": "Shopify color_scheme setting",
+    "body": "{ type: \"color_scheme\", id: \"${1:id}\", label: \"${2:Label}\" }"
+  },
+
+  "Setting: line_break": {
+    "prefix": "setting-linebreak",
+    "description": "Shopify line_break sidebar setting",
+    "body": "{ type: \"line_break\" }"
+  }
+}
