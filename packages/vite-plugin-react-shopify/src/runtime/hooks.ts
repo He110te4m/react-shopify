@@ -1,13 +1,19 @@
 import { useContext, useEffect, useState } from "react";
 import { LiquidDataContext } from "./provider";
 
+function getLiquidFilter(expr: string): string {
+  const filterMap = (globalThis as any).__shopify_ssg_liquid_filters as Record<string, string> | undefined;
+  return filterMap?.[expr] ?? "";
+}
+
 function useLiquidRaw(expr: string): string | undefined {
   const data = useContext(LiquidDataContext) as Record<string, any>;
 
   if (typeof (globalThis as any).document === "undefined") {
     const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
     if (tracker) tracker.add(expr);
-    return `{{ ${expr} }}`;
+    const filter = getLiquidFilter(expr);
+    return `{{ ${expr}${filter} }}`;
   }
 
   if (Object.prototype.hasOwnProperty.call(data, expr)) {
@@ -27,7 +33,8 @@ function useLiquidRawValues<T extends Record<string, string>>(
     const values = {} as Record<string, string | undefined>;
     for (const [key, expr] of Object.entries(map)) {
       if (tracker) tracker.add(expr);
-      values[key] = `{{ ${expr} }}`;
+      const filter = getLiquidFilter(expr);
+      values[key] = `{{ ${expr}${filter} }}`;
     }
     return values as { [K in keyof T]: string | undefined };
   }

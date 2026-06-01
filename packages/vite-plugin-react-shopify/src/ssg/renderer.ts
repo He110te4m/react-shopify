@@ -14,6 +14,26 @@ function pathToFileURL(filePath: string): string {
 
 const log = logger("ssg:renderer");
 
+const DEFAULT_LIQUID_FILTERS: Record<string, string> = {
+  textarea: " | newline_to_br",
+  image_picker: " | img_url: 'master'",
+};
+
+function buildLiquidFilterMap(
+  settings: { type: string; id: string }[] | undefined,
+  prefix: string,
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!settings) return map;
+  for (const s of settings) {
+    const filter = DEFAULT_LIQUID_FILTERS[s.type];
+    if (filter) {
+      map[`${prefix}${s.id}`] = filter;
+    }
+  }
+  return map;
+}
+
 export interface RenderResult {
   html: string;
   trackedExpressions: Set<string>;
@@ -52,6 +72,10 @@ export function renderEntry(
 
     (globalThis as any).__shopify_ssg_target = entry.targetType;
 
+    const prefix = entry.targetType === "block" ? "block.settings." : "section.settings.";
+    const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
+    (globalThis as any).__shopify_ssg_liquid_filters = filterMap;
+
     const trackedExpressions = new Set<string>();
     (globalThis as any).__shopify_ssg_liquid_track = trackedExpressions;
 
@@ -59,6 +83,7 @@ export function renderEntry(
     let html = renderToStaticMarkup(element);
 
     delete (globalThis as any).__shopify_ssg_liquid_track;
+    delete (globalThis as any).__shopify_ssg_liquid_filters;
 
     html = normalizeVoidElements(html);
     html = normalizeStyleAttributes(html);

@@ -336,3 +336,87 @@ describe("runtime hooks — SSR regression (number/boolean default behaviour pre
     expect(result).toEqual({ show: false });
   });
 });
+
+describe("runtime hooks — SSR with liquid filters", () => {
+  beforeEach(() => {
+    g.__shopify_ssg_liquid_track = new Set<string>();
+    g.__shopify_ssg_liquid_filters = {};
+    delete g.document;
+  });
+
+  afterEach(() => {
+    delete g.__shopify_ssg_liquid_track;
+    delete g.__shopify_ssg_liquid_filters;
+  });
+
+  it("applies filter when expression matches filter map", async () => {
+    g.__shopify_ssg_liquid_filters = {
+      "section.settings.description": " | newline_to_br",
+    };
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.description");
+    expect(val).toBe("{{ section.settings.description | newline_to_br }}");
+    expect(g.__shopify_ssg_liquid_track.has("section.settings.description")).toBe(true);
+  });
+
+  it("does not apply filter when expression not in filter map", async () => {
+    g.__shopify_ssg_liquid_filters = {
+      "section.settings.description": " | newline_to_br",
+    };
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.title");
+    expect(val).toBe("{{ section.settings.title }}");
+  });
+
+  it("does not apply filter when filter map is empty", async () => {
+    g.__shopify_ssg_liquid_filters = {};
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.title");
+    expect(val).toBe("{{ section.settings.title }}");
+  });
+
+  it("does not apply filter when filter map is not set", async () => {
+    delete g.__shopify_ssg_liquid_filters;
+    const { useLiquidValue } = await importHooks();
+    const [val] = useLiquidValue("section.settings.title");
+    expect(val).toBe("{{ section.settings.title }}");
+  });
+
+  it("useLiquidValues applies filters to matching expressions", async () => {
+    g.__shopify_ssg_liquid_filters = {
+      "section.settings.description": " | newline_to_br",
+      "section.settings.image": " | img_url: 'master'",
+    };
+    const { useLiquidValues } = await importHooks();
+    const result = useLiquidValues({
+      title: "section.settings.title",
+      description: "section.settings.description",
+      image: "section.settings.image",
+      count: "section.settings.count",
+    });
+    expect(result).toEqual({
+      title: "{{ section.settings.title }}",
+      description: "{{ section.settings.description | newline_to_br }}",
+      image: "{{ section.settings.image | img_url: 'master' }}",
+      count: "{{ section.settings.count }}",
+    });
+  });
+
+  it("useSectionSettings applies filter when set", async () => {
+    g.__shopify_ssg_liquid_filters = {
+      "section.settings.description": " | newline_to_br",
+    };
+    const { useSectionSettings } = await importHooks();
+    const result = useSectionSettings("description");
+    expect(result.value).toBe("{{ section.settings.description | newline_to_br }}");
+  });
+
+  it("useBlockSettings applies filter when set", async () => {
+    g.__shopify_ssg_liquid_filters = {
+      "block.settings.color": " | img_url: 'master'",
+    };
+    const { useBlockSettings } = await importHooks();
+    const result = useBlockSettings("color");
+    expect(result.value).toBe("{{ block.settings.color | img_url: 'master' }}");
+  });
+});
