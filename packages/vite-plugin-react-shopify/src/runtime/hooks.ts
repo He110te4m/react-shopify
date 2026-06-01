@@ -75,9 +75,18 @@ function useLiquidValue(
   type: LiquidTypeMode = "string",
 ): [string | number | boolean | undefined, Setter<any>] {
   const raw = useLiquidRaw(expr);
+  const isSSR = typeof (globalThis as any).document === "undefined";
 
-  const defaultVal: any = type === "number" ? 0 : type === "boolean" ? false : raw;
-  const [val, setVal] = useState(defaultVal);
+  let initialVal: any;
+  if (type === "boolean") {
+    initialVal = false;
+  } else if (type === "number") {
+    initialVal = isSSR ? raw : parseLiquidNumber(raw, 0);
+  } else {
+    initialVal = raw;
+  }
+
+  const [val, setVal] = useState(initialVal);
 
   useEffect(() => {
     if (type === "number") setVal(parseLiquidNumber(raw, 0));
@@ -103,12 +112,19 @@ function useLiquidValues<T extends Record<string, string>, const Types extends T
   const raw = useLiquidRawValues(map);
   const keys = Object.keys(map) as (keyof T & string)[];
   const rawDep = keys.map((k) => raw[k]).join("\0");
+  const isSSR = typeof (globalThis as any).document === "undefined";
 
   const [parsed, setParsed] = useState(() => {
     const vals = {} as Record<string, string | number | boolean | undefined>;
     for (const k of keys) {
       const mode: LiquidTypeMode = (types as Record<string, LiquidTypeMode>)?.[k] ?? "string";
-      vals[k] = mode === "number" ? 0 : mode === "boolean" ? false : raw[k];
+      if (mode === "boolean") {
+        vals[k] = false;
+      } else if (mode === "number") {
+        vals[k] = isSSR ? raw[k] : parseLiquidNumber(raw[k], 0);
+      } else {
+        vals[k] = raw[k];
+      }
     }
     return vals;
   });
