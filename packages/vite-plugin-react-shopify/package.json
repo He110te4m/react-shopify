@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-react-shopify",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "description": "Vite plugin for React Shopify themes",
   "files": [
     "dist"
