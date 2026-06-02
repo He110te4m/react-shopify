@@ -1,76 +1,88 @@
-import type { SettingSchema, ShopifyMeta } from "../types";
+/**
+ * @file Serializes {@link ShopifyMeta} into the JSON `{% schema %}` block
+ * required by Shopify theme sections and blocks.
+ *
+ * Translates settings array, presets, blocks configuration, and other metadata
+ * fields into the exact JSON structure the Shopify theme editor expects.
+ */
 
-function serializeSetting(setting: SettingSchema): Record<string, unknown> {
-  const s: Record<string, unknown> = { type: setting.type };
+import type { ShopifyMeta, PresetDefinition } from "../types/shopify";
 
-  if ("id" in setting) s.id = setting.id;
-  if ("label" in setting) s.label = setting.label;
-
-  if ("default" in setting && setting.default !== undefined) {
-    s.default = setting.default;
-  }
-  if ("info" in setting && setting.info) s.info = setting.info;
-  if ("placeholder" in setting && setting.placeholder) {
-    s.placeholder = setting.placeholder;
-  }
-  if ("options" in setting && setting.options) s.options = setting.options;
-  if ("min" in setting && setting.min !== undefined) s.min = setting.min;
-  if ("max" in setting && setting.max !== undefined) s.max = setting.max;
-  if ("step" in setting && setting.step !== undefined) s.step = setting.step;
-  if ("unit" in setting && setting.unit) s.unit = setting.unit;
-  if ("accept" in setting && setting.accept) s.accept = setting.accept;
-  if ("metaobject_type" in setting && setting.metaobject_type) {
-    s.metaobject_type = setting.metaobject_type;
-  }
-  if ("limit" in setting && setting.limit !== undefined) s.limit = setting.limit;
-  if ("content" in setting && setting.content) s.content = setting.content;
-  if ("definition" in setting && setting.definition) {
-    s.definition = setting.definition.map(serializeSetting);
-  }
-  if ("role" in setting && setting.role) s.role = setting.role;
-
-  return s;
+/**
+ * Convert a flat `ShopifyMeta` object into the `{% schema %}...{% endschema %}`
+ * Liquid block string.
+ */
+export function generateSchema(meta: ShopifyMeta): string {
+  const schema = buildSchema(meta);
+  const json = JSON.stringify(schema, null, 2);
+  return `\n{% schema %}\n${json}\n{% endschema %}`;
 }
 
-export function generateSchema(
-  meta: Required<Pick<ShopifyMeta, "name">> & ShopifyMeta,
-): string {
-  const schema: Record<string, unknown> = {
-    name: meta.name,
+/** Build the plain JSON object from metadata. */
+function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
+  return {
+    name: meta.name ?? "",
+    tag: meta.tag ?? "div",
+    class: meta.class ?? "",
+    limit: meta.limit,
+    ...(meta.max_blocks != null ? { max_blocks: meta.max_blocks } : {}),
+    settings: meta.settings || [],
+    blocks: meta.blocks
+      ? meta.blocks.map((b) => serializeBlockDefinition(b))
+      : undefined,
+    presets: meta.presets
+      ? meta.presets.map((p) => serializePreset(p))
+      : undefined,
+    ...(meta.enabled_on ? { enabled_on: meta.enabled_on } : {}),
+    ...(meta.disabled_on ? { disabled_on: meta.disabled_on } : {}),
+    ...(meta.templates ? { templates: meta.templates } : {}),
   };
+}
 
-  if (meta.tag) schema.tag = meta.tag;
-  if (meta.class) schema.class = meta.class;
-  if (meta.limit !== undefined) schema.limit = meta.limit;
-  if (meta.max_blocks !== undefined) schema.max_blocks = meta.max_blocks;
+/** Strip the `name` field from a block definition for JSON output. */
+function serializeBlockDefinition(
+  block: { type: string; name?: string; settings?: any[] },
+): Record<string, unknown> {
+  const { name: _name, ...rest } = block;
+  return rest;
+}
 
-  if (meta.settings && meta.settings.length > 0) {
-    schema.settings = meta.settings.map(serializeSetting);
+/** Recursively serialize preset blocks, stripping `name` and `id` if static. */
+function serializePreset(preset: PresetDefinition): Record<string, unknown> {
+  const obj: Record<string, unknown> = { name: preset.name };
+
+  if (preset.category) obj.category = preset.category;
+
+  if (preset.settings) {
+    for (const [key, value] of Object.entries(preset.settings)) {
+      if (obj.settings == null) obj.settings = {};
+      (obj.settings as Record<string, any>)[key] =
+        value === "" ? undefined : value;
+    }
   }
 
-  if (meta.blocks && meta.blocks.length > 0) {
-    schema.blocks = meta.blocks.map((block) => {
-      const b: Record<string, unknown> = { type: block.type };
-      if (block.name) b.name = block.name;
-      if (block.settings) b.settings = block.settings;
-      return b;
-    });
-  }
+  if (preset.blocks) {
+    obj.blocks = preset.blocks.map((block) => {
+      const { type, id, static: isStatic } = block;
+      const p: Record<string, any> = { type };
 
-  if (meta.presets && meta.presets.length > 0) {
-    schema.presets = meta.presets.map((preset) => {
-      const p: Record<string, unknown> = { name: preset.name };
-      if (preset.category) p.category = preset.category;
-      if (preset.settings) p.settings = preset.settings;
-      if (preset.blocks) p.blocks = preset.blocks;
+      if (isStatic) {
+        p.static = true;
+        return p;
+      }
+
+      if (id && block.settings) {
+        p.id = id;
+        p.settings = {};
+        for (const [key, value] of Object.entries(block.settings)) {
+          (p.settings as Record<string, any>)[key] =
+            value === "" ? undefined : value;
+        }
+      }
+
       return p;
     });
   }
 
-  if (meta.enabled_on) schema.enabled_on = meta.enabled_on;
-  if (meta.disabled_on) schema.disabled_on = meta.disabled_on;
-  if (meta.templates) schema.templates = meta.templates;
-
-  const json = JSON.stringify(schema, null, 2);
-  return `\n{% schema %}\n${json}\n{% endschema %}\n`;
+  return obj;
 }

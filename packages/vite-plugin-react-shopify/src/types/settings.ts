@@ -1,3 +1,12 @@
+/**
+ * @file TypeScript type definitions for Shopify theme setting schemas.
+ *
+ * Covers every Shopify setting type (text, checkbox, color, image_picker,
+ * etc.) as well as informational sidebar types (header, paragraph). Also
+ * includes utility types for type-level validation ({@link AssertNoEmptyDefaults})
+ * and schema inference ({@link InferSettings}).
+ */
+
 // ── Base ────────────────────────────────────────────────────────────────
 
 interface BaseSettingSchema {

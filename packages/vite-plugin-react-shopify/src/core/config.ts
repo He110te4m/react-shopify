@@ -1,3 +1,12 @@
+/**
+ * @file Vite configuration plugin for Shopify theme development.
+ *
+ * Merges sensible defaults for build output, module resolution, dev server,
+ * CSS modules, and manual chunk splitting (react / react-dom) into the Vite
+ * config. Detects watch mode via CLI flags or `SHOPIFY_DEV_WATCH` env var
+ * to toggle sourcemaps and minification.
+ */
+
 import path from "node:path";
 import { Plugin, UserConfig } from "vite";
 import { logger } from "./logger";
@@ -5,10 +14,15 @@ import type { ResolvedOptions } from "./options";
 
 const log = logger("config");
 
+/** Detect if Vite is running in watch/dev mode. */
 function isWatchMode(): boolean {
   return process.argv.includes("--watch") || process.env.SHOPIFY_DEV_WATCH === "1";
 }
 
+/**
+ * Vite plugin that provides default build, resolve, server, and CSS config
+ * for React Shopify theme projects.
+ */
 export default function shopifyConfig(options: ResolvedOptions): Plugin {
   return {
     name: "vite-plugin-shopify:config",

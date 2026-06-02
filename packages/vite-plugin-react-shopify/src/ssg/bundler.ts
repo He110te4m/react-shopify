@@ -1,3 +1,12 @@
+/**
+ * @file esbuild bundler for SSG entry compilation.
+ *
+ * Bundles a single React component entry into a temporary ESM file that can
+ * be imported for server-side rendering. Applies hydration fix transforms
+ * and strips CSS imports (both plain and CSS Modules) to produce a clean
+ * Node-compatible module.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -6,10 +15,20 @@ import { autoFixAdjacentText } from "../hydration-fix";
 
 const log = logger("ssg:bundler");
 
+/** Result of bundling a single entry. */
 export interface BundleResult {
   tmpFile: string;
 }
 
+/**
+ * Bundle the source file via esbuild, fix hydration issues, strip CSS, and
+ * write the output to a temporary `.mjs` file.
+ *
+ * @param entry The scanned entry file path and name.
+ * @param projectRoot Root of the theme project (for resolving esbuild).
+ * @param sourceDir The `frontend/` directory (for temp file placement).
+ * @returns The path to the temporary bundle, or `null` if esbuild is unavailable.
+ */
 export async function bundleEntry(
   entry: { filePath: string; kebabName: string },
   projectRoot: string,
@@ -27,6 +46,7 @@ export async function bundleEntry(
 
   const sourceCode = fs.readFileSync(entry.filePath, "utf-8");
 
+  // Apply hydration fix to the entry file itself
   const { result: fixedSource, fixCount } = autoFixAdjacentText(sourceCode, entry.filePath);
   const finalSource = fixCount > 0 ? fixedSource : sourceCode;
 
@@ -60,6 +80,7 @@ export async function bundleEntry(
     allowOverwrite: true,
     plugins: [
       {
+        // Re-apply hydration fix to all TSX/JSX files loaded during bundle
         name: "ssg-hydration-fix",
         setup(build: any) {
           build.onLoad({ filter: /\.(tsx|jsx)$/ }, (args: any) => {
@@ -77,6 +98,7 @@ export async function bundleEntry(
         },
       },
       {
+        // Strip CSS imports — not needed for SSR, replaced by Liquid stylesheet
         name: "ssg-strip-css",
         setup(build: any) {
           build.onResolve({ filter: /\.module\.css$/ }, (args: any) => ({

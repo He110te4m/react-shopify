@@ -1,3 +1,11 @@
+/**
+ * @file File-system scanner for discovering React component entries.
+ *
+ * Walks `frontend/{sections,blocks,templates,snippets}` directories with
+ * fast-glob, building {@link SSGEntry} records that drive the SSG compilation
+ * pipeline.
+ */
+
 import path from "node:path";
 import glob from "fast-glob";
 import { normalizePath } from "vite";
@@ -12,6 +20,10 @@ const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   snippets: "snippet",
 };
 
+/**
+ * Discover all `.tsx` / `.jsx` component files in the configured source
+ * directories and return structured entry records.
+ */
 export function scanEntries(options: ResolvedOptions): SSGEntry[] {
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
   const entries: SSGEntry[] = [];
@@ -40,6 +52,7 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
   return entries;
 }
 
+/** Convert PascalCase / camelCase to kebab-case. */
 export function toKebabCase(str: string): string {
   return str
     .replace(/([a-z])([A-Z])/g, "$1-$2")
@@ -48,6 +61,12 @@ export function toKebabCase(str: string): string {
     .toLowerCase();
 }
 
+/**
+ * Derive a human-readable display name from a filename.
+ *
+ * Converts `ProductPrice` → `Product Price`, `my-section` → `my section`.
+ * Truncated to 25 characters (Shopify's limit).
+ */
 export function deriveName(fileName: string): string {
   const readable = fileName
     .replace(/([a-z])([A-Z])/g, "$1 $2")

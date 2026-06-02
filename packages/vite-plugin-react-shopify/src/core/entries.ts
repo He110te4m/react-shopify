@@ -1,3 +1,12 @@
+/**
+ * @file Vite plugin that discovers React component entries and generates
+ * virtual entry modules for Vite's build.
+ *
+ * Scans `frontend/` directories for `.tsx`/`.jsx` files, creates a virtual
+ * module per entry (containing hydration bootstrapping code), and adds them
+ * to Rolldown's `input` so each component gets a separate JS output chunk.
+ */
+
 import path from "node:path";
 import { Plugin } from "vite";
 import { normalizePath } from "vite";
@@ -9,6 +18,9 @@ import { generateEntryModule } from "./entry-template";
 
 const log = logger("entries");
 
+/**
+ * Vite plugin for entry scanning and virtual module generation.
+ */
 export default function shopifyEntries(options: ResolvedOptions): Plugin {
   let entries: SSGEntry[] = [];
 

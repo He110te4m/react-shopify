@@ -1,3 +1,10 @@
+/**
+ * @file Runtime barrel export — public API for React components.
+ *
+ * Re-exports all hooks and the Liquid data provider so components can
+ * `import { useLiquidValue, ... } from 'vite-plugin-react-shopify/runtime'`.
+ */
+
 export {
   useLiquidValue,
   useLiquidValues,

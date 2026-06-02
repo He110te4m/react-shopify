@@ -1,3 +1,15 @@
+/**
+ * @file Vite plugin for the Static Site Generation (SSG) phase.
+ *
+ * Runs in `closeBundle` after Vite finishes bundling React components.
+ * Reads the Vite manifest, compiles each entry through the SSG pipeline
+ * (bundle → SSR render → Liquid assemble), writes `.liquid` files to the
+ * theme directory, and generates the import map snippet.
+ *
+ * Also handles the virtual module `vite-plugin-shopify/runtime` so
+ * components can import runtime hooks without a physical module.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { Plugin, Manifest } from "vite";
@@ -7,6 +19,9 @@ import { compileAllEntries } from "./compiler";
 
 const log = logger("ssg");
 
+/**
+ * Vite plugin that orchestrates SSG compilation after the bundle phase.
+ */
 export default function shopifySSG(options: ResolvedOptions): Plugin {
   return {
     name: "vite-plugin-shopify:ssg",
@@ -58,6 +73,7 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
   };
 }
 
+/** Write the import map snippet defining React CDN paths. */
 function writeImportMapSnippet(options: ResolvedOptions): void {
   const snippetPath = path.resolve(
     options.themeRoot,

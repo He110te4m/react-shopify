@@ -1,3 +1,10 @@
+/**
+ * @file Barrel re-export for all public types exposed by the package.
+ *
+ * Aggregates options types, Shopify metadata types, SSG entry types, and the
+ * full settings schema type hierarchy into a single import target.
+ */
+
 export type {
   Options,
   SSGOptions,

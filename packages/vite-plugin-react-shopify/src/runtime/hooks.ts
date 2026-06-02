@@ -1,11 +1,35 @@
+/**
+ * @file Runtime hooks for Shopify SSG React components.
+ *
+ * Provides React hooks that bridge Liquid template expressions and React state.
+ * During SSR, hooks return raw `{{ expr }}` strings and register expressions
+ * in a global tracker for the assembler. On the client, they read resolved
+ * values from LiquidDataContext (populated by the JSON bridge injected into
+ * the rendered HTML).
+ */
 import { useContext, useEffect, useState, useMemo } from "react";
 import { LiquidDataContext } from "./provider";
 
+/**
+ * Returns the Liquid filter suffix (e.g. `" | img_url: 'master'"`) for a given
+ * expression, based on the globally-registered filter map populated by the
+ * renderer before SSR rendering.
+ */
 function getLiquidFilter(expr: string): string {
   const filterMap = (globalThis as any).__shopify_ssg_liquid_filters as Record<string, string> | undefined;
   return filterMap?.[expr] ?? "";
 }
 
+/**
+ * Resolves a single Liquid expression to its raw value.
+ *
+ * - **SSR**: registers the expression in `__shopify_ssg_liquid_track` and
+ *   returns a raw `{{ expr }}` string (with optional filter suffix).
+ * - **Client**: reads the resolved string value from LiquidDataContext.
+ *
+ * @returns The raw Liquid expression string (SSR) or the resolved value from
+ *   the JSON bridge (client), or `undefined` if not found.
+ */
 function useLiquidRaw(expr: string): string | undefined {
   const data = useContext(LiquidDataContext) as Record<string, any>;
 
@@ -23,6 +47,15 @@ function useLiquidRaw(expr: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Batched version of `useLiquidRaw` — resolves multiple expressions at once.
+ *
+ * Accepts a name-to-expression mapping and returns the same shape with
+ * resolved values. On SSR, all expressions are tracked in a single pass.
+ *
+ * @param map - Object mapping keys to Liquid expression strings.
+ * @returns Object with the same keys, each mapped to the resolved value.
+ */
 function useLiquidRawValues<T extends Record<string, string>>(
   map: T,
 ): { [K in keyof T]: string | undefined } {
@@ -48,12 +81,21 @@ function useLiquidRawValues<T extends Record<string, string>>(
   return values as { [K in keyof T]: string | undefined };
 }
 
+/**
+ * Parses a Liquid value into a boolean following Shopify truthiness rules:
+ * `false`, `""`, `"0"`, `undefined`, and `null` are falsy; everything else is
+ * truthy.
+ */
 export function parseLiquidBoolean(value: string | boolean | undefined | null): boolean {
   if (typeof value === "boolean") return value;
   if (value === undefined || value === null) return false;
   return value !== "" && value !== "0" && value !== "false";
 }
 
+/**
+ * Parses a Liquid value into a number, falling back to `defaultVal` (default 0)
+ * when the value is `undefined`, `null`, or unparseable.
+ */
 export function parseLiquidNumber(
   value: string | number | undefined | null,
   defaultVal: number = 0,
@@ -64,6 +106,7 @@ export function parseLiquidNumber(
   return Number.isNaN(num) ? defaultVal : num;
 }
 
+/** Type mode hint for `useLiquidValue` — controls how the raw string is coerced. */
 export type LiquidTypeMode = "string" | "number" | "boolean";
 
 type Setter<T> = (val: T | ((prev: T) => T)) => void;
@@ -73,6 +116,17 @@ type ValueForMode<M extends LiquidTypeMode | undefined> =
   : M extends "boolean" ? boolean
   : string | undefined;
 
+/**
+ * Reads a single Liquid setting and returns a React state tuple.
+ *
+ * Overloads allow compile-time type narrowing based on the `type` argument:
+ * - No `type` or `"string"` → `[string | undefined, Setter]`
+ * - `"number"` → `[number, Setter]`
+ * - `"boolean"` → `[boolean, Setter]`
+ *
+ * @param expr - Liquid expression to read (e.g. `"section.settings.title"`).
+ * @param type  - Type coercion mode: `"string"` (default), `"number"`, or `"boolean"`.
+ */
 function useLiquidValue(expr: string): [string | undefined, Setter<string | undefined>];
 function useLiquidValue(expr: string, type: "string"): [string | undefined, Setter<string | undefined>];
 function useLiquidValue(expr: string, type: "number"): [number, Setter<number>];
@@ -84,6 +138,8 @@ function useLiquidValue(
   const raw = useLiquidRaw(expr);
   const isSSR = typeof (globalThis as any).document === "undefined";
 
+  // Determine initial value: booleans always start false; numbers are parsed
+  // on the client and deferred to `raw` placeholders on SSR; strings use raw as-is.
   let initialVal: any;
   if (type === "boolean") {
     initialVal = false;
@@ -104,14 +160,26 @@ function useLiquidValue(
   return [val, setVal];
 }
 
+/** Maps individual keys in a Liquid expression map to a type mode (string/number/boolean). */
 type TypeModes<T extends Record<string, string>> = Partial<{
   [K in keyof T & string]: LiquidTypeMode;
 }>;
 
+/** Infers the resolved value types for each key in a Liquid expression map. */
 type InferValues<T extends Record<string, string>, Types extends TypeModes<T>> = {
   [K in keyof T & string]: ValueForMode<Types[K]>;
 };
 
+/**
+ * Reads multiple Liquid settings simultaneously and returns a single state object.
+ *
+ * Like `useLiquidValue` but batched — takes a name-to-expression mapping and an
+ * optional name-to-type-mode mapping. Returns a plain object with the resolved
+ * (and type-coerced) values.
+ *
+ * @param map   - Object mapping keys to Liquid expression strings.
+ * @param types - Optional per-key type mode overrides (default: `"string"`).
+ */
 function useLiquidValues<T extends Record<string, string>, const Types extends TypeModes<T> = {}>(
   map: T,
   types?: Types,
@@ -158,24 +226,54 @@ function useLiquidValues<T extends Record<string, string>, const Types extends T
   return parsed as InferValues<T, Types>;
 }
 
+/**
+ * Reads a section-level setting value.
+ *
+ * Equivalent to `useLiquidRaw(\`section.settings.${key}\`)`.
+ */
 function useSectionSettings(key: string): { value: string | undefined } {
   return { value: useLiquidRaw(`section.settings.${key}`) };
 }
 
+/**
+ * Reads a block-level setting value.
+ *
+ * Equivalent to `useLiquidRaw(\`block.settings.${key}\`)`.
+ */
 function useBlockSettings(key: string): { value: string | undefined } {
   return { value: useLiquidRaw(`block.settings.${key}`) };
 }
 
+/**
+ * Reads a snippet parameter by name.
+ */
 function useSnippetParams(key: string): { value: string | undefined } {
   return { value: useLiquidRaw(key) };
 }
 
+/**
+ * Reads a block parameter by name.
+ */
 function useBlockParams(key: string): { value: string | undefined } {
   return { value: useLiquidRaw(key) };
 }
 
+/** Regex to extract `{{ expr }}` tokens from Liquid code — used to track referenced expressions. */
 const LIQUID_EXPR_RE = /\{\{([^{}]+)\}\}/g;
 
+/**
+ * Registers a block of raw Liquid code for injection into the generated
+ * `.liquid` file. During SSR the code (and any `{{ expr }}` references it
+ * contains) is accumulated in global registries; on the client it is a no-op.
+ *
+ * The registered Liquid code is injected **before** the JSON bridge in the
+ * assembled output so that any variables it defines are available for the
+ * bridge's `json` filter.
+ *
+ * @param code - Raw Liquid template code (may include `{{ }}` expressions).
+ * @returns Always returns an empty string — the Liquid code is rendered
+ *   server-side only.
+ */
 function useLiquidBlock(code: string): string {
   const isSSR = typeof (globalThis as any).document === "undefined";
 
@@ -185,6 +283,8 @@ function useLiquidBlock(code: string): string {
     const blocks = (globalThis as any).__shopify_ssg_liquid_blocks as string[] | undefined;
     if (blocks) blocks.push(code);
 
+    // Also track any Liquid expressions referenced inside the block code so
+    // they are included in the JSON bridge.
     const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
     if (tracker) {
       let match: RegExpExecArray | null;

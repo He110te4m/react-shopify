@@ -1,3 +1,13 @@
+/**
+ * @file AST-based hydration mismatch fixer for JSX/TSX source.
+ *
+ * React SSR renders adjacent text and expression children without separators,
+ * but browser hydration treats them as separate DOM nodes, causing mismatches.
+ * This module parses the source with OXC, walks the AST, detects runs of
+ * adjacent `JSXText` + `JSXExpressionContainer` children, and wraps them in a
+ * template literal `{\`...\`}` so React produces a single text node.
+ */
+
 import type { JSXChild, JSXElement, JSXFragment } from "@oxc-project/types";
 import { parseSync } from "oxc-parser";
 import { walk } from "oxc-walker";
@@ -11,6 +21,14 @@ interface Replacement {
   replacement: string;
 }
 
+/**
+ * Analyze and fix a JSX/TSX source file for adjacent-text hydration issues.
+ *
+ * @param source The raw source code string.
+ * @param filePath The file path (used for error reporting and parser config).
+ * @returns The fixed source with zero or more replacements applied, and a
+ *   count of how many fixes were made.
+ */
 export function autoFixAdjacentText(
   source: string,
   filePath: string,
@@ -38,6 +56,7 @@ export function autoFixAdjacentText(
     return { result: source, fixCount: 0 };
   }
 
+  // Apply replacements in reverse order so offsets stay valid
   replacements.sort((a, b) => b.start - a.start);
 
   let fixed = source;
@@ -52,6 +71,10 @@ export function autoFixAdjacentText(
   return { result: fixed, fixCount: replacements.length };
 }
 
+/**
+ * Walk a JSX element's children, detecting runs of adjacent text +
+ * expression children and emitting replacement records.
+ */
 function processChildren(
   children: JSXChild[],
   source: string,
@@ -68,6 +91,7 @@ function processChildren(
     let hasText = children[i].type === "JSXText";
     let hasExpr = children[i].type === "JSXExpressionContainer";
 
+    // Expand run while next sibling is also text or expression
     while (
       runEnd + 1 < children.length &&
       (children[runEnd + 1].type === "JSXText" ||
@@ -93,6 +117,7 @@ function processChildren(
       continue;
     }
 
+    // Wrap in template literal: `{x} {y}` → {`${x} ${y}`}
     const tpl = trimmed.replace(/\{([^}]+)\}/g, "${$1}");
     replacements.push({
       start: sliceStart,
@@ -104,6 +129,11 @@ function processChildren(
   }
 }
 
+/**
+ * Decide whether a run of JSX text+expressions needs fixing.
+ *
+ * Single expressions or elements containing HTML tags are safe.
+ */
 function needsFix(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;

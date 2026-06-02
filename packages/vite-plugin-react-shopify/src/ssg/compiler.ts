@@ -1,3 +1,17 @@
+/**
+ * @file Compilation orchestrator for SSG (static site generation).
+ *
+ * Coordinates the full per-entry build pipeline:
+ *   1. `scanEntries` — discover all entry-point source files
+ *   2. `compileEntry` (parallel-safe loop):
+ *      a. `bundleEntry` — esbuild bundle to a temporary file
+ *      b. `renderEntry` — SSR render the React component
+ *      c. CSS analysis & categorization (inline vs. shared snippets)
+ *      d. `assembleLiquidFile` — build the final `.liquid` output
+ *      e. Write to disk
+ *      f. Clean up temporary bundle file
+ *   3. Remove the `.ssg-tmp/` directory after all entries are compiled.
+ */
 import fs from "node:fs";
 import path from "node:path";
 import { Manifest } from "vite";
@@ -13,6 +27,14 @@ import { validateShopifyMeta } from "../validate";
 
 const log = logger("ssg:compiler");
 
+/**
+ * Entry point for SSG compilation. Scans the source directory for entries,
+ * analyzes CSS sharing across entries, then compiles each entry sequentially
+ * (writing one `.liquid` file per entry).
+ *
+ * After all entries are processed, the `.ssg-tmp/` temporary bundle directory
+ * is removed.
+ */
 export async function compileAllEntries(
   options: ResolvedOptions,
   manifest: Manifest,
@@ -49,6 +71,13 @@ export async function compileAllEntries(
   }
 }
 
+/**
+ * Compiles a single entry through the full pipeline:
+ * esbuild bundle → SSR render → CSS categorize → Liquid assemble → write file.
+ *
+ * The temporary bundle file is cleaned up in a `finally` block regardless of
+ * whether the compilation succeeded or failed.
+ */
 async function compileEntry(
   entry: ReturnType<typeof scanEntries>[number],
   options: ResolvedOptions,

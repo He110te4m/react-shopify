@@ -35,28 +35,28 @@ describe("autoFixAdjacentText", () => {
   });
 
   it("does NOT touch pure text (no expression)", () => {
-    const { result, fixCount } = autoFixAdjacentText(
+    const { fixCount } = autoFixAdjacentText(
       `<button>Reset</button>`, "test.tsx",
     );
     expect(fixCount).toBe(0);
   });
 
   it("does NOT touch single expression", () => {
-    const { result, fixCount } = autoFixAdjacentText(
+    const { fixCount } = autoFixAdjacentText(
       `<h1>{title}</h1>`, "test.tsx",
     );
     expect(fixCount).toBe(0);
   });
 
   it("does NOT touch already-safe template literal", () => {
-    const { result, fixCount } = autoFixAdjacentText(
+    const { fixCount } = autoFixAdjacentText(
       "<button>{`-${s.step}`}</button>", "test.tsx",
     );
     expect(fixCount).toBe(0);
   });
 
   it("does NOT touch ternary expression", () => {
-    const { result, fixCount } = autoFixAdjacentText(
+    const { fixCount } = autoFixAdjacentText(
       "<div>{show ? 'yes' : 'no'}</div>", "test.tsx",
     );
     expect(fixCount).toBe(0);
