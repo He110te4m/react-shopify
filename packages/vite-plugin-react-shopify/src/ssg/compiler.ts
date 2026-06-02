@@ -67,7 +67,7 @@ async function compileEntry(
     const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot);
     if (!renderResult) return;
 
-    const { html, trackedExpressions } = renderResult;
+    const { html, trackedExpressions, liquidBlocks } = renderResult;
 
     validateShopifyMeta(entry.meta, { kebabName: entry.kebabName, filePath: entry.filePath });
 
@@ -90,7 +90,7 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
-    }, [...trackedExpressions]);
+    }, [...trackedExpressions], liquidBlocks);
 
     // Write output
     const outputPath = getOutputPath(entry, {

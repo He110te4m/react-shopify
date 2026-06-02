@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import { logger } from "../core/logger";
 import { normalizeVoidElements, normalizeStyleAttributes, unwrapHtmlEntities } from "./post-process";
+
 function pathToFileURL(filePath: string): string {
   const absPath = path.resolve(filePath);
   if (process.platform === "win32") {
@@ -37,6 +38,7 @@ function buildLiquidFilterMap(
 export interface RenderResult {
   html: string;
   trackedExpressions: Set<string>;
+  liquidBlocks: string[];
   entryMeta: any;
 }
 
@@ -79,17 +81,21 @@ export function renderEntry(
     const trackedExpressions = new Set<string>();
     (globalThis as any).__shopify_ssg_liquid_track = trackedExpressions;
 
+    const liquidBlocks: string[] = [];
+    (globalThis as any).__shopify_ssg_liquid_blocks = liquidBlocks;
+
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
 
     delete (globalThis as any).__shopify_ssg_liquid_track;
+    delete (globalThis as any).__shopify_ssg_liquid_blocks;
     delete (globalThis as any).__shopify_ssg_liquid_filters;
 
     html = normalizeVoidElements(html);
     html = normalizeStyleAttributes(html);
     html = unwrapHtmlEntities(html);
 
-    return { html, trackedExpressions, entryMeta: entry.meta };
+    return { html, trackedExpressions, liquidBlocks, entryMeta: entry.meta };
   });
 }
 

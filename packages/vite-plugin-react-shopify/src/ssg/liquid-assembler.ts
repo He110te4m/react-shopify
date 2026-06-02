@@ -18,25 +18,27 @@ export function assembleLiquidFile(
   cssContents: { inline: string[]; snippets: string[] },
   options: AssembleOptions,
   trackedExpressions: string[] = [],
+  liquidBlocks: string[] = [],
 ): string {
   const type = entry.meta.type ?? entry.targetType;
   const parts = [DISCLAIMER];
+  const liquidPrepend = liquidBlocks.length > 0 ? liquidBlocks.join("\n") : "";
 
   switch (type) {
     case "template":
       parts.push(html);
       break;
     case "section":
-      parts.push(...buildSection(html, entry, trackedExpressions));
+      parts.push(...buildSection(html, entry, trackedExpressions, liquidPrepend));
       break;
     case "block":
-      parts.push(...buildBlock(html, entry, trackedExpressions));
+      parts.push(...buildBlock(html, entry, trackedExpressions, liquidPrepend));
       break;
     case "snippet":
-      parts.push(...buildSnippet(html, entry, trackedExpressions));
+      parts.push(...buildSnippet(html, entry, trackedExpressions, liquidPrepend));
       break;
     default:
-      parts.push(...buildSection(html, entry, trackedExpressions));
+      parts.push(...buildSection(html, entry, trackedExpressions, liquidPrepend));
       break;
   }
 
@@ -92,6 +94,7 @@ function buildSection(
   html: string,
   entry: SSGEntry,
   trackedExpressions: string[],
+  liquidPrepend: string = "",
 ): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
@@ -105,6 +108,8 @@ function buildSection(
   ];
   if (cls) lines.push(`  class="${cls}"`);
   lines.push(`>`);
+
+  if (liquidPrepend) lines.push(liquidPrepend);
 
   const liquidBridge = buildLiquidBridge(trackedExpressions);
   if (liquidBridge) lines.push(liquidBridge);
@@ -122,6 +127,7 @@ function buildBlock(
   html: string,
   entry: SSGEntry,
   trackedExpressions: string[],
+  liquidPrepend: string = "",
 ): string[] {
   const tag = entry.meta.tag ?? "div";
   const cls = entry.meta.class ?? "";
@@ -144,6 +150,8 @@ function buildBlock(
     `>`,
   );
 
+  if (liquidPrepend) lines.push(liquidPrepend);
+
   const liquidBridge = buildLiquidBridge(trackedExpressions);
   if (liquidBridge) lines.push(liquidBridge);
 
@@ -160,11 +168,14 @@ function buildSnippet(
   html: string,
   entry: SSGEntry,
   trackedExpressions: string[],
+  liquidPrepend: string = "",
 ): string[] {
   const lines: string[] = [
     "",
     `<div data-ssg-component="${entry.kebabName}">`,
   ];
+
+  if (liquidPrepend) lines.push(liquidPrepend);
 
   const liquidBridge = buildLiquidBridge(trackedExpressions);
   if (liquidBridge) lines.push(liquidBridge);

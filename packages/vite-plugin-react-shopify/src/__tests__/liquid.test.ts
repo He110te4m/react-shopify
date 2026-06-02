@@ -254,3 +254,122 @@ describe("assembleLiquidFile — bridge isolation", () => {
     expect(blockResult).not.toContain("section.settings.title");
   });
 });
+
+describe("assembleLiquidFile — liquid block repositioning", () => {
+  it("injects liquidBlocks before the bridge script", () => {
+    const liquidCode = "{%- liquid\n  assign price = 100\n%}\n{{ price }}";
+    const html = "<span>content</span>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      [],
+      [liquidCode],
+    );
+
+    expect(result).toContain("assign price = 100");
+    expect(result).toContain("{{ price }}");
+    expect(result).toContain("<span>content</span>");
+  });
+
+  it("liquid block appears before the bridge script", () => {
+    const liquidCode = "{%- liquid\n  assign price = 100\n%}\n{{ price }}";
+    const html = "<span>content</span>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      ["price"],
+      [liquidCode],
+    );
+
+    const liquidPos = result.indexOf("assign price");
+    const bridgePos = result.indexOf("data-ssg-liquid");
+    expect(liquidPos).toBeGreaterThan(0);
+    expect(bridgePos).toBeGreaterThan(0);
+    expect(liquidPos).toBeLessThan(bridgePos);
+  });
+
+  it("bridge JSON references variables defined in liquidBlocks", () => {
+    const liquidCode = "{%- liquid\n  assign price = 100\n%}\n{{ price }}";
+    const html = "<span>content</span>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      ["price"],
+      [liquidCode],
+    );
+
+    const liquidPos = result.indexOf("assign price = 100");
+    const bridgeRefPos = result.indexOf('"price": {{ price | json }}');
+    expect(liquidPos).toBeGreaterThan(0);
+    expect(bridgeRefPos).toBeGreaterThan(0);
+    expect(liquidPos).toBeLessThan(bridgeRefPos);
+  });
+
+  it("handles multiple liquid blocks", () => {
+    const code1 = "{%- liquid\n  assign a = 1\n%}\n{{ a }}";
+    const code2 = "{%- liquid\n  assign b = 2\n%}\n{{ b }}";
+    const html = "<span>x</span>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      [],
+      [code1, code2],
+    );
+
+    expect(result).toContain("assign a = 1");
+    expect(result).toContain("assign b = 2");
+  });
+
+  it("handles empty liquidBlocks", () => {
+    const html = "<div>plain content</div>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      [],
+      [],
+    );
+
+    expect(result).toContain("<div>plain content</div>");
+  });
+
+  it("default liquidBlocks parameter omits liquid prepend", () => {
+    const html = "<div>plain content</div>";
+    const entry = makeEntry();
+
+    const result = assembleLiquidFile(
+      html,
+      entry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      [],
+    );
+
+    expect(result).toContain("<div>plain content</div>");
+  });
+});

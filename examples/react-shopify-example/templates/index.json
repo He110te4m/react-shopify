@@ -16,7 +16,11 @@
     "react_hello_world_iinCCE": {
       "type": "react-hello-world",
       "name": "Hello World React Template",
-      "settings": {}
+      "settings": {
+        "title": "Hello, World!",
+        "description": "This section is built with React and compiled to Liquid via vite-plugin-react-shopify SSG.",
+        "accent_color": "#6c63ff"
+      }
     },
     "react_counter_NyQTzT": {
       "type": "react-counter",
@@ -29,30 +33,46 @@
     },
     "react_block_test_AbCdEf": {
       "type": "react-block-test-section",
-      "settings": {
-        "title": "Block Test Section",
-        "layout": "vertical",
-        "border_color": "#e5e5e5"
-      },
       "blocks": {
         "react_color_block_X1": {
           "type": "react-color-block",
-          "settings": { "label": "Block A", "color": "#6c63ff", "height": 60 }
+          "settings": {
+            "label": "Block A",
+            "color": "#6c63ff",
+            "height": 60
+          },
+          "blocks": {}
         },
         "react_color_block_X2": {
           "type": "react-color-block",
-          "settings": { "label": "Block B", "color": "#00b894", "height": 80 }
+          "settings": {
+            "label": "Block B",
+            "color": "#00b894",
+            "height": 80
+          },
+          "blocks": {}
         },
         "react_color_block_X3": {
           "type": "react-color-block",
-          "settings": { "label": "Block C", "color": "#e17055", "height": 100 }
+          "settings": {
+            "label": "Block C",
+            "color": "#e17055",
+            "height": 100
+          },
+          "blocks": {}
         }
       },
       "block_order": [
         "react_color_block_X1",
         "react_color_block_X2",
         "react_color_block_X3"
-      ]
+      ],
+      "settings": {
+        "title": "Block Test Section",
+        "layout": "vertical",
+        "border_color": "#e5e5e5",
+        "initial_count": 0
+      }
     },
     "react_todo_list_FrdqkC": {
       "type": "react-todo-list",
@@ -74,6 +94,14 @@
         "accent_color": "#6366f1",
         "effect_only_text": "effect value"
       }
+    },
+    "react_product_price_xWPMQk": {
+      "type": "react-product-price",
+      "name": "Product Price (Default)",
+      "settings": {
+        "price_input": "19900",
+        "compare_price_input": "$99.99"
+      }
     }
   },
   "order": [
@@ -82,6 +110,7 @@
     "react_counter_NyQTzT",
     "react_block_test_AbCdEf",
     "react_todo_list_FrdqkC",
-    "react_settings_tracker_test_UyLCHw"
+    "react_settings_tracker_test_UyLCHw",
+    "react_product_price_xWPMQk"
   ]
 }

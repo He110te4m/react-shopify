@@ -1,6 +1,7 @@
 export {
   useLiquidValue,
   useLiquidValues,
+  useLiquidBlock,
   useSectionSettings,
   useBlockSettings,
   useSnippetParams,

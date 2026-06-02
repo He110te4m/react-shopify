@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useMemo } from "react";
 import { LiquidDataContext } from "./provider";
 
 function getLiquidFilter(expr: string): string {
@@ -174,9 +174,36 @@ function useBlockParams(key: string): { value: string | undefined } {
   return { value: useLiquidRaw(key) };
 }
 
+const LIQUID_EXPR_RE = /\{\{([^{}]+)\}\}/g;
+
+function useLiquidBlock(code: string): string {
+  const isSSR = typeof (globalThis as any).document === "undefined";
+
+  useMemo(() => {
+    if (!isSSR) return;
+
+    const blocks = (globalThis as any).__shopify_ssg_liquid_blocks as string[] | undefined;
+    if (blocks) blocks.push(code);
+
+    const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
+    if (tracker) {
+      let match: RegExpExecArray | null;
+      while ((match = LIQUID_EXPR_RE.exec(code)) !== null) {
+        const fullExpr = match[1].trim();
+        const pipeIdx = fullExpr.indexOf("|");
+        const exprName = pipeIdx >= 0 ? fullExpr.substring(0, pipeIdx).trim() : fullExpr;
+        if (exprName) tracker.add(exprName);
+      }
+    }
+  }, [code, isSSR]);
+
+  return "";
+}
+
 export {
   useLiquidValue,
   useLiquidValues,
+  useLiquidBlock,
   useSectionSettings,
   useBlockSettings,
   useSnippetParams,
