@@ -6,7 +6,8 @@
  * fields into the exact JSON structure the Shopify theme editor expects.
  */
 
-import type { ShopifyMeta, PresetDefinition } from "../types/shopify";
+import type { ShopifyMeta, PresetDefinition, BlockDefinition } from "../types/shopify";
+import { MAX_NAME_LENGTH } from "../validate/rules";
 
 /**
  * Convert a flat `ShopifyMeta` object into the `{% schema %}...{% endschema %}`
@@ -39,12 +40,39 @@ function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
   };
 }
 
-/** Strip the `name` field from a block definition for JSON output. */
+/**
+ * Derive a human-readable block name from its `type` when the user didn't
+ * supply one. Mirrors the `deriveName` logic used for section-level names
+ * but stripped of the PascalCase splitter (block `type` is always kebab/
+ * snake-case per Shopify convention).
+ *
+ * @example
+ * defaultBlockName("slide")              // "Slide"
+ * defaultBlockName("text-block")         // "Text Block"
+ * defaultBlockName("image_with_caption") // "Image With Caption"
+ * defaultBlockName("@app")               // "App"
+ */
+function defaultBlockName(type: string): string {
+  const name = type
+    .replace(/^@/, "")
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
+}
+
+/** Serialize a block definition, auto-deriving `name` from `type` if missing. */
 function serializeBlockDefinition(
-  block: { type: string; name?: string; settings?: any[] },
+  block: BlockDefinition,
 ): Record<string, unknown> {
-  const { name: _name, ...rest } = block;
-  return rest;
+  const { type, name, limit, settings } = block;
+  return {
+    type,
+    name: name ?? defaultBlockName(type),
+    ...(limit != null ? { limit } : {}),
+    ...(settings ? { settings } : {}),
+  };
 }
 
 /** Recursively serialize preset blocks, stripping `name` and `id` if static. */
@@ -63,18 +91,19 @@ function serializePreset(preset: PresetDefinition): Record<string, unknown> {
 
   if (preset.blocks) {
     obj.blocks = preset.blocks.map((block) => {
-      const { type, id, static: isStatic } = block;
-      const p: Record<string, any> = { type };
+      const p: Record<string, any> = { type: block.type };
 
-      if (isStatic) {
+      if (block.static) {
         p.static = true;
         return p;
       }
 
-      if (id && block.settings) {
+      const id = "id" in block ? block.id : undefined;
+      const settings = "settings" in block ? block.settings : undefined;
+      if (id && settings) {
         p.id = id;
         p.settings = {};
-        for (const [key, value] of Object.entries(block.settings)) {
+        for (const [key, value] of Object.entries(settings)) {
           (p.settings as Record<string, any>)[key] =
             value === "" ? undefined : value;
         }

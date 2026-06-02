@@ -747,7 +747,7 @@ interface ShopifyMeta {
   limit?: number;
   params?: string[];
   settings?: SettingSchema[];
-  blocks?: { type: string; name?: string; settings?: SettingSchema[] }[];
+  blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
   enabled_on?: Record<string, string>[];

@@ -11,7 +11,13 @@ export type {
   ImportMapOptions,
 } from "./options";
 
-export type { ShopifyBlockType, ShopifyMeta, PresetDefinition, PresetBlock } from "./shopify";
+export type {
+  ShopifyBlockType,
+  ShopifyMeta,
+  BlockDefinition,
+  PresetDefinition,
+  PresetBlock,
+} from "./shopify";
 
 export type { SSGEntry } from "./ssg";
 

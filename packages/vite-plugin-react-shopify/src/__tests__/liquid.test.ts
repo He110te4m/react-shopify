@@ -139,7 +139,10 @@ describe("assembleLiquidFile", () => {
     const entry = makeEntry({
       meta: {
         ...makeEntry().meta,
-        blocks: [{ type: "child-block" }, { type: "other-block" }],
+        blocks: [
+          { type: "child-block", name: "Child Block" },
+          { type: "other-block", name: "Other Block" },
+        ],
         max_blocks: 4,
       },
     });
@@ -230,7 +233,7 @@ describe("assembleLiquidFile — bridge isolation", () => {
 
     const sectionEntry = makeEntry({
       kebabName: "parent-section",
-      meta: { ...makeEntry().meta, blocks: [{ type: "child" }] },
+      meta: { ...makeEntry().meta, blocks: [{ type: "child", name: "Child" }] },
     });
     const blockEntry = makeEntry({
       targetType: "block",

@@ -12,6 +12,7 @@ import { normalizePath } from "vite";
 import type { ResolvedOptions } from "../core/options";
 import type { SSGEntry } from "../types/ssg";
 import type { ShopifyBlockType } from "../types/shopify";
+import { MAX_NAME_LENGTH } from "../validate/rules";
 
 const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   templates: "template",
@@ -75,5 +76,5 @@ export function deriveName(fileName: string): string {
     .replace(/\s+/g, " ")
     .trim();
 
-  return readable.length > 25 ? readable.slice(0, 25) : readable;
+  return readable.length > MAX_NAME_LENGTH ? readable.slice(0, MAX_NAME_LENGTH) : readable;
 }

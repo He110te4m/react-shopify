@@ -12,6 +12,25 @@ import type { SettingSchema, InputSettings } from "./settings";
 export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
 
 /**
+ * A block definition within a section's `blocks` attribute.
+ *
+ * Per the Shopify section schema, each block entry supports the following:
+ *
+ * | Attribute  | Required | Description                                                          |
+ * | ---------- | -------- | -------------------------------------------------------------------- |
+ * | `type`     | Yes      | Free-form block type identifier.                                    |
+ * | `name`     | No       | Block name shown as the block title in the theme editor. Auto-derived from `type` (e.g. `text-block` → `Text Block`) if omitted. |
+ * | `limit`    | No       | Max number of blocks of this type that can be used.                 |
+ * | `settings` | No       | Input or sidebar settings exposed to the merchant for this block.    |
+ */
+export interface BlockDefinition {
+  type: string;
+  name?: string;
+  limit?: number;
+  settings?: SettingSchema[];
+}
+
+/**
  * Metadata for a Shopify section, block, snippet, or template.
  *
  * Exported as `shopifyMeta` from the React component file. Drives the
@@ -25,7 +44,7 @@ export interface ShopifyMeta {
   limit?: number;
   params?: string[];
   settings?: SettingSchema[];
-  blocks?: { type: string; name?: string; settings?: SettingSchema[] }[];
+  blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
   enabled_on?: Record<string, string>[];
