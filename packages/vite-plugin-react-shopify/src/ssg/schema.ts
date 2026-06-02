@@ -6,7 +6,7 @@
  * fields into the exact JSON structure the Shopify theme editor expects.
  */
 
-import type { ShopifyMeta, PresetDefinition, BlockDefinition } from "../types/shopify";
+import type { ShopifyMeta, PresetDefinition, BlockDefinition, PresetBlock } from "../types/shopify";
 import { MAX_NAME_LENGTH } from "../validate/rules";
 
 /**
@@ -23,7 +23,7 @@ export function generateSchema(meta: ShopifyMeta): string {
 function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
   return {
     name: meta.name ?? "",
-    tag: meta.tag ?? "div",
+    ...(meta.tag !== undefined ? { tag: meta.tag } : {}),
     class: meta.class ?? "",
     limit: meta.limit,
     ...(meta.max_blocks != null ? { max_blocks: meta.max_blocks } : {}),
@@ -34,6 +34,8 @@ function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
     presets: meta.presets
       ? meta.presets.map((p) => serializePreset(p))
       : undefined,
+    ...(meta.default ? { default: serializePreset(meta.default) } : {}),
+    ...(meta.locales ? { locales: meta.locales } : {}),
     ...(meta.enabled_on ? { enabled_on: meta.enabled_on } : {}),
     ...(meta.disabled_on ? { disabled_on: meta.disabled_on } : {}),
     ...(meta.templates ? { templates: meta.templates } : {}),
@@ -75,42 +77,52 @@ function serializeBlockDefinition(
   };
 }
 
-/** Recursively serialize preset blocks, stripping `name` and `id` if static. */
+/** Convert an `InputSettings` map to a JSON-safe object, dropping empty strings. */
+function serializeInputSettings(
+  settings: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!settings) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(settings)) {
+    out[key] = value === "" ? undefined : value;
+  }
+  return out;
+}
+
+/** Recursively serialize a preset block (normal or static). */
+function serializePresetBlock(block: PresetBlock): Record<string, unknown> {
+  const p: Record<string, unknown> = { type: block.type };
+
+  if (block.name) p.name = block.name;
+
+  if (block.static) {
+    p.static = true;
+    if (block.id) p.id = block.id;
+  }
+
+  const settings = serializeInputSettings(
+    "settings" in block ? block.settings : undefined,
+  );
+  if (settings) p.settings = settings;
+
+  if (!block.static && block.blocks?.length) {
+    p.blocks = block.blocks.map(serializePresetBlock);
+  }
+
+  return p;
+}
+
+/** Recursively serialize a preset, normalizing its settings/blocks. */
 function serializePreset(preset: PresetDefinition): Record<string, unknown> {
   const obj: Record<string, unknown> = { name: preset.name };
 
   if (preset.category) obj.category = preset.category;
 
-  if (preset.settings) {
-    for (const [key, value] of Object.entries(preset.settings)) {
-      if (obj.settings == null) obj.settings = {};
-      (obj.settings as Record<string, any>)[key] =
-        value === "" ? undefined : value;
-    }
-  }
+  const settings = serializeInputSettings(preset.settings);
+  if (settings) obj.settings = settings;
 
-  if (preset.blocks) {
-    obj.blocks = preset.blocks.map((block) => {
-      const p: Record<string, any> = { type: block.type };
-
-      if (block.static) {
-        p.static = true;
-        return p;
-      }
-
-      const id = "id" in block ? block.id : undefined;
-      const settings = "settings" in block ? block.settings : undefined;
-      if (id && settings) {
-        p.id = id;
-        p.settings = {};
-        for (const [key, value] of Object.entries(settings)) {
-          (p.settings as Record<string, any>)[key] =
-            value === "" ? undefined : value;
-        }
-      }
-
-      return p;
-    });
+  if (preset.blocks?.length) {
+    obj.blocks = preset.blocks.map(serializePresetBlock);
   }
 
   return obj;

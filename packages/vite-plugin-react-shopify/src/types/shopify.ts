@@ -48,6 +48,15 @@ export interface TemplateScope {
 }
 
 /**
+ * Section-level translation overrides for the schema.
+ *
+ * Each entry maps a language code (e.g. `"en"`, `"fr"`) to a flat key/value
+ * translation map. When emitted, translations are accessed in Liquid via
+ * the `t` filter using the key `sections.<section-name>.<key>`.
+ */
+export type SectionLocales = Record<string, Record<string, string>>;
+
+/**
  * Metadata for a Shopify section, block, snippet, or template.
  *
  * Exported as `shopifyMeta` from the React component file. Drives the
@@ -56,7 +65,14 @@ export interface TemplateScope {
 export interface ShopifyMeta {
   type?: ShopifyBlockType;
   name?: string;
-  tag?: string;
+  /**
+   * HTML wrapper tag. Use `null` to render without a wrapper (blocks only).
+   *
+   * For sections Shopify only accepts a fixed set of tags (`article`,
+   * `aside`, `div`, `footer`, `header`, `section`); for blocks any string
+   * up to 50 chars is accepted.
+   */
+  tag?: string | null;
   class?: string;
   limit?: number;
   params?: string[];
@@ -64,8 +80,20 @@ export interface ShopifyMeta {
   blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
+  /**
+   * Default configuration used when a section is statically rendered. Has
+   * the same shape as a {@link PresetDefinition}.
+   */
+  default?: PresetDefinition;
+  /**
+   * Inline translation overrides for the section, scoped to the
+   * theme editor's **Sections** tab.
+   */
+  locales?: SectionLocales;
   enabled_on?: TemplateScope;
   disabled_on?: TemplateScope;
+  /** @deprecated Use `enabled_on` / `disabled_on` instead. */
+  templates?: string[];
 }
 
 /** A theme editor preset definition within the schema. */

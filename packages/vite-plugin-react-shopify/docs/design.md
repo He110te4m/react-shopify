@@ -742,7 +742,7 @@ hydration 入口将 `readLiquidData()` 的结果注入 Provider，所有 hook �
 interface ShopifyMeta {
   type?: ShopifyBlockType;
   name: string;
-  tag?: string;
+  tag?: string | null;
   class?: string;
   limit?: number;
   params?: string[];
@@ -750,6 +750,8 @@ interface ShopifyMeta {
   blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
+  default?: PresetDefinition;
+  locales?: SectionLocales;
   enabled_on?: TemplateScope;
   disabled_on?: TemplateScope;
   /** @deprecated Use `enabled_on` / `disabled_on` instead. */

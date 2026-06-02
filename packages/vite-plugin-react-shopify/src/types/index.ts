@@ -16,6 +16,7 @@ export type {
   ShopifyMeta,
   BlockDefinition,
   TemplateScope,
+  SectionLocales,
   PresetDefinition,
   PresetBlock,
 } from "./shopify";
