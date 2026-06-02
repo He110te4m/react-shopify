@@ -41,11 +41,22 @@ export interface PresetDefinition {
   blocks?: PresetBlock[];
 }
 
-/** A nested block preset inside a parent preset. */
-export interface PresetBlock {
+interface CommonBlockPreset {
   type: string;
-  id?: string;
-  static?: boolean;
+  name?: string;
   settings?: InputSettings;
   blocks?: PresetBlock[];
 }
+
+export interface ShopifyNormalBlockPreset extends CommonBlockPreset {
+  id?: never;
+  static?: never;
+}
+
+export interface ShopifyStaticBlockPreset extends CommonBlockPreset {
+  id: string;
+  static: true;
+}
+
+/** A nested block preset inside a parent preset. */
+export type PresetBlock = ShopifyNormalBlockPreset | ShopifyStaticBlockPreset;
