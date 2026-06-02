@@ -92,8 +92,6 @@ export interface ShopifyMeta {
   locales?: SectionLocales;
   enabled_on?: TemplateScope;
   disabled_on?: TemplateScope;
-  /** @deprecated Use `enabled_on` / `disabled_on` instead. */
-  templates?: string[];
 }
 
 /** A theme editor preset definition within the schema. */

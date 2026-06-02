@@ -38,7 +38,6 @@ function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
     ...(meta.locales ? { locales: meta.locales } : {}),
     ...(meta.enabled_on ? { enabled_on: meta.enabled_on } : {}),
     ...(meta.disabled_on ? { disabled_on: meta.disabled_on } : {}),
-    ...(meta.templates ? { templates: meta.templates } : {}),
   };
 }
 

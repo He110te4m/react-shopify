@@ -754,8 +754,6 @@ interface ShopifyMeta {
   locales?: SectionLocales;
   enabled_on?: TemplateScope;
   disabled_on?: TemplateScope;
-  /** @deprecated Use `enabled_on` / `disabled_on` instead. */
-  templates?: string[];
 }
 ```
 
