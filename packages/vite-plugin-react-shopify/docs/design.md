@@ -750,8 +750,9 @@ interface ShopifyMeta {
   blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
-  enabled_on?: Record<string, string>[];
-  disabled_on?: Record<string, string>[];
+  enabled_on?: TemplateScope;
+  disabled_on?: TemplateScope;
+  /** @deprecated Use `enabled_on` / `disabled_on` instead. */
   templates?: string[];
 }
 ```

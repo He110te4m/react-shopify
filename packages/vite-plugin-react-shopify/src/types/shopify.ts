@@ -31,6 +31,23 @@ export interface BlockDefinition {
 }
 
 /**
+ * Template/group scope filter used by `enabled_on` / `disabled_on`.
+ *
+ * Per the Shopify section schema, at least one of `templates` or `groups`
+ * must be provided. `enabled_on` and `disabled_on` are mutually exclusive —
+ * a section may declare one but not both.
+ *
+ * | Attribute   | Description                                                                              |
+ * | ----------- | ---------------------------------------------------------------------------------------- |
+ * | `templates` | Page types the section is restricted to (or excluded from). Use `["*"]` for all.        |
+ * | `groups`    | Section group types: `header`, `footer`, `aside`, or `custom.<NAME>`. Use `["*"]` for all. |
+ */
+export interface TemplateScope {
+  templates?: string[];
+  groups?: string[];
+}
+
+/**
  * Metadata for a Shopify section, block, snippet, or template.
  *
  * Exported as `shopifyMeta` from the React component file. Drives the
@@ -47,9 +64,8 @@ export interface ShopifyMeta {
   blocks?: BlockDefinition[];
   max_blocks?: number;
   presets?: PresetDefinition[];
-  enabled_on?: Record<string, string>[];
-  disabled_on?: Record<string, string>[];
-  templates?: string[];
+  enabled_on?: TemplateScope;
+  disabled_on?: TemplateScope;
 }
 
 /** A theme editor preset definition within the schema. */
