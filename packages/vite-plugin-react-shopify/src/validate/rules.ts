@@ -1,4 +1,4 @@
-const MAX_NAME_LENGTH = 25;
+export const MAX_NAME_LENGTH = 25;
 
 export function checkNameLength(meta: { name: string }, kebabName: string): string | null {
   if (meta.name.length > MAX_NAME_LENGTH) {

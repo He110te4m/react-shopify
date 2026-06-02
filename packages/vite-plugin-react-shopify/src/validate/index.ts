@@ -1,5 +1,5 @@
 import { logger } from "../core/logger";
-import { checkNameLength, checkEmptyStringDefault } from "./rules";
+import { checkNameLength, checkEmptyStringDefault, MAX_NAME_LENGTH } from "./rules";
 
 const log = logger("validate");
 
@@ -17,7 +17,10 @@ export function validateShopifyMeta(meta: ValidatableMeta, context: ValidateCont
   const warnings: string[] = [];
 
   const nameWarning = checkNameLength(meta, context.kebabName);
-  if (nameWarning) warnings.push(nameWarning);
+  if (nameWarning) {
+    warnings.push(nameWarning);
+    meta.name = meta.name.slice(0, MAX_NAME_LENGTH);
+  }
 
   if (meta.settings) {
     for (const s of meta.settings) {
