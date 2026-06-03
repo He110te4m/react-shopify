@@ -22,34 +22,46 @@
 | **SSR**(Node.js, esbuild 临时 bundle) | 渲染 React 树,产出 HTML | 跟踪 Liquid 表达式,生成占位符,组装最终 Liquid |
 | **CSR**(浏览器) | 拿到 SSR 产出的 HTML 后,接管 hydration | 从 JSON bridge 读值,接管 React state |
 
-### 0.2 占位符机制(关键设计)
+### 0.2 占位符机制(v8 修正,不用占位符)
 
-部分组件需要在 React 树中"占一个位置",在 SSR 结束后被替换为真实 Liquid 代码。设计:
+> **v8 重大修正**:**放弃"在 React 树中占位 + 后处理替换"模式**(v1-v4 HTML 注释 / v5-v7 span+data-img-id 都被评审证实不可行)。改为**全局收集 + 注入到 `data-ssg-hydrate` div 之前**(沿用现有 `useLiquidBlock` 机制)。
+
+**当前方案(无占位符)**:
 
 ```
-React 树:
-  <div>
-    <h1>{title}</h1>
-    <!--RAW-LIQUID-0-->
-    <p>{desc}</p>
-    <!--RAW-LIQUID-1-->
-  </div>
+SSR 阶段(在 React 渲染之外,无 DOM 影响):
+  useLiquidBlock('{% style %}.section-padding { ... }{% endstyle %}')
+  ↓ 推入全局 __shopify_ssg_liquid_blocks 数组
 
-SSR 收集占位符: ['{% form "customer" %}', '{% endform %}']
+渲染器(在 React renderToStaticMarkup 之后):
+  __shopify_ssg_liquid_blocks 内容
+  ↓ 注入到 <div data-ssg-hydrate> 之前
 
 最终 HTML:
-  <div>
-    <h1>{{ section.settings.title }}</h1>
-    {% form "customer" %}
-    <p>{{ section.settings.desc }}</p>
-    {% endform %}
-  </div>
+  {% style %}.section-padding { ... }{% endstyle %}  ← 从 React 树之外注入
+  <div data-ssg-hydrate>React 树输出</div>
 
 客户端:
-  React 树中 <!--RAW-LIQUID-0--> 渲染为 <span hidden data-raw-liquid-id="0"></span>
-  水合时,占位 span 是空 div,DOM 树结构对齐(无 hydration mismatch)
-  真实 Liquid 在服务端已被 Shopify 求值,水合后 span 仍在但内容已渲染
+  useLiquidBlock 行为 = no-op
+  React 树结构 = SSR HTML 结构 → 水合一致
 ```
+
+**为什么放弃占位符模式**:
+- v1-v4 HTML 注释:被 `renderToStaticMarkup` 转义为 `&lt;!--`(实证发现 1)
+- v5-v6 span + null return:hydration mismatch(child count: SSR 1 → CSR 0,实证发现 2)
+- v7 真实 `<img>` + null return:已改为渲染真实 `<img>`,不需要占位符
+
+**当前可用的"插入 Liquid"机制**:
+| API | 位置 | 用途 |
+|---|---|---|
+| `useLiquidBlock(code)` | `data-ssg-hydrate` div **之前** | 独立的 Liquid 片段(`{% style %}`, `{{ 'icon' | inline_asset_content }}` 等) |
+| `useRawLiquid(code)` | 同上(v8 改为 useLiquidBlock 别名) | 同上 |
+| **无 "在 React 树中间占位" 机制** | — | 当前架构不支持,需重设计 |
+
+**适合"在 React 树中间"插入的场景**(如 `{% form %}` 包裹 children):
+- 当前架构**不支持**
+- 阶段 1 不实现 useForm / usePaginate
+- 阶段 4+ 重写(详见 §3.2 §3.3)
 
 ### 0.3 JSON Bridge:统一数据流,不分层
 
@@ -507,7 +519,15 @@ function useImageUrl(
 
 ---
 
-### 2.3 `useAsset(path, mode?)`
+### 2.3 `useAsset(path, mode?)`(v8 修正:不调用 useLiquidRaw)
+
+> **v2 评审问题**:v6 文档说"跟踪 `'foo.css'`(字符串字面量)",但 `useLiquidRaw` 会把字面量也加入 bridge:
+> ```json
+> { "'foo.css'": {{ 'foo.css' | json }} }
+> ```
+> 这是恒等映射,完全冗余。
+
+**v8 修正**:`useAsset` **不调用** `useLiquidRaw`,直接返回完整 Liquid 字符串,实现为独立模板函数。
 
 **签名**:
 ```ts
@@ -516,20 +536,42 @@ function useAsset(path: string, mode?: AssetMode): string;
 ```
 
 **SSR 行为**:
-- `mode='url'` → `{{ 'foo.css' | asset_url }}`
-- `mode='inline'` → `{{ 'foo.svg' | inline_asset_content }}`
-- `mode='stylesheet'` → `{{ 'foo.css' | stylesheet_tag }}`
-- 跟踪:`'foo.css'`(字符串字面量)
+- `mode='url'` → 返回 `"{{ 'foo.css' | asset_url }}"`
+- `mode='inline'` → 返回 `"{{ 'foo.svg' | inline_asset_content }}"`
+- `mode='stylesheet'` → 返回 `"{{ 'foo.css' | stylesheet_tag }}"`
+- **不调用** useLiquidRaw,不进入 bridge
 
 **CSR 行为**:不使用
 
-**实现路径**:字符串模板 + 跟踪字面量表达式(非变量)
+**实现**:
+```ts
+// packages/vite-plugin-react-shopify/src/runtime/hooks.ts
+const ASSET_FILTERS: Record<AssetMode, string> = {
+  url: ' | asset_url',
+  inline: ' | inline_asset_content',
+  stylesheet: ' | stylesheet_tag',
+};
+
+export function useAsset(path: string, mode: AssetMode = 'url'): string {
+  return `{{ ${JSON.stringify(path)}${ASSET_FILTERS[mode]} }}`;
+}
+```
+
+**约束**:
+- `path` 必须是**字符串字面量**(如 `'foo.css'`),不支持变量
+- 如需变量,用 `useLiquidValue` 读取 + 字符串拼接
+
+**`mode='stylesheet'` 警告**:
+- 返回的是 `<link rel="stylesheet" href="...">` HTML 元素
+- 在 JSX 中作为文本子节点会被 React 转义
+- 应只放在 `<head>` 或非水合区域(原 Dawn 行为)
+- **不能**作为 `<div>{useAsset(path, 'stylesheet')}</div>` 的子节点
 
 **风险**:🟢 无
 
 ---
 
-### 2.4 `useFontFace(font)`
+### 2.4 `useFontFace(font)`(v8 补充用法约束)
 
 **签名**:
 ```ts
@@ -542,13 +584,34 @@ function useFontFace(font: string): string;
 
 **CSR 行为**:不使用
 
-**实现路径**:字符串模板
+**实现**:字符串模板(不用 useLiquidValue,因 expression 形式固定)
 
-**风险**:🟢 无
+**⚠️ 关键使用约束**(v2 评审补充):
+
+返回的是 `@font-face { ... }` **CSS 文本**,不是 React 元素。React 在 JSX 中作为文本子节点会**转义** `<`、`{`、`@` 等字符。
+
+```tsx
+// ❌ 错误 - React 会转义 CSS 文本
+<style>{useFontFace(settings.type_body_font)}</style>
+// 输出: <style>{{ settings.type_body_font | font_face: ... }}</style> (转义后)
+// Shopify 处理后: <style>{{ ... }}</style> (Liquid 语法还是字面量,无法生效)
+
+// ✅ 正确 - 用 dangerouslySetInnerHTML
+<style dangerouslySetInnerHTML={{ __html: useFontFace(settings.type_body_font) }} />
+// 输出: <style>{{ settings.type_body_font | font_face: ... }}</style> (原样)
+// Shopify 处理后: 真实 @font-face 规则
+
+// ✅ 替代方案 - 放在 theme.liquid 中(theme.liquid 级别)
+// 不在 React 端处理,直接用 Liquid 输出
+```
+
+**Dawn 中的实际位置**:`theme.liquid` 的 `<head>` 中,用 `{% style %}` 块(已迁移到 `theme.liquid` 终态,§4.4)。**React 端不调用 useFontFace**。
+
+**风险**:🟢 无(因为 Dawn 用法是 theme.liquid 层)
 
 ---
 
-### 2.5 `usePlaceholderSvg(name)`
+### 2.5 `usePlaceholderSvg(name)`(v8 修正 + 用法约束)
 
 **签名**:
 ```ts
@@ -557,21 +620,47 @@ function usePlaceholderSvg(name: string): string;
 
 **SSR 行为**:
 - 返回 `{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}`
-- 跟踪字面量表达式
+- **v8 修正**:不走 `DEFAULT_LIQUID_FILTERS`,直接返回完整字符串
 
 **CSR 行为**:不使用
 
-**实现路径**:在 `DEFAULT_LIQUID_FILTERS` 中加 `'placeholder_svg_tag'` 映射
+**实现**:
+```ts
+export function usePlaceholderSvg(name: string): string {
+  return `{{ ${JSON.stringify(name)} | placeholder_svg_tag: 'placeholder-svg' }}`;
+}
+```
 
-**风险**:🟢 无
+**⚠️ 关键使用约束**:
+
+返回的是 `<svg>...</svg>` **HTML 元素**。React 在 JSX 中作为文本子节点会**转义** `<svg>` 标签。
+
+```tsx
+// ❌ 错误 - React 转义 SVG
+<div>{usePlaceholderSvg('hero-apparel-1')}</div>
+// 输出: <div>{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}</div> (转义)
+
+// ✅ 正确 - 用 dangerouslySetInnerHTML
+<div dangerouslySetInnerHTML={{ __html: usePlaceholderSvg('hero-apparel-1') }} />
+// 输出: <div><svg>...</svg></div> (Shopify 处理后)
+
+// ✅ 替代方案 - Dawn 中通常用 {%- render 'placeholder', name: ... %}
+// 或 <img> 作为背景(不通过 SVG 元素)
+```
+
+**Dawn 中的实际用法**:`<img src="{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}">`,与 `useImageTag` 行为一致。建议改用 `<ImageTag image="section.settings.image" asPlaceholder="hero-apparel-1">` 统一处理。
+
+**风险**:🟡 MED(需要正确的 dangerouslySetInnerHTML 用法)
 
 ---
 
-### 2.6 `useThemeSettings(key)`
+### 2.6 `useThemeSettings(key)`(v8 补充类型重载)
 
-**签名**:
+**签名**(v8,与 `useLiquidValue` 对齐):
 ```ts
 function useThemeSettings(key: string): string | undefined;
+function useThemeSettings(key: string, type: "number"): number;
+function useThemeSettings(key: string, type: "boolean"): boolean;
 ```
 
 **SSR 行为**:
@@ -696,7 +785,7 @@ function useImageBehavior(behavior) {
 
 ---
 
-### 2.11 `useSectionPadding(settingsKey?)`
+### 2.11 `useSectionPadding(settingsKey?)`(v8 补充用法约束)
 
 **签名**:
 ```ts
@@ -709,9 +798,39 @@ function useSectionPadding(settingsKey?: string): string;
 
 **CSR 行为**:不使用(SSG 已生成 `<style>`)
 
-**实现路径**:字符串模板函数 + tracking
+**实现**:字符串模板函数 + tracking
 
-**风险**:🟢 无(但要确保 `<style>` 标签在 `<div data-ssg-hydrate>` 内部正确显示)
+**⚠️ 关键使用约束**(v2 评审补充):
+
+返回的是 `<style>...</style>` **HTML 字符串**。React 在 JSX 中作为子节点会**转义** `<style>` 标签。
+
+```tsx
+// ❌ 错误 - React 转义 <style> 标签
+<div>{useSectionPadding()}</div>
+// 输出: <div>&lt;style&gt;...</style></div> (转义)
+
+// ✅ 正确 - 用 dangerouslySetInnerHTML
+<div dangerouslySetInnerHTML={{ __html: useSectionPadding() }} />
+
+// ✅ 替代方案 1 - 直接放 React 树顶层(React 允许 <style> 元素)
+// useSectionPadding() 不需要,React <style> 元素直接写 CSS
+<style>{`
+  .section-${section.id}-padding {
+    padding-top: ${paddingTop}px;
+    padding-bottom: ${paddingBottom}px;
+  }
+`}</style>
+
+// ✅ 替代方案 2 - 在 CSS 文件中(最推荐)
+.elem {
+  padding-top: var(--section-padding-top, 36px);
+  padding-bottom: var(--section-padding-bottom, 36px);
+}
+```
+
+**Dawn 中的实际用法**:Dawn 在每个 section 顶部用 `{%- style -%}` 内联块(已迁移到 React 端可用 `useSectionPadding` + `dangerouslySetInnerHTML`,或改为 CSS 变量)。
+
+**风险**:🟡 MED(需要正确的 dangerouslySetInnerHTML 用法)
 
 ---
 
@@ -721,112 +840,51 @@ function useSectionPadding(settingsKey?: string): string;
 >
 > **B 类总量从 v1 的 4 个减为 3 个**:`useShopifyAttributes` 移除(v1 错误设计)
 
-### 3.1 ~~`useRawLiquid(code)`~~ — **v7 降级为 `useLiquidBlock` 别名**(🟡 MEDIUM)
+### 3.1 `useRawLiquid(code)` — **v7 降级为 `useLiquidBlock` 别名**(🟢 LOW)
 
-**v7 重新设计**(基于评审者发现 1+2):
+> **v8 清理**:本节之前混叠了 v1-v4 的旧实现描述(RawLiquid 组件、HTML 注释、Fragment 包裹等),**全部废弃**。v7 起 useRawLiquid 改为 useLiquidBlock 别名,v8 删除历史描述,只保留生效设计。
 
-**v1-v4 失败原因**(评审者发现 1):
-- HTML 注释 `<!--` 被 `renderToStaticMarkup` 转义为 `&lt;!--`
-- 后处理扫描不到原模式
+**v1-v6 失败原因**(简要):
+- v1-v4:HTML 注释被 `renderToStaticMarkup` 转义(评审发现 1)
+- v5-v6:span 占位 + null return hydration mismatch(评审发现 2)
+- v7 起:**完全放弃占位符模式**
 
-**v5-v6 失败原因**(评审者发现 2 + §0.2):
-- 改用 `<span hidden>` 占位
-- CSR 返回 null
-- 仍然 hydration mismatch(span/字符串 vs 真实 Liquid 元素)
-
-**v7 决策**:**完全放弃 React 树中占位**,改用**全局收集机制**(类似现有 `useLiquidBlock`)。
-
-**签名**(v7,与现有 `useLiquidBlock` 等价):
+**签名**(v7+,与现有 `useLiquidBlock` 等价):
 ```ts
-// useRawLiquid 是 useLiquidBlock 的别名(不增加新概念)
+// useRawLiquid 是 useLiquidBlock 的语义别名(不增加新概念)
 function useRawLiquid(code: string): void;
 ```
 
 **SSR 行为**:
-- 收集到全局 `__shopify_ssg_liquid_blocks` 数组(已存在)
+- 调用 `useLiquidBlock(code)`(已存在机制)
+- 收集到全局 `__shopify_ssg_liquid_blocks` 数组
 - 跟踪 `code` 中的 `{{ ... }}` 表达式
-- **不返回任何内容**(`void`)
+- **不返回任何内容**(`void`),不产生 DOM 节点
 
 **CSR 行为**:
 - no-op
 
-**渲染器侧**:
-- 复用现有 `useLiquidBlock` 机制
-- 收集的代码注入到 `data-ssg-hydrate` div **之前**(已实现)
+**渲染器侧**(已存在,无需新实现):
+- `liquid-assembler.ts` 中 `liquidPrepend` 逻辑
+- 收集的代码注入到 `data-ssg-hydrate` div **之前**
 
-**v7 的限制**:
-- ❌ **不能在 React 树中"包裹" children**(已确认)
+**v7+ 的限制**:
+- ❌ **不能在 React 树中"包裹" children**(已确认,见 §3.2 useForm)
 - ❌ 注入位置固定在 `data-ssg-hydrate` div 之前,不能在中间插入
-- ✅ 适合"独立插入 Liquid 代码片段"场景(如 `{{ schema }}`, `{% style %}` 等)
+- ✅ 适合"独立插入 Liquid 代码片段"场景
 
 **典型用例**:
 ```tsx
-// 阶段 1-2 场景:独立插入
 function MySection() {
   useRawLiquid('{% style %}.section-padding { ... }{% endstyle %}');
+  useRawLiquid("{{ 'icon-arrow.svg' | inline_asset_content }}");
   return <section>...</section>;
 }
 ```
 
-**为 `useForm` 留路**:
-- `{% form %}` 需要**包裹** children,这是不同的问题(见 §3.2)
-- 阶段 1 不解决 form 包裹问题,降级为不实现
-- 水合时 `<span hidden>` 是空元素,与 DOM 匹配
-
-**边缘情况**:
-- 多个连续 `useRawLiquid`:用不同 id 区分
-- 嵌套 `{% form %}` / `{% endform %}` 配对:需要顺序配对
-- 多行代码:支持任意多行 Liquid
-
-**实现路径**:
-1. 定义虚拟组件 `RawLiquid`:
-   ```ts
-   function RawLiquid({ code, _id }: { code: string; _id: number }) {
-     // SSR: 返回 <!--RAW-LIQUID-{_id}-->
-     // CSR: 返回 <span hidden data-raw-liquid-id={_id} />
-   }
-   ```
-2. 在 `useRawLiquid` hook 中:
-   - SSR:维护全局自增 id,调用 `createElement(RawLiquid, { code, _id })`
-   - 渲染器收集 `(id, code)` 对
-3. 渲染器后处理:扫描输出 HTML,找到 `<!--RAW-LIQUID-N-->` 替换为对应 `code`
-4. 表达式跟踪:用正则扫描 `code` 提取 `{{ ... }}` 表达式
-
-**风险**:
-- 🟡 **客户端水合 React 树与 DOM 不完全匹配**:如果某次 SSR 输出 `<form {% form %}>` 之后又输出 `<div>`,客户端 React 树是 `[<span>, <div>]`。DOM 是 `[<form>, <div>]`。**结构不同**。
-  - **解决**:用 `<template>` 元素包裹占位符,客户端不渲染 `<template>` 内容,DOM 结构完全一致
-  - **更稳妥**:用 `<></>` Fragment 包裹,React Fragment 在 SSR 会被消除。需要重新设计占位符策略
-
-**重新设计 — Fragment 包裹**:
-```jsx
-<>
-  <RawLiquid code="{% form 'customer' %}" />
-  <input name="email" />
-  <RawLiquid code="{% endform %}" />
-</>
-```
-
-SSR 输出:
-```html
-<!--RAW-LIQUID-0--><input name="email"><!--RAW-LIQUID-1-->
-```
-
-替换后:
-```html
-{% form 'customer' %}<input name="email">{% endform %}
-```
-
-客户端 React 树(无 RawLiquid 节点,直接 Fragment):
-- `<>` 内 `[<input />]`
-- DOM: `[<input />]`
-- ✓ 匹配
-
-**修正实现**:
-- `<RawLiquid>` 在 SSR 渲染为 `<!--RAW-LIQUID-N-->`
-- 客户端:`<RawLiquid>` 渲染为 `null`(直接返回 null)
-- React Fragment 把 `null` 视为"无节点",结构对齐
-
-**最终风险**:🟢 LOW(实现可控,关键是要在测试中验证水合)
+**与 useLiquidBlock 的关系**:
+- `useRawLiquid(code)` ≡ `useLiquidBlock(code)`(只是命名更直观)
+- 保留两个名称,**无需新增概念**
 
 ---
 
@@ -1315,23 +1373,39 @@ t('cart.items_added.one', { count: 1 })   // → "1 item added"
 
 ---
 
-### 6.3 Filter 跟踪扩展
+### 6.3 Filter 跟踪扩展(v8 修正)
 
-**改动位置**:`packages/vite-plugin-react-shopify/src/ssg/renderer.ts` 中 `DEFAULT_LIQUID_FILTERS`
+> **v8 修正**:v2 评审指出原文档中新增的 `asset_url` / `inline_asset_content` / `placeholder_svg_tag` 是**无效项**。`DEFAULT_LIQUID_FILTERS` 的 key 必须是 setting **type** 名(`textarea` / `image_picker`),但这些 filter 名不是 setting type。
 
-**新增**:
+**`DEFAULT_LIQUID_FILTERS` 真实匹配机制**(代码路径):
+```ts
+// packages/vite-plugin-react-shopify/src/ssg/renderer.ts
+function buildLiquidFilterMap(settings, prefix) {
+  const map = {};
+  for (const s of settings) {
+    const filter = DEFAULT_LIQUID_FILTERS[s.type];  // ← key 是 s.type
+    if (filter) map[`${prefix}${s.id}`] = filter;
+  }
+  return map;
+}
+```
+
+**正确的内容**(保留):
 ```ts
 const DEFAULT_LIQUID_FILTERS: Record<string, string> = {
   textarea: " | newline_to_br",
   image_picker: " | img_url: 'master'",
-  // 新增:
-  asset_url: "",         // useAsset 的 url 模式
-  inline_asset_content: "", // useAsset 的 inline 模式
-  placeholder_svg_tag: " | placeholder_svg_tag: 'placeholder-svg'",
+  // ❌ 不需要为 useAsset / usePlaceholderSvg 加条目
+  // 这些 hook 不使用 type-based filter 机制
+  // 它们的 Liquid 字符串由 hook 内部直接生成完整表达式
 };
 ```
 
-**实现**:在 useLiquidValue 输出表达式时,根据 expression 类型自动附加 filter。
+**useAsset / usePlaceholderSvg 的实现方式**:
+- **不调用** `useLiquidValue`(避免进入 type-based filter 机制)
+- 直接返回完整 Liquid 字符串,如 `{{ 'foo.svg' | asset_url }}`
+- 由渲染器识别这是字面量表达式(没有变量),不进入 bridge
+- 见 §3.4 useAsset 字面量跟踪冗余问题
 
 **风险**:🟢 LOW
 
@@ -1467,7 +1541,11 @@ interface Options {
 
 **无法自动修复**:因为业务逻辑决定何时显示,插件无法智能判断。
 
-#### H3 内联颜色 hex 转换
+#### H3 内联颜色 hex 转换(v8 修正)
+
+> **v2 评审问题**:v6 文档的自动修复方案 `backgroundColor: "#6c63ff"` → `"--bg-color": "#6c63ff"` 改变了 CSS 语义。`background-color` 是标准 CSS 属性,`--bg-color` 是 CSS 自定义属性(必须配合 CSS 规则 `background-color: var(--bg-color)` 才生效)。自动修复的产物**不向后兼容**,会破坏现有样式。
+>
+> **v8 决策**:**H3 降级为 `warn`**,**不自动修复**。
 
 **场景**:
 ```tsx
@@ -1479,26 +1557,42 @@ interface Options {
 
 **正确做法**:
 ```tsx
-// ✅ 用 CSS 变量
-<div style={{ "--accent": "#6c63ff" } as React.CSSProperties} />
-```
-```css
-.elem { background-color: var(--accent, #6c63ff); }
+// ✅ 把颜色放在 CSS 文件中(非内联 style)
+.elem { background-color: #6c63ff; }
+<div className="elem" />
+// 或 ✅ 用 CSS 变量(如果必须在 inline style 中)
+<div style={{ backgroundColor: "var(--accent, #6c63ff)" } as React.CSSProperties} />
 ```
 
-**插件自动修复**:
-- 检测 `style={{ backgroundColor: "..." }}`(其他颜色属性同理)
-- 自动改为 `style={{ "--color-name": "..." } as React.CSSProperties }`
-- 转换名规则:`backgroundColor` → `--bg-color`,`color` → `--text-color`,等
-- 输出 warn 让开发者确认转换是否合理
+**插件检测**:
+- 扫描 `style={{ 属性: "hex 值" }}` 模式
+- **只 warn,不自动修复**(避免改变语义)
+- 输出建议:`Inline color style detected. Move color to CSS file or use CSS variable.`
+- `failOnError` 不阻塞构建
 
-#### H4 Date/Number 本地化
+**修改默认配置**:
+```ts
+const rules: HydrationRule[] = [
+  // ...
+  { id: 'H3', severity: 'warn', detector: detectH3 },  // 移除 fixer
+  // ...
+];
+```
+
+#### H4 Date/Number 本地化(v8 扩展检测范围)
+
+> **v2 评审问题**:v6 文档只检测 `toLocaleString` 等方法调用,缺失 `Intl.DateTimeFormat` / `Intl.NumberFormat` 等现代 API。
 
 **场景**:
 ```tsx
-// ❌ 危险
+// ❌ 危险(本地化方法)
 <span>{new Date().toLocaleString()}</span>
 <span>{(12345.67).toLocaleString()}</span>
+
+// ❌ 危险(Intl 对象)
+<span>{new Intl.DateTimeFormat('en-US').format(new Date())}</span>
+<span>{new Intl.NumberFormat('en-US').format(12345.67)}</span>
+<span>{(12345.67).toLocaleString('en-US')}</span>
 ```
 
 **正确做法**:
@@ -1508,9 +1602,12 @@ const [date, setDate] = useState('');
 useEffect(() => { setDate(new Date().toLocaleString()); }, []);
 ```
 
-**插件检测**:
-- 扫描 `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` 调用
-- 输出 warn:`Hydration risk: locale-dependent method. Use useState + useEffect.`
+**插件检测**(v8 扩展):
+- 扫描以下方法调用:
+  - `toLocaleString` / `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString(locale)`
+  - `new Intl.DateTimeFormat`
+  - `new Intl.NumberFormat`
+- 输出 warn:`Hydration risk: locale-dependent method/constructor. Use useState + useEffect.`
 
 **无法自动修复**。
 
@@ -1760,9 +1857,8 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 | **1.5** | `<ImageTag>` 组件 + 标记替换 | 1-2 天 | 全部图片密集 section |
 | **1.6** | `<BlockSlot>` 组件 + 标记替换 | 0.5-1 天 | 几乎所有 section(用 block) |
 | **1.7** | `<StaticBlock>` 组件 | 0.5 天 | slideshow controls |
-| **1.8** | useForm (B.1 标记替换) | 1 天 | newsletter, contact, login |
-| **1.9** | useForm (B.2 完整接管) | 3-4 天 | (可选,先 B.1 跑通) |
-| **1.10** | usePaginate (B 类降级方案) | 1-2 天 | collection grid, search |
+| **1.8** | ❌ **不实现** useForm (v8 决策:阶段 4+ 重写) | 0 | (推迟) |
+| **1.9** | ❌ **不实现** usePaginate (v8 决策:分页由 Liquid 处理) | 0 | (推迟) |
 | **1.11** | i18n locale 生成 + useT / useLocale | 2-3 天 | 全部 section |
 | **1.12** | CSS Modules 支持 | 2-3 天 | (可选,先禁用) |
 | **1.13** | App Block | 0.5 天 | (utility) |
