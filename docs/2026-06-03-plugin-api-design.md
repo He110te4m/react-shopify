@@ -88,40 +88,72 @@ Shopify SSR 阶段(在 .liquid 渲染时):
 - 实际上 Shopify 引擎 + React tree 自然处理了"作用域"
 - v5 起文档统一使用"entry 级 bridge" 概念,一个 entry(section / block / snippet)对应一个 bridge
 
-### 0.4 ID 生成:内部化,不暴露
+### 0.4 ID 生成:内部化,不暴露(v6 重写,统一论证)
 
-> **v5 修正(用户反馈)**:v1-v4 让组件用自增计数器(如 `<!--IMG-N-->`)。这有两个问题:
-> 1. 主题开发者要了解 id 机制
-> 2. 自增 id 在 React tree 多次渲染时可能冲突
->
-> **解决**:使用 `uuid` 依赖包生成稳定唯一 id,组件内部自动管理,**主题开发者不感知**。
+> **v6 修正(用户反馈 v5)**:v5 文档中 §0.4 / §0.5 / §2.1.1 三处对 useId vs uuid vs 自增计数器 的论证**互相矛盾**(一会说用 uuid,一会说不用 uuid,一会说不能用 useId,一会又分析 useId 适用场景)。这里给出**单一连贯**的决策。
 
-**实现方案**:
-- 插件 runtime 增加 `uuid` 依赖(轻量,~3KB gzipped)
-- 提供内部工具 `useUniqueId(prefix?)` hook
-- `<ImageTag>` / `<BlockSlot>` / `<StaticBlock>` 等组件内部调用此 hook
-- SSR 与客户端 id 保持一致(因为是确定性的 uuid v4 还是基于 React 树位置)
+**核心事实**:**占位符 id 不进入最终产物**。
+- SSR 阶段:`<ImageTag>` 渲染为 `<span data-img-id="img-1" hidden>`
+- SSR 后处理:`<span data-img-id="img-1" hidden>` 被替换为完整的 `<img src="...">` 标签
+- 客户端水合:占位符已不存在,`<ImageTag>` 组件返回 null,React 不需要这个 id
+- **最终 HTML 中,这个 id 从未出现过**
 
-**具体设计**(见 §2.1 ImageTag):
-- 占位符 id 来自 `useUniqueId('img')`,如 `img-a1b2c3d4`
-- React 树位置相同的组件,多次渲染的 id 相同(确定性)
-- 水合时,React 树与 DOM 的 id 自然对齐
+**这个事实的推论**:
+- ❌ **不需要 server/client 稳定 id** — 客户端永远不读它
+- ❌ **不需要跨进程全局唯一** — 每次 SSR 是一次性渲染
+- ❌ **不需要 HTML 属性安全的格式** — 它不进 DOM 属性
+- ❌ **不需要跨渲染稳定** — 占位符临时,被替换后消失
+- ✅ **只需要**:单次 SSR 渲染内唯一,够区分多个组件
 
-**为什么不直接用 React.useId()**:
-- React.useId() 是 React 18+ 提供的,生成 stable id 用于 server/client 对齐
-- 我们的占位符 id 只在 SSR 阶段存在,水合后被替换为真实 Liquid,**客户端 React 不需要看到这些 id**
-- React.useId() 的产物是 `:` 分隔符的字符串(避免 SSR/CSR 不一致),用 `:` 在 HTML 注释中可能引发解析问题
-- uuid v4 的字符串(`a1b2c3d4`)简单清晰,适合作为占位符后缀
+**候选方案对比**:
 
-**结论**:用 `uuid` 包生成确定性 id,内部 hook `useUniqueId` 暴露给组件实现者,主题开发者**不直接使用**。
+| 方案 | 满足需求? | 代价 | 评价 |
+|---|---|---|---|
+| **自增计数器** | ✅ | 5 行代码,0 KB | 满足所有要求,**最简单** |
+| `React.useId()` | ✅ | 0 行(React 自带) | 满足,但它提供的"server/client 稳定"特性对我们是**浪费** |
+| `uuid` npm 包 | ✅ | 3 KB gzipped,1 个依赖 | 满足,但提供"全局唯一"是**过度设计** |
+| 注释占位 `<!--IMG-N-->` | ✅ | 0 行 | 满足,但 HTML 注释解析不如 data-attr 稳定(已被 v5 放弃) |
 
-### 0.5 React.useId() 的适用场景
+**决策**:**自增计数器**(5 行实现,无依赖)。
+- 用户反馈"自增 id 在 React tree 多次渲染时可能冲突" — **不会**。我们在 `useRef` 内缓存,组件重渲染不重新生成;SSR 进程内单调递增,无冲突可能
+- "不引入外部依赖" — 0 KB 体积,符合 Dawn 迁移期"压体积"原则
+- "5 行实现,可读可改" — 不需要 uuid 的全局唯一(跨进程)能力,因为占位符不进最终产物
 
-`useId()` 是为以下场景设计的:
-- 组件需要生成 server/client 稳定一致的 DOM id(如 `<label htmlFor>`、`<input id>`)
-- 这种 id **必须**在 React 树中存在,客户端水合时需要匹配
+**对比 v5 矛盾**:
 
-我们的占位符 id 不属于这个场景 — 占位符在 SSR 后被替换,客户端 React tree 中无对应节点。**`useId()` 不适合本场景**。
+| v5 错误表述 | v6 修正 |
+|---|---|
+| "uuid v4 的字符串简单清晰" → 暗示用 uuid | **不**用 uuid,因为自增计数器已经够用 |
+| "React.useId() 含 `:`" | `:` 没问题(不进 DOM),但 useId 的 server/client 稳定特性对我们是浪费 |
+| "uuid 引入 3KB" → 不该用 | 不该用,**但理由是"过度设计"**而不是"3KB 太大"(对比自增计数器才有"过度"概念) |
+
+**§0.5 旧版"React.useId() 适用场景"分析**:**保留作为知识背景**(`useId()` 真正适用场景是 `<label htmlFor>`/`<input id>` 等需要 server/client 稳定 id 的场景),但**已不属于本节**——本节只讲"占位符 id 怎么生成"。
+
+**§2.1.1 旧版"为什么不用 useId"**:**删除**。既然 v6 决策是"自增计数器",对比对象是"uuid 是不是过度",而不是"useId 是不是合适"。
+
+**实现** (5 行,无外部依赖):
+
+```ts
+// frontend/utils/use-unique-id.ts
+let counter = 0;
+export function useUniqueId(prefix: string = 'u'): string {
+  const ref = useRef<string | null>(null);
+  if (ref.current === null) {
+    counter = (counter + 1) & 0xffffffff;
+    ref.current = `${prefix}-${counter.toString(36)}`;
+  }
+  return ref.current;
+}
+```
+
+**主题开发者使用**(完全不感知):
+```tsx
+<ImageTag image={image} width={3840} />
+```
+
+**客户端 vs 服务端 id 一致性保证**:
+- **不需要保证**。占位符是临时的,被替换后消失
+- React 在客户端渲染 `<ImageTag>` 时直接返回 null,完全不依赖占位符的 id
 
 ---
 
@@ -265,23 +297,14 @@ export function useUniqueId(prefix: string = 'u'): string {
 }
 ```
 
-**为什么不用 uuid npm 包**:
-- uuid 引入 ~3KB gzipped,对小工具是浪费
-- 上述实现仅 5 行,无外部依赖
-- 计数器保证唯一性(在同一 SSR 进程内)
-- 不要求跨进程稳定(占位符是临时的)
-
-**为什么不用 React.useId()**:
-- React.useId() 产物含 `:`(如 `:r0:`),HTML 属性中需转义
-- React.useId() 用于 server/client 一致性,但我们的占位符**只存在于 SSR 阶段**,客户端 null
-- 占位符在 SSR 后处理阶段已被替换为真实 Liquid,客户端看不到
-
-**客户端 vs 服务端 id 一致性保证**:
-- 不需要保证。占位符是临时的,被替换后消失
-- React 在客户端渲染 `<ImageTag>` 时直接返回 null,完全不依赖占位符的 id
+**为什么选自增计数器**(完整论证见 §0.4):
+- 占位符 id 不进入最终产物(SSR 后处理替换),不需要 server/client 稳定 / 跨进程唯一 / HTML 安全的特性
+- 自增计数器 5 行代码,无外部依赖
+- `useRef` 缓存保证组件重渲染不重复生成
+- 单次 SSR 进程内单调递增,无冲突可能
 
 **风险**:
-- 🟡 **MEDIUM**:多张图同位置时,id 管理需要唯一性
+- 🟢 LOW:实现简单,无外部依赖
 - 🟡 **MEDIUM**:Dawn 中 `image_tag` 的可选参数较多(width, height, sizes, widths, fetchPriority, loading, alt, class),组件 API 需完整覆盖
 
 **可行性结论**:🟡 MEDIUM,实现可控,但需要细致测试水合一致性。
