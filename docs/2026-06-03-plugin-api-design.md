@@ -192,31 +192,60 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 ### 1.2 关键驳回(评审者错误/夸大处)
 
-#### 驳回 1:发现 4 的事实错误
+#### 驳回 1 ❌ **错误**:发现 4 的事实错误 — **v8 修正**
 
-评审者说:
-> 单引号在属性中转义为 `&#x27;`
+> **v8 关键修正**:`docs/2026-06-03-plugin-api-rebuttal-verify.cjs` 的驳回验证测试**反证了我的驳回**。
+>
+> 我之前的"实际是双引号被转义为 `&quot;`"结论**是错的**。我看到的是驳回测试 B 的输出(`{{ "Banner" }}` 用双引号包含,被转 `&quot;`),但混淆成了驳回测试 A。
+>
+> **驳回验证测试 A 实际输出**:
+> ```js
+> alt: "{{ image.alt | default: 'Banner' }}"
+> // ↓
+> <img alt="{{ image.alt | default: &#x27;Banner&#x27; }}"/>
+> ```
+> **单引号在 HTML 属性中**确实**被转义为 `&#x27;`**(不是 `&quot;`)。
+>
+> | 字符串内含 | 转义后 |
+> |---|---|
+> | `'Banner'` (单引号) | `&#x27;Banner&#x27;` |
+> | `"Banner"` (双引号) | `&quot;Banner&quot;` |
+> | 纯 Liquid 表达式(无字面量) | 原样保留 |
+>
+> **结论**:v7 文档 "驳回 1" 完全错误,**两种引号都会被转义,只是 entity 形式不同**。`&#x27;` 在 Liquid 中可能无法正确解析(因为 `'` 是 Liquid 字符串分隔符),需要进一步验证 Shopify 引擎行为。
+>
+> **修正行动**:
+> 1. 承认驳回 1 错误,接受评审者原始发现 4 的描述
+> 2. 文档 §2.x 中所有"避免在属性中用字符串字面量"的建议**加强**:v8 起明确"避免在 HTML 属性中放任何含引号的字符串字面量"
 
-**实际测试输出**:
-```html
-<img alt="{{ section.settings.image.alt | default: &quot;Banner&quot; }}"/>
-```
-
-**实际是双引号被转义为 `&quot;`**(`'Banner'` 在模板字符串里是合法字符,无需转义)。但**结论"避免在属性中用字符串字面量"仍然有效**,因为 `&quot;` 同样会破坏 Liquid。
-
-#### 驳回 2:评审者修正方案忽略发现 6
+#### 驳回 2:评审者修正方案忽略发现 6(部分正确,需要修正)
 
 评审者建议 `<ImageTag>` 改为渲染真实 `<img>`:
 ```tsx
 <img src={`{{ ${image} | image_url: width: ${width} }}`} srcSet={`...`} />
 ```
 
-**但发现 6 已证实 React 19 会自动插入 `<link rel="preload">`**。即使不用 srcSet,React 19 仍可能为 `<img src>` 插入 preload。
+**驳回验证测试(react 19 preload 触发条件)**:
 
-**正确方案**应避免 React 直接渲染 `<img>`:
-- 方案 A: `<noscript>` 内渲染 `<img>`(noscript 不参与 hydration)
-- 方案 B: 用 `<picture>` + `<source>`(可控)
-- 方案 C: **用 useLiquidBlock 模式**,把 `<img>` 作为字符串注入到 `data-ssg-hydrate` div 之外
+| 输入 | preload 触发? |
+|---|---|
+| `<img src="...">` (极简) | **✓ 触发** |
+| `<img src="..." loading="lazy">` | ✗ **不触发** |
+| `<img src="..." className="x">` | ✓ 触发 |
+| `<img alt="">` 无 src | ✗ 不触发 |
+| `<picture><source srcSet><img src>` | ✗ **不触发** |
+| `<img src="{{ ... }}">` (Liquid) | ✓ 触发 |
+
+**关键修正**:
+- preload 触发条件**不是 srcSet**(我之前驳回 3 的部分依据)
+- preload 触发条件是**"无 loading='lazy' 的 `<img>`"**(评审者发现 6 真相)
+- **`<picture>` 包裹**也能避免 preload
+- **`<noscript>` 包裹**(评审者 F/G 测试)避免 preload,但 `<noscript>` 内的 img 不显示
+
+**v7 修正方案必须重新评估**:
+- 方案 A:**强制 `loading="lazy"`**(除 LCP 关键图外,默认 lazy)
+- 方案 B:LCP 关键图用 `<picture>` 包裹
+- 方案 C:**走 useLiquidBlock 模式**,把 `<img>` 注入到 `data-ssg-hydrate` div 之外(完全不参与 React 渲染)
 
 #### 驳回 3:发现 3 的"路径 A"是 useLiquidBlock 重命名
 
@@ -238,14 +267,17 @@ export function useUniqueId(prefix: string = 'u'): string {
 - 包裹 children 的需求与"占位符在 React 树中"的设计矛盾
 - 当前架构下不可行,需分阶段降级
 
-### 1.4 受影响文档章节
+### 1.4 受影响文档章节(v8 修订)
 
-- **§2.1 `<ImageTag>`**:v5/v6 设计需重写
+- **§2.1 `<ImageTag>`**(v7 → v8 进一步修正):
+  - **v7 失败**:v7 设计的"`<img src>` 不带 srcSet 也不会触发 React 19 preload"假设**是错的**。驳回验证测试 C 证实,**任何无 `loading="lazy"` 的 `<img>` 都会触发 preload**
+  - **v8 修正**:`loading` 默认 `'lazy'`,移除 `fetchPriority`;LCP 关键图用 `<picture>` 包裹或 `useLiquidBlock` 模式
+- **§2.x 文档加强**:"避免在 HTML 属性中放任何含引号的字符串字面量"——驳回 1 反证后加强(单引号也会被转 `&#x27;`)
 - **§3.1 useRawLiquid**:v1-v4 的 HTML 注释方案已废弃,v5/v6 的 span + null 也有问题,**需彻底重设计**
 - **§3.2 useForm**:需分两阶段降级
 - **§3.3 usePaginate**:需移除或大幅降级
 - **§3.4 useStaticBlock**:仍可走 useLiquidBlock 模式
-- **§6.5 hydration 规则**:H3(自动改 CSS 变量)的方案需重新设计;新增规则 H13(检测 React 19 自动 link preload)
+- **§6.5 hydration 规则**:H3(自动改 CSS 变量)的方案需重新设计;新增规则 H13(检测 React 19 自动 link preload,触发条件是"无 loading=lazy")
 
 ---
 
@@ -258,57 +290,72 @@ export function useUniqueId(prefix: string = 'u'): string {
 > - 作为文本子节点,且文本本身就是 Liquid 表达式(SSR 后被 Liquid 替换)
 > - **不**能用于产生 HTML 元素碎片的场景(那会破坏水合)
 
-### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,**v7 彻底重设计**)
+### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,**v8 彻底重设计**)
 
-**v1-v6 设计历史**(从错误到修正):
-- v1:返回字符串 → hydration mismatch(React 树文本 vs DOM 元素)
-- v2:组件 + 标记替换模式(注释)
-- v3-v4:`<BlockSlot>` 等组件,延后
-- v5:`<span data-img-id>` 占位 + CSR null
-- v6:同 v5(去掉 uuid,改用计数器)
-- **v7(当前,经评审)**:v5/v6 的"占位 + null" 设计**有 hydration mismatch 风险**。评审者测试发现:
-  - SSR: `<div><span></span></div>` (1 child)
-  - Shopify: `<div><img/></div>` (1 child, 但类型变化)
-  - CSR (null return): `<div></div>` (0 children)
-  - **React hydration 期望 0,DOM 有 1,结构不匹配**
+**v1-v7 设计历史**(从错误到修正):
+- v1:返回字符串 → hydration mismatch
+- v2-v4:组件 + 标记替换(注释)
+- v5-v6:`<span data-img-id>` 占位 + CSR null(评审发现 2 证实不可行)
+- **v7**:放弃占位,渲染真实 `<img>` 元素 + Liquid 表达式属性(驳回验证测试**进一步发现问题**)
+- **v8(当前)**:v7 进一步修正 — **必须默认 `loading="lazy"`**
 
-**v7 重新设计 — 渲染真实 `<img>`**:
+**v7 → v8 关键修正**(基于驳回验证测试 驳回 3):
 
-放弃"占位 + 替换"模式,改为**让 React 直接渲染 `<img>` 元素,只在属性值中使用 Liquid 表达式**。
+驳回验证测试(`rebuttal-verify.cjs`)对 React 19 自动 `<link rel="preload">` 触发条件做了精确测试:
 
-**签名**(v7):
+| 输入 | preload 触发? |
+|---|---|
+| `<img src="...">` (极简) | ✓ **触发** |
+| `<img src="..." loading="lazy">` | ✗ **不触发** |
+| `<img src="..." className="x">` | ✓ 触发 |
+| `<img alt="">` 无 src | ✗ 不触发 |
+| `<picture><source srcSet><img src>` | ✗ **不触发** |
+| `<img src="{{ ... }}">` (Liquid) | ✓ 触发 |
+
+**关键发现**:
+- ❌ **不是 srcSet 触发**(我之前驳回 3 的部分依据是错的)
+- ❌ **不是 className 触发**(任意额外属性都触发)
+- ✅ **"无 `loading='lazy'`" 是触发条件** — React 19 把没明确 lazy 的 img 视为 LCP 候选,自动预加载
+- ✅ `<picture>` 包裹也避免 preload
+
+**v8 设计 — 默认 `loading="lazy"`,移除 `fetchPriority`**:
+
 ```ts
 interface ImageTagProps {
   image: string;             // Liquid 表达式,如 "section.settings.image"
   width?: number;            // image_url 宽度(默认 3840)
   alt?: string;
   className?: string;
-  loading?: 'lazy' | 'eager';
-  fetchPriority?: 'auto' | 'high' | 'low';
+  loading?: 'lazy' | 'eager'; // 默认 'lazy'(避免 React 19 自动 preload)
   asPlaceholder?: string;    // 当 image 为空时,显示的 placeholder svg 名
-  // ❌ 不再支持:srcSet, sizes, widths
-  //   因为 React 19 会自动插入 <link rel="preload"> (评审发现 6)
+  // ❌ 不再支持:srcSet, sizes, widths, fetchPriority
+  //   fetchPriority 与 loading 互斥
 }
 function ImageTag(props: ImageTagProps): JSX.Element;
 ```
 
-**SSR 行为**(v7):
+**SSR 行为**(v8):
 ```tsx
-function ImageTag({ image, width = 3840, alt, className, loading, fetchPriority, asPlaceholder }: ImageTagProps) {
+function ImageTag({
+  image,
+  width = 3840,
+  alt,
+  className,
+  loading = 'lazy',  // ★ 默认 lazy(避免 React 19 preload)
+  asPlaceholder,
+}: ImageTagProps) {
   if (typeof document === "undefined") {
-    // SSR: 渲染真实 <img>, src 用 Liquid 表达式
     return (
       <img
         src={`{{ ${image} | image_url: width: ${width} }}`}
         alt={alt ?? ""}
         className={className}
         loading={loading}
-        fetchPriority={fetchPriority}
       />
     );
   }
 
-  // CSR: 从 bridge 读解析后的实际 URL
+  // CSR
   const [resolvedSrc] = useLiquidValue(`${image} | image_url: width: ${width}`);
   return (
     <img
@@ -316,81 +363,81 @@ function ImageTag({ image, width = 3840, alt, className, loading, fetchPriority,
       alt={alt ?? ""}
       className={className}
       loading={loading}
-      fetchPriority={fetchPriority}
     />
   );
 }
 ```
 
-**SSR 输出**:
+**SSR 输出**(默认 loading='lazy'):
 ```html
 <img src="{{ section.settings.image | image_url: width: 3840 }}"
-     alt="..."
-     class="banner__image" loading="lazy" fetchpriority="high" />
+     alt="..." class="banner__image" loading="lazy" />
 ```
 
 **Shopify 处理后**:
 ```html
-<img src="https://cdn.shopify.com/s/files/1/.../banner.jpg?width=3840"
-     alt="..." class="banner__image" loading="lazy" fetchpriority="high" />
+<img src="https://cdn.shopify.com/.../banner.jpg?width=3840"
+     alt="..." class="banner__image" loading="lazy" />
 ```
 
-**客户端 React 树**: 同样的 `<img>` 元素,`src` 从 bridge 读值。
+**客户端 React 树** + **水合**: 元素结构完全一致,`src` 从 bridge 解析。
 
-**水合**: ✅ **元素结构完全一致**(都是 `<img>`),仅 `src` 属性值从 bridge 解析。
+**v8 方案的代价(必须接受)**:
+- ❌ 失去 `image_tag` filter 自动计算 srcset/sizes/width/height 的能力
+- ❌ 失去 `fetchPriority` 精细控制(改由 `loading` 间接控制)
+- ⚠️ Dawn 中 `image_tag` 输出包含大量属性(width, height, srcset, sizes),React 端要手写
+- ⚠️ Dawn 现有 image 类名需要手动传入
 
-**`asPlaceholder` fallback**:
+**LCP 关键图(必须 `eager` 的图)的降级方案**:
+
+如一张图是页面的 LCP 关键图(如 hero banner),需要 `loading="eager"` + `fetchPriority="high"` 以提升 LCP 分数。**这种情况 React 19 会插入 preload link**。
+
+**降级方案 A:用 `<picture>` 包裹**(测试证实有效,推荐):
 ```tsx
-if (!image) {
-  return <img
-    src={`{{ '${asPlaceholder}' | placeholder_svg_tag: 'placeholder-svg' }}`}
-    className={className}
-  />;
+function HeroImage(props) {
+  return (
+    <picture>
+      <source srcSet={`{{ ${props.image} | image_url: width: 800 }} 800w`} />
+      <img src={`{{ ${props.image} | image_url: width: 3840 }}`}} loading="eager" />
+    </picture>
+  );
 }
 ```
+测试证实 `<picture>` 包裹的 `<img>` **不触发 React 19 自动 preload**。
+
+**降级方案 B:`useLiquidBlock` 模式**(彻底规避,最保守):
+```tsx
+function HeroImage(props) {
+  // 客户端 React 树中不渲染 <img>,完全由 Liquid 注入
+  useLiquidBlock(`<img src="{{ ${props.image} | image_url: width: 3840 }}" loading="eager" fetchpriority="high" alt="${props.alt ?? ''}" />`);
+  return null;
+}
+```
+- `<img>` 完全在 `data-ssg-hydrate` div **之外**(由 useLiquidBlock 注入)
+- 不参与 React hydration(无 mismatch 风险)
+- 失去 client-side state 管理(如交互式图片)
+- 适用于纯展示的 LCP 关键图
+
+**默认行为**:`loading="eager"` 图用 `useLiquidBlock` 模式;`loading="lazy"` 图用 `<ImageTag>` 组件。
 
 **跟踪的表达式**:
 - `image` (基础)
 - `image | image_url: width: W` (实际 src 计算)
-- `asPlaceholder` (如果提供)
 - 全部加入 JSON bridge
 
-**v7 方案的代价(必须接受)**:
-- ❌ 失去 `image_tag` filter 自动计算 srcset/sizes/width/height 的能力
-- ⚠️ Dawn 中 `image_tag` 输出包含大量属性(width, height, srcset, sizes),React 端要手写
-- ⚠️ Dawn 现有 image 类名(如 `banner__media-image` 等)需要手动传入
-- ⚠️ 每次 React 端调用 `<ImageTag>`,需要重复传 props
-
-**为什么 v7 仍然安全(评审者没充分考虑的点)**:
-- 评审者建议"渲染真实 `<img>` + srcSet" 方案
-- 但**发现 6 证实 React 19 会自动插入 `<link rel="preload">`**,即使不用 srcSet
-- v7 **彻底避免 srcSet/sizes**,React 19 不应再插入 preload(测试需进一步验证)
-- 如果 React 19 仍插入 preload,需改用更激进的方案(见下方)
-
-**v7+ 激进降级方案**(如果水合仍有问题):
-- 方案 A:`<noscript>` 内渲染 `<img>`(noscript 内容不参与 hydration)
-- 方案 B:放弃 `<ImageTag>` 组件,改用 `useLiquidBlock` 注入完整 `<img>` 字符串到 `data-ssg-hydrate` div 之外
-  ```tsx
-  // 客户端 React 树中不渲染 <img>,完全由 Liquid 注入
-  function ImageTag(props) {
-    useLiquidBlock(`<img src="{{ ${props.image} | image_url: width: ${props.width} }}" alt="${props.alt ?? ''}" />`);
-    return null;
-  }
-  ```
-  这是当前 `react-product-price.liquid` 的实际工作模式
-
-**v7 方案待验证项**(待 P0 阶段实施时实际测试):
-- [ ] React 19 是否对 `<img src={{...}}>` (单 src, 无 srcSet) 插入 preload
+**v8 方案待验证项**(待 P0 阶段实施时实际测试):
+- [ ] React 19 对 `<img src={{...}} loading="lazy">` 不插入 preload(已通过驳回验证测试 C 证实)
 - [ ] alt 为空时的 hydration(空字符串 vs undefined)
 - [ ] asPlaceholder fallback 路径
 - [ ] 多图同位置 id 唯一性
+- [ ] `<picture>` 包裹的实际 hydration 行为
 
 **风险评估**:
-- 🟢 **理论上安全**:React 树与 DOM 结构完全一致
-- 🟡 **MEDIUM**:需实际 hydration 测试验证(React 18+ 行为可能更宽容或更严格)
-- 🟡 **MEDIUM**:React 19 自动优化可能仍产生意外元素(需测试)
+- 🟢 **理论上安全**:`loading="lazy"` 默认值 + 不支持 srcSet 规避 React 19 preload
+- 🟡 **MEDIUM**:LCP 关键图需降级方案,增加复杂度
+- 🟡 **MEDIUM**:`<picture>` 包裹的实际 hydration 行为需测试
 
-**可行性结论**:🟡 MEDIUM,**优先实施并测试**。如失败,降级到 useLiquidBlock 方案。
+**可行性结论**:🟡 MEDIUM,**优先实施并测试**。
 
 ### 2.1.1 `useUniqueId(prefix?)` 内部 hook
 
@@ -1680,25 +1727,25 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 
 ---
 
-## 7. 风险汇总(v7 修订,基于评审反馈)
+## 7. 风险汇总(v8 修订,基于驳回验证测试)
 
 | 风险 | 等级 | 影响 hook/组件 | 缓解 |
 |---|---|---|---|
-| **水合时 DOM 与 React 树结构不匹配** | 🔴 **HIGH** | `<ImageTag>`, useForm, usePaginate | **v7 修正**:`<ImageTag>` 改为渲染真实 `<img>`(§2.1);useForm/usePaginate **降级不实现** |
+| **水合时 DOM 与 React 树结构不匹配** | 🔴 **HIGH** | `<ImageTag>`, useForm, usePaginate | **v8 修正**:`<ImageTag>` 渲染真实 `<img>` + `loading="lazy"` 默认;useForm/usePaginate 阶段 1 不实现 |
 | ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>` |
 | CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules |
-| `{% form %}` 包裹 children 的根本困难 | 🔴 HIGH | useForm | **v7 决策**:阶段 1 不实现;阶段 2-3 用 useLiquidBlock 临时方案;阶段 4+ 重写 |
-| `{% paginate %}` SSR 数据不可用 | 🔴 HIGH | usePaginate | **v7 决策**:阶段 1 不实现;分页完全由 Liquid 处理,React 只渲染单个 card |
-| React 19 自动插入 `<link rel="preload">` | 🟠 MED-HIGH | `<img srcSet>` 模式 | **v7 修正**:`<ImageTag>` 不支持 srcSet,避免触发;新增 H13 规则检测 |
+| `{% form %}` 包裹 children 的根本困难 | 🔴 HIGH | useForm | **v8 决策**:阶段 1 不实现;阶段 2-3 useLiquidBlock;阶段 4+ 重写 |
+| `{% paginate %}` SSR 数据不可用 | 🔴 HIGH | usePaginate | **v8 决策**:阶段 1 不实现;分页完全由 Liquid 处理 |
+| **React 19 自动插入 `<link rel="preload">`** | 🔴 **HIGH** | **任何 `<img>` 元素** | **v8 修正**:`<ImageTag>` **默认 `loading="lazy"`**;LCP 关键图用 `<picture>` 包裹或 `useLiquidBlock` 模式;**新增 H13 规则检测** |
 | Pluralization 翻译 | 🟡 MED | useT (i18n) | 字典查找时支持 `key.other` / `key.one` 后缀 |
 | i18n 文件体积 | 🟢 LOW | useT | 初始 locale 内联,其他按需加载 |
-| 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | v5 新增 `useUniqueId` hook(已被 v7 ImageTag 重设计取代) |
+| 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | v5 新增 `useUniqueId` hook(已被 v8 ImageTag 重设计取代) |
 | 客户端 useEffect 修改 DOM 引发的水合不一致 | 🟡 MED | 复杂组件 | 文档 + lint 提示;无法自动修复 |
-| `bridge` 数据错位 | 🟢 LOW | (无 useBlockLoop) | bridge 不分层,Shopify 自动处理 `block.settings.X` 上下文 |
-| **水合 mismatch 风险(H1-H13)** | 🟠 MED-HIGH | **所有 React 组件** | **新增 hydration-rules 模块,13 条规则分级 warn/error 提示,部分自动修复,关键错误 failOnError 阻止构建**(详见 §6.5) |
-| **属性字符串字面量被转义** | 🟡 MED | useAsset, useFontFace 等 | v7 文档明确:避免 `style={{ attr: "literal" }}`,改用 CSS 变量或 React state |
-| **v1-v6 `<ImageTag>` 设计的根本错误** | 🔴 HIGH | (v5-v6 文档) | **v7 彻底重设计**:不再占位替换,直接渲染 `<img>` 元素 |
-| **v1-v4 `<!--` HTML 注释占位** | 🟡 MED | useRawLiquid | **v7 修正**:useRawLiquid 改回 useLiquidBlock 别名,不再用 HTML 注释 |
+| `bridge` 数据错位 | 🟢 LOW | (无 useBlockLoop) | bridge 不分层 |
+| **水合 mismatch 风险(H1-H13)** | 🟠 MED-HIGH | **所有 React 组件** | hydration-rules 模块,H13 检测 `<img>` 是否缺 `loading="lazy"` |
+| **HTML 属性中引号被转义** | 🟡 MED | useAsset, useFontFace 等 | **v8 加强**:避免在属性中放任何含 `'` 或 `"` 的字符串字面量(驳回 1 反证:单引号也会被转 `&#x27;`) |
+| v1-v7 `<ImageTag>` 设计的根本错误 | 🔴 HIGH | (v5-v7 文档) | **v8 彻底重设计**:不再占位替换,渲染真实 `<img>`,默认 `loading="lazy"` |
+| v1-v4 `<!--` HTML 注释占位 | 🟡 MED | useRawLiquid | v7 修正:useRawLiquid 改回 useLiquidBlock 别名 |
 
 ---
 
