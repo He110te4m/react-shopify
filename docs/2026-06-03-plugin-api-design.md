@@ -1485,7 +1485,7 @@ interface Options {
 |---|---|---|---|---|---|
 | H1 | 相邻 JSXText + JSXExpressionContainer | `<li>title = {title}</li>` | 🟡 常见 | ✅ 已实现 | ✅ 已实现 |
 | H2 | 条件渲染结构差异 | `{cond && <Banner />}` 与 SSR 状态不一致 | 🔴 严重 | ❌ | ⚠️ 静态扫描可识别语法(条件+JSX) |
-| H3 | 内联颜色 hex → rgb 转换 | `<div style={{ backgroundColor: "#fff" }} />` | 🟡 常见 | ⚠️ 自动改为 CSS 变量 | ✅ 可识别 |
+| H3 | 内联颜色 hex → rgb 转换 | `<div style={{ backgroundColor: "#fff" }} />` | 🟡 常见 | 🧹 **仅 warn,不自动修复** | ✅ 可识别 |
 | H4 | Date/Number 本地化差异 | `{new Date().toLocaleString()}` | 🔴 严重 | ❌ 取决于环境 | ❌ |
 | H5 | Conditional className 拼接 | `clsx(cond && "a", "b")` | 🟡 常见 | ❌ | ❌ |
 | H6 | 条件注释/`<></>` Fragment 结构 | `<>{cond ? <A/> : null}</>` | 🟠 中等 | ❌ | ⚠️ |
@@ -1704,7 +1704,8 @@ interface HydrationRule {
 const rules: HydrationRule[] = [
   { id: 'H1', severity: 'warn', detector: detectH1, fixer: fixH1 },     // 已有
   { id: 'H2', severity: 'warn', detector: detectH2 },
-  { id: 'H3', severity: 'error', detector: detectH3, fixer: fixH3 },
+  // v9 修正: H3 移除 fixer,降级为 warn(自动修复会改变 CSS 语义,评审 §3.2)
+  { id: 'H3', severity: 'warn', detector: detectH3 },
   { id: 'H4', severity: 'warn', detector: detectH4 },
   { id: 'H5', severity: 'warn', detector: detectH5 },
   { id: 'H9', severity: 'warn', detector: detectH9 },
@@ -1733,11 +1734,10 @@ interface Options {
   Conditional render detected. Use 'hidden' attribute instead.
   > {showBanner && <Banner />}
 
-[hydration] H3 (error) frontend/sections/HeroBanner.tsx:18
-  Inline color style detected. Auto-fixed to CSS variable.
+[hydration] H3 (warn) frontend/sections/HeroBanner.tsx:18
+  Inline color style detected. Move color to CSS file or use CSS variable.
   > style={{ backgroundColor: "#6c63ff" }}
-  ↓
-  > style={{ "--bg-color": "#6c63ff" } as React.CSSProperties}
+  (no auto-fix)
 
 Build failed: 1 hydration error(s) in 1 file(s)
 ```
@@ -1754,7 +1754,7 @@ Build failed: 1 hydration error(s) in 1 file(s)
 **默认配置**:
 - H1 (相邻文本):`warn`,自动修复
 - H2 (条件渲染):`warn`,仅提示
-- H3 (内联颜色):`error`,自动修复为 CSS 变量
+- H3 (内联颜色):`warn`,**仅提示**(v9 修正,移除自动修复)
 - H4 (locale 方法):`warn`,仅提示
 - H5 (条件 class):`warn`,仅提示
 - H9 (useState 外部):`warn`,仅提示
