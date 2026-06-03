@@ -1,0 +1,15 @@
+node_modules/*
+frontend/*
+package.json
+tsconfig.json
+vite.config.ts
+pnpm-lock.yaml
+index.html
+assets/build/.vite/*
+assets/*.map
+assets/build/*.map
+.gitignore
+.gitattributes
+.shopifyignore
+.theme-check.yml
+*.md
