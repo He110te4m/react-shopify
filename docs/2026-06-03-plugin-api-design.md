@@ -1,9 +1,12 @@
 # Plugin API Design — Dawn Migration Hooks
 
-> 独立 API 评审文档 · 2026-06-03
-> 用途:把主报告(v3)中所有 hook 需求从 §8 抽出,提供**完整 API 签名、SSR/CSR 双端行为、边缘情况、实现路径、可行性评级**。
-> 主报告 v3 假设这些 hook 都可实现。本文档**诚实地标出每一个 hook 的真实可行性**,如有问题可提前调整主报告的迁移策略。
+> 独立 API 评审文档 · v2(2026-06-03 修订)
+> v1 → v2 主要修正:
+> 1. `useImageTag` 归类错误:返回字符串会插入到 React 树中导致 hydration mismatch,改为 `<ImageTag>` 组件 + 标记替换模式
+> 2. `useShopifyAttributes` 不可行:`{...string}` 不是合法 JSX,且当前插件已在 Liquid 层处理,直接移除
+> 3. `useBlockLoop` 不可行:SSR 时 blocks 数据不可知,且与 `{% content_for 'blocks' %}` 机制冲突,改为 `<BlockSlot>` 组件
 >
+> 用途:把主报告(v3)中所有 hook 需求从 §8 抽出,提供**完整 API 签名、SSR/CSR 双端行为、边缘情况、实现路径、可行性评级**。
 > 评审方法:每个 hook 单独评审,通过/打回/打回需返工,逐个推进。
 
 ---
@@ -66,9 +69,10 @@ SSR 收集占位符: ['{% form "customer" %}', '{% endform %}']
 
 | 类别 | 标记 | 描述 | 数量 |
 |---|---|---|---|
-| **A 类 — 简单值 hook** | 🟢 HIGH | 行为类似现有 `useLiquidValue`,只是参数不同 | 11 |
-| **B 类 — 标记替换 hook** | 🟡 MEDIUM | 需要在 React 树中插入占位符,SSR 后字符串替换 | 4 |
-| **C 类 — 上下文驱动 hook** | 🟠 MEDIUM-HIGH | 引入 React context,每个 block 独立 JSON bridge | 3 |
+| **A 类 — 简单值 hook** | 🟢 HIGH | 行为类似现有 `useLiquidValue`,只是参数不同 | 10(v1:11) |
+| **A' 类 — 标记替换组件** | 🟡 MEDIUM | 输出 HTML 片段,需标记替换避免水合 mismatch | 1(useImageTag 改造) |
+| **B 类 — 标记替换 hook** | 🟡 MEDIUM | 需要在 React 树中插入占位符,SSR 后字符串替换 | 3(v1:4,useShopifyAttributes 移除) |
+| **C 类 — 组件化 slot** | 🟢 HIGH | 利用 Shopify 现有 `{% content_for 'blocks' %}` 机制 | 1(`<BlockSlot>` 替代 useBlockLoop) |
 | **D 类 — i18n hook** | 🟢 HIGH | 字典查找,build 时生成 | 2 |
 
 ---
@@ -76,45 +80,80 @@ SSR 收集占位符: ['{% form "customer" %}', '{% endform %}']
 ## 2. A 类 — 简单值 Hook(🟢 HIGH 可行性)
 
 > 这些 hook 在 SSR 时返回 `{{ expr }}` 字符串并跟踪,在客户端从 context 读值。**与现有 `useLiquidValue` 行为一致,只需新增参数或命名。**
+>
+> ⚠️ **重要约束**:返回字符串的 hook 只能用于以下场景:
+> - 作为元素 attribute 值(字符串本身)
+> - 作为文本子节点,且文本本身就是 Liquid 表达式(SSR 后被 Liquid 替换)
+> - **不**能用于产生 HTML 元素碎片的场景(那会破坏水合)
 
-### 2.1 `useImageTag(image, opts?)`
+### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,🟡 MEDIUM)
+
+**v1 错误**:v1 把 `useImageTag` 设计为返回字符串(如 `{{ image | image_url ... | image_tag ... }}`)。问题是:
+- React 树中:`<div>{useImageTag("section.settings.image")}</div>` 把这个字符串作为子节点
+- SSR 渲染:`<div>{{ section.settings.image | image_url ... | image_tag ... }}</div>`(文本节点)
+- Liquid 处理:`<div><img src="..." ...></div>`(变成了 `<img>` 元素)
+- **DOM 树与 React 树结构不同** → hydration mismatch
+
+**v2 修正**:改为 `<ImageTag>` 组件 + 标记替换模式。
 
 **签名**:
 ```ts
-interface ImageTagOptions {
+interface ImageTagProps {
+  image: string;             // Liquid 表达式,如 "section.settings.image"
   width?: number;            // image_url 宽度
-  sizes?: string;            // sizes 属性
   widths?: string;           // widths 列表(逗号分隔)
+  sizes?: string;            // sizes 属性
   alt?: string;
-  class?: string;
+  className?: string;
   loading?: 'lazy' | 'eager';
   fetchpriority?: 'auto' | 'high' | 'low';
   preload?: boolean;
+  asPlaceholder?: string;    // 当 image 为空时,显示的 placeholder svg 名
 }
-function useImageTag(
-  image: string | undefined,  // Liquid: section.settings.image 等
-  opts?: ImageTagOptions
-): string;
+function ImageTag(props: ImageTagProps): JSX.Element;
 ```
 
 **SSR 行为**:
-- 返回:`{{ image | image_url: width: 3840 | image_tag: width: image.width, ... }}`
-- 跟踪表达式:`image`(外加 `image.width` 等)
-- 加入 section 级 JSON bridge
+- 渲染为注释节点 `<!--IMG-N-->`(N 是自增 id)
+- 渲染器维护 `[id] → props` 映射
+- 后处理:扫描输出 HTML,找到 `<!--IMG-N-->` 替换为对应的 `{{ image | image_url: width: W | image_tag: ... }}` Liquid 表达式
+- 跟踪 `image` 及附属表达式(`image.width` 等)
 
 **CSR 行为**:
-- 直接调用 React `<Image>` 组件,不再用 hook 字符串
-- **实际:这个 hook 主要在 SSR 阶段使用,客户端不消费字符串**
+- 渲染为 `null`(真实 `<img>` 已被 SSR 注入到 DOM)
+- React 水合时,`<ImageTag>` 节点不渲染,DOM 与 React 树结构对齐
 
 **边缘情况**:
-- `image` 为空时返回 `{{ 'placeholder' | placeholder_svg_tag: 'class' }}`(自动 fallback)
-- `image` 是 object 形式(Liquid 解析后)时,需要确保 settings 通过 hook 读取而不是直接拿 string
+- `image` 为空(未设置或没上传):自动 fallback 到 `asPlaceholder` 指定的 svg
+- `image` 引用的是 image_picker setting:返回完整的 `image_tag` 表达式,包含 width/height/srcset/fetchpriority 等
+- 多张图同位置:用 N 区分
 
 **实现路径**:
-- 在 `useLiquidRaw` 基础上,自动附加 `| image_url: width: W | image_tag: ...` 过滤器
-- 跟踪的图片辅助表达式(`image.width`, `image.height`, `image.aspect_ratio`)加到默认跟踪列表
+1. 定义虚拟组件 `ImageTag`:
+   ```tsx
+   function ImageTag({ image, width = 3840, ...rest, _id }: ImageTagProps & { _id: number }) {
+     // SSR: 返回 <span data-img-id={_id} hidden />
+     // CSR: 返回 null(在 hydration 阶段)
+   }
+   ```
+2. 在渲染器中,识别 `ImageTag` 组件,替换为标记
+3. 渲染后处理:用 props 生成 Liquid 表达式字符串,替换标记
+4. 表达式跟踪:扫描表达式中的 `image` 引用
 
-**风险**:🟢 无(纯字符串模板)
+**风险**:
+- 🟡 **MEDIUM**:多张图同位置时,id 管理需要唯一性
+- 🟡 **MEDIUM**:Dawn 中 `image_tag` 的可选参数较多(width, height, sizes, widths, fetchpriority, loading, alt, class),组件 API 需完整覆盖
+
+**可行性结论**:🟡 MEDIUM,实现可控,但需要细致测试水合一致性。
+
+**与 Dawn 行为的兼容性**:
+- Dawn 输出的 `<img>` 标签结构(包含 fetchpriority, sizes, widths)与本组件的 props 一一对应
+- 占位符模式与现有 `useLiquidBlock` 思路一致,但作用位置是"替换为完整 HTML 片段"而非"插入在 wrapper 之前"
+
+**类似组件(同样需要标记替换)**:
+- `<Video>` 组件 — 输出 `{{ video | video_tag }}` 或 YouTube/Vimeo 嵌入
+- `<Source>` 组件 — 输出 `image_url` 不带 `image_tag` 包装(用于 srcset)
+- `<Icon>` 组件 — 输出 `{{ 'icon-X.svg' | inline_asset_content }}`
 
 ---
 
@@ -238,22 +277,33 @@ function useColorScheme(id: string | undefined): string;
 
 ---
 
-### 2.8 `useShopifyAttributes()`
+### 2.8 ~~`useShopifyAttributes`~~ — **移除**
 
-**签名**:
-```ts
-function useShopifyAttributes(): string;
-```
+**v1 错误**:v1 设计 `useShopifyAttributes()` 返回 `{{ block.shopify_attributes }}` 字符串,期望用户在 JSX 中用 `{...string}` 展开。
+- **`{...string}` 在 JSX 中不是合法的 spread** —— JSX spread 只接受对象(POJO)
+- 即使能用,string 会被当作对象属性展开,语义错误
 
-**SSR 行为**:
-- 返回字面量字符串 `{{ block.shopify_attributes }}`
-- 跟踪:`block.shopify_attributes`
+**v2 结论**:
+- **当前插件(`liquid-assembler.ts:236-237`)已自动在 block wrapper 上注入 `{{ block.shopify_attributes }}`**:
+  ```html
+  <{{tag}} id="{{ block.id }}" data-section-id="{{ section.id }}" 
+        data-ssg-component="{{kebabName}}" {{ block.shopify_attributes }}>
+    <!-- React SSR HTML -->
+  </{{tag}}>
+  ```
+- 用户的 React block 组件**不需要关心** `shopify_attributes`,它已经被插件注入到 block 根元素上
+- **Dawn 行为差异**:Dawn 把 `{{ block.shopify_attributes }}` 放在**内层元素**上(如 `<h2 {{ block.shopify_attributes }}>`),而当前插件放在**外层 wrapper** 上
+- **对 Dawn 迁移的影响**:Dawn 的 rich-text 等 block 把 attrs 放在 heading 上,如果迁移到 React,heading 元素本身不会有 attrs(会被插件放到外层 wrapper),但**这不影响功能**(`shopify_attributes` 主要用于 theme editor 高亮整块,放在外层 wrapper 同样有效)
 
-**CSR 行为**:返回空字符串(属性由 SSG 已经注入到 DOM)
+**实现路径**:**无需实现**。
 
-**实现路径**:在 `useLiquidRaw` 上层,硬编码表达式
+**风险**:🟢 无
 
-**风险**:🟢 无(但要确保 SSR 阶段与 React 树中 `{...attrs}` 正确对接)
+**设计更新**:
+- §3.1 `useRawLiquid` 文档中,移除"配合 useShopifyAttributes"的相关引用
+- §3.1 B 类示例代码中,移除 `<h2 {...attrs}>` 写法
+- §3.2 `useForm` 文档中,移除相关引用
+- §4 C 类(useBlockLoop)整体重构(见 §4),移除 BlockContext / useBlockRouter
 
 ---
 
@@ -337,9 +387,11 @@ function useSectionPadding(settingsKey?: string): string;
 
 ---
 
-## 3. B 类 — 标记替换 Hook(🟡 MEDIUM 可行性)
+## 3. B 类 — 标记替换 Hook/组件(🟡 MEDIUM 可行性)
 
 > 这些 hook 在 React 树中渲染一个占位符节点,SSR 阶段被替换为真实 Liquid 代码。客户端水合时占位符节点为空,与 DOM 结构对齐(无 mismatch)。
+>
+> **B 类总量从 v1 的 4 个减为 3 个**:`useShopifyAttributes` 移除(v1 错误设计)
 
 ### 3.1 `useRawLiquid(code)` ★ 关键
 
@@ -564,122 +616,168 @@ function useStaticBlock(spec: StaticBlockSpec): React.FC;
 
 > 这些 hook 引入 React Context,让 block 子组件能访问当前 block 的 settings。**核心挑战:每个 block 需要独立的 JSON bridge。**
 
-### 4.1 `useBlockLoop(blocks, render)` ★ 关键
+## 4. ~~C 类 — 上下文驱动 Hook~~ → C' 类 — 组件化 Slot(🟢 HIGH)
+
+> v1 设计的 `useBlockLoop` 系列 hook 不可行,已替换为 `<BlockSlot>` 组件 + 每个 Theme Block 独立 entry 的方案。
+
+### 4.0 v1 不可行的原因
+
+**v1 设计问题**:
+
+1. **SSR 时 blocks 数据不可知**
+   - `useBlockLoop(blocks, render)` 需要在 React 组件中传入 `blocks` 数组
+   - 但 React 组件不知道当前 section 有哪些 block(block 是 Shopify 后台数据)
+   - 即使用某种"全局上下文"传递,SSR 阶段 React 树还是只看到"渲染 slot",无法预知 block 数量和顺序
+
+2. **与 `{% content_for 'blocks' %}` 机制冲突**
+   - 当前插件已通过 `{% content_for 'blocks' %}` 让 Shopify 渲染 block
+   - `useBlockLoop` 想用 React 自己迭代,会绕过 Shopify 的 block 机制
+   - 块顺序、限制(`limit`)、嵌套等 Shopify 处理逻辑被绕过
+
+3. **block 独立 React entry 是更优解**
+   - 当前的 `useBlockSettings("X")` 已经是基于"当前 block 上下文"工作
+   - 每个 block 单独 hydrate,JSON bridge 简单清晰
+   - 不需要新加任何 hook,只需要让 React 知道"block 由 Shopify 渲染,React 负责水合"
+
+### 4.1 `<BlockSlot>` 组件(替代 useBlockLoop)★ 关键
 
 **签名**:
 ```ts
-function useBlockLoop<TBlock>(
-  blocks: TBlock[],
-  render: (block: TBlock) => ReactNode
-): ReactNode[];
+interface BlockSlotProps {
+  /** 可选:渲染前的占位文本,在管理后台显示 */
+  fallback?: ReactNode;
+}
+function BlockSlot(props?: BlockSlotProps): JSX.Element;
 ```
 
-**实现路径**:
-
-```tsx
-// 内部
-function useBlockLoop(blocks, render) {
-  return blocks.map((block) => (
-    <BlockWrapper key={block.id} block={block}>
-      {render(block)}
-    </BlockWrapper>
-  ));
-}
-
-// BlockWrapper
-function BlockWrapper({ block, children }) {
-  // SSR: 输出 <div data-ssg-block-id={block.id} data-ssg-hydrate>
-  //   包含:
-  //     - 该 block 的 JSON bridge
-  //     - 子 React 树(其中 useBlockSettings 输出 {{ block.settings.X }})
-  // CSR: 输出同样结构,JSON bridge 由 SSR 注入
-  return (
-    <BlockContext.Provider value={block}>
-      <div data-ssg-block-id={block.id} data-ssg-hydrate>
-        {/* JSON bridge for THIS block */}
-        <script type="application/json" data-ssg-block-liquid>
-          {JSON.stringify(blockSettingsToBridge(block))}
-        </script>
-        {children}
-      </div>
-    </BlockContext.Provider>
-  );
-}
-```
-
-**SSR 关键改动**:
-- 渲染器需要在渲染每个 block 前**重置表达式跟踪器**(`__shopify_ssg_liquid_track`)
-- 每个 block 的表达式独立收集,生成独立的 JSON bridge
-- `block.id` 通过 `data-ssg-block-id` 属性暴露(客户端可识别)
+**SSR 行为**:
+- 渲染为 `{% content_for 'blocks' %}`(已有机制)
+- Shopify 在 SSR 阶段渲染该 section 的所有 block(根据 `shopifyMeta.blocks` 决定可接受的类型)
+- 每个 block 对应一个独立的 React entry,有自己的 JSON bridge
 
 **CSR 行为**:
-- 客户端拿到 SSR HTML 后,每个 block 节点都有独立 JSON bridge
-- `useBlockSettings("X")` 从当前 block context 读值
-- 水合时,每个 block 节点独立 hydrate
+- 渲染为 `null`(实际 block 由 SSR 注入 DOM)
+- 水合时:已 hydrate 的 block 节点会被识别,新插入的 block 通过 Shopify 的 `shopify:section:load` / `shopify:section:unload` 事件重新触发 hydrate
 
 **边缘情况**:
-- **嵌套 block**:`Row` block 内部又有 `blocks: [{ type: "heading" }]`,需要嵌套 `<BlockWrapper>`,每层独立 bridge
-- **块内 `{% form %}`**:`EmailForm` block 内部使用 `{% form 'customer' %}`,form 标记必须正确放置
-- **块内 `useLiquidBlock`**:Dawn 的 slideshow 旧实现中,`{%- for block in section.blocks -%}` 的 for-loop 本身是 `useLiquidBlock` 注入的;新设计中,`useBlockLoop` 是 React 主导,这种情况不再需要 `useLiquidBlock`
-- **顺序稳定性**:React key 用 `block.id`,确保 block 顺序变化时 hydration 不会错乱
+- **嵌套 block**:父 block 也用 `<BlockSlot />` 即可(Shopify 递归处理)
+- **静态 block**:见 §4.2 `<StaticBlock>` 组件
+- **block 顺序变化**:Shopify 自动处理,React 用 `block.id` 作为 key
+- **`limit` 约束**:由 schema 保证,超出时报错
 
-**实现路径(详细)**:
-1. 引入 `BlockContext` (`React.createContext<BlockData | null>(null)`)
-2. `BlockWrapper` 组件:
-   - SSR:渲染 `<div data-ssg-block-id data-ssg-hydrate>` + 内部 JSX
-   - 维护 SSR 表达式跟踪上下文
-3. 渲染器改造(`renderer.ts`):
-   - 提供 `withBlockScope(block, fn)` API,临时切换 `__shopify_ssg_liquid_track` 到 block 私有 Set
-   - 渲染 block 子树后,把该 Set 转 JSON bridge 注入
-4. `useBlockSettings` 改造:
-   - 从 BlockContext 读当前 block
-   - 输出 `{{ block.settings.X }}`(在 block 作用域内 Liquid 自动解析正确)
-5. presets 中的 blocks schema 声明:需支持 `[{ type: "heading", name: "Heading" }, ...]` 形式(已支持)
+**实现路径**:
+1. 虚拟组件 `BlockSlot`:
+   ```tsx
+   function BlockSlot() {
+     // SSR: 返回 <!--BLOCK-SLOT--> 占位符
+     // CSR: 返回 null
+   }
+   ```
+2. 渲染器在 post-process 阶段把 `<!--BLOCK-SLOT-->` 替换为 `{% content_for 'blocks' %}`
+3. **无需新加表达式跟踪机制** — block 的设置由各自 entry 的 `useBlockSettings` 处理(已有)
+
+**对比 v1 设计**:
+
+| 维度 | v1 (useBlockLoop) | v2 (`<BlockSlot>`) |
+|---|---|---|
+| 数据流 | React 显式迭代 blocks(数据不可知) | Shopify 自动迭代,React 不知情 |
+| JSON bridge | 每 block 独立(需新机制) | 复用现有机制(block 自带 bridge) |
+| 嵌套支持 | 需递归处理 | Shopify 天然支持 |
+| `limit` 校验 | React 不感知 | schema 保证 |
+| 复杂度 | 高(需新跟踪机制) | 低(替换占位符) |
+
+**示例代码**:
+```tsx
+// 主报告 §6.2 中的 image-banner.tsx 改用 <BlockSlot />
+export default function ImageBanner() {
+  return (
+    <div className="banner">
+      <div className="banner__media">
+        <ImageTag image="section.settings.image" width={3840} />
+      </div>
+      <div className="banner__content">
+        <BlockSlot />  {/* ← 由 Shopify 渲染所有 block */}
+      </div>
+    </div>
+  );
+}
+
+// heading block (frontend/blocks/Heading.tsx)
+export const blockMeta = {
+  name: "Heading",
+  settings: [
+    { type: "inline_richtext", id: "heading", label: "Heading" },
+    { type: "select", id: "heading_size", label: "Size", options: [...] },
+  ],
+} satisfies BlockMeta;
+
+export default function Heading() {
+  const heading = useBlockSettings("heading");  // {{ block.settings.heading }}
+  const size = useBlockSettings("heading_size");
+  return <h2 className={clsx("banner__heading", "inline-richtext", `banner__heading--${size}`)}>{heading}</h2>;
+}
+```
+
+**风险**:🟢 LOW(沿用现有机制,改动小)
+
+**可行性结论**:🟢 **HIGH**,推荐方案。
+
+---
+
+### 4.2 `<StaticBlock>` 组件(替代 useStaticBlock)
+
+**签名**:
+```ts
+interface StaticBlockProps {
+  type: string;       // block 文件名,如 "slide"
+  id: string;         // 块唯一 ID(在 presets 中声明)
+  data?: Record<string, string | number>;  // 传给子 block 的数据
+}
+function StaticBlock(props: StaticBlockProps): JSX.Element;
+```
+
+**SSR 行为**:
+- 渲染为 `{% content_for "block", type: spec.type, id: spec.id, data_key: data.value %}`
+- 注意:`data` 参数中的 value 若是 Liquid 表达式,需要跟踪
+- 若是字面量,直接拼接到表达式
+
+**CSR 行为**:渲染为 null
+
+**边缘情况**:
+- `data` 中的 value 是字面量 vs 变量:`{% content_for "block", ..., accent: "#fff" %}` vs `accent: settings.X`
+- 子 block 接收:`{{ accent | default: '#000' }}`
+
+**实现路径**:
+- 字符串模板生成 `{% content_for "block", ... %}` 表达式
+- 跟踪 data 引用到的所有表达式
 
 **风险**:
-- 🟠 **MEDIUM-HIGH**:JSON bridge 嵌套结构在 React 树中渲染时,React 可能把它视为特殊 script 节点(无害,但要注意)
-- 🟠 **MEDIUM**:嵌套 block 时,block.id 命名冲突需隔离(每个 block 树独立)
-- 🟠 **MEDIUM-HIGH**:**`block.shopify_attributes` 的注入位置需要精确**。当前是手动 `{{ block.shopify_attributes }}`,新设计通过 `<div data-ssg-block-id>` 自动包含,但 Dawn 的真实属性是放在具体子元素上(如 `<h2 {{ block.shopify_attributes }}>`)
+- 🟢 LOW
+- 🟡 **MEDIUM**:data 传值需要类型检查,避免传 React 引用
 
-**修正 — `useShopifyAttributes` 与子元素配合**:
-- `useShopifyAttributes()` 返回字符串,JSX 中 `{...spread}` 展开
-- SSR 时,`block.shopify_attributes` 表达式被跟踪并加入 block 的 JSON bridge
-- 客户端,React 的 spread 把属性注入到对应元素
-
-**可行性结论**:🟠 MEDIUM-HIGH,需要重构当前渲染器的表达式跟踪机制。建议先实现**单 block、无嵌套**版本,验证水合后再扩展嵌套。
+**可行性结论**:🟢 **HIGH**
 
 ---
 
-### 4.2 `useBlockContext()` (内部 hook)
+### 4.2 ~~`useBlockContext`~~ / ~~`useBlockRouter`~~ — **移除**
 
-**签名**:
-```ts
-function useBlockContext<T>(): T;
-```
+**v1 设计的问题**:
+- `useBlockContext` 用于从 React context 读 block 数据 — **新设计不需要 block context**,因为 block 是独立 React entry,直接在 entry 内 `useBlockSettings` 即可
+- `useBlockRouter` 用于根据 block.type 查表 — **新设计不需要**,因为每个 block 是独立 .tsx 文件,Shopify 的 `content_for 'blocks'` 直接渲染对应 block 文件
 
-**SSR/CSR 行为**:
-- 读 React Context
-- 必须在 `<BlockWrapper>` 内部调用
+**实现路径**:**无需实现**。
 
-**实现路径**:`useContext(BlockContext)` 简单包装
+**风险**:🟢 无
 
-**风险**:🟢 无(标准 React context)
+**§6.2 image-banner 范例更新**:
+- 删除 `BlockRouter.tsx` 组件
+- `ImageBanner.tsx` 用 `<BlockSlot />` 代替循环
+- 每个 block 独立 entry,`frontend/blocks/Heading.tsx` 等直接是 React 组件
 
----
-
-### 4.3 `useBlockRouter(type, registry)`
-
-**签名**:
-```ts
-function useBlockRouter<P>(
-  type: string,
-  registry: Record<string, React.ComponentType<P>>
-): React.ComponentType<P> | null;
-```
-
-**实现路径**:纯 lookup
-
-**风险**:🟢 无(纯 JS utility)
+**§5.3 Block 决策更新**:
+- 块升级为 Theme Block 的策略**不变**(仍是 30+ 个 Theme Block)
+- 但实现方式:每个 block 是独立 React entry + 独立 .liquid 文件
+- 不再需要在 section 端做 block 分发
 
 ---
 
@@ -890,71 +988,81 @@ interface Options {
 
 ---
 
-## 7. 风险汇总
+## 7. 风险汇总(v2 修订)
 
-| 风险 | 等级 | 影响 hook | 缓解 |
+| 风险 | 等级 | 影响 hook/组件 | 缓解 |
 |---|---|---|---|
-| 水合时 DOM 与 React 树结构不匹配 | 🟠 MED-HIGH | useRawLiquid, useForm, usePaginate, useStaticBlock | 用 Fragment 包裹占位符;SSR 渲染为注释节点,客户端渲染为 null;严格测试 |
-| Block JSON bridge 嵌套与命名冲突 | 🟠 MED-HIGH | useBlockLoop | 渲染器隔离 block 作用域;每 block 独立 bridge |
+| 水合时 DOM 与 React 树结构不匹配 | 🟠 MED-HIGH | useRawLiquid, useForm, usePaginate, useStaticBlock, **`<ImageTag>`** | 用 Fragment 包裹占位符;SSR 渲染为注释节点,客户端渲染为 null;严格测试 |
+| ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>`,block 独立 entry,沿用现有 JSON bridge 机制 |
 | CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules;阶段 6 再评估 |
 | `{% form %}` 提交行为与 Shopify 原生差异 | 🟠 MED | useForm | 分两阶段:B.1 只做标记替换,B.2 完整接管 |
 | `{% paginate %}` URL 同步与 SEO link | 🟡 MED | usePaginate | B 类降级方案:只做标记替换,客户端不接管 |
 | Pluralization 翻译 | 🟡 MED | useT (i18n) | 字典查找时支持 `key.other` / `key.one` 后缀 |
 | i18n 文件体积 | 🟢 LOW | useT | 初始 locale 内联,其他按需加载 |
-| `useShopifyAttributes` spread 在 SSR 时是否正确 | 🟡 MED | useBlockLoop | 测试验证;Dawn 用例: `<h2 {{ block.shopify_attributes }}>` |
-| `data-ssg-block-id` 与 `block.id` 一致性 | 🟡 MED | useBlockLoop | SSR 强制使用 `block.id` 字面量 |
+| ~~`useShopifyAttributes` spread~~ | ~~🟠 MED~~ | ~~useBlockLoop~~ | **已解决**:v1 错误设计,整个 hook 移除;插件已自动注入 `shopify_attributes` 到 block wrapper |
+| `<ImageTag>` 替换为 HTML 片段时 DOM 元素插入位置 | 🟡 MED | `<ImageTag>` | 标记替换模式;SSR 注释节点 + CSR null;在测试中验证水合 |
+| `<BlockSlot>` 与现有 `content_for 'blocks'` 机制的语义对齐 | 🟢 LOW | `<BlockSlot>` | 直接替换,无新机制 |
 
 ---
 
-## 8. 实施优先级建议
+## 8. 实施优先级建议(v2 修订)
 
-| 阶段 | Hook | 工作量 | 阻塞的下游 |
+| 阶段 | Hook/组件 | 工作量 | 阻塞的下游 |
 |---|---|---|---|
-| **1.1** | useImageTag, useImageUrl, useAsset, useFontFace, usePlaceholderSvg | 1 天 | 全部图片密集 section |
-| **1.2** | useThemeSettings, useColorScheme, useShopifyAttributes, useBlockType | 0.5 天 | 全部 section |
+| **1.1** | useImageUrl, useAsset, useFontFace, usePlaceholderSvg | 1 天 | 全部图片密集 section |
+| **1.2** | useThemeSettings, useColorScheme, useBlockType | 0.5 天 | 全部 section |
 | **1.3** | useSectionPadding, useImageBehavior, useSectionAspect, useIconUrl | 1 天 | image-banner 类 |
 | **1.4** | useRawLiquid + 标记替换机制 | 2-3 天 | main-product, slideshow, 所有 block-iterating |
-| **1.5** | useBlockLoop + BlockContext + block-scope bridge | 3-4 天 | 几乎所有 section(用 block) |
-| **1.6** | useForm (B.1 标记替换) | 1 天 | newsletter, contact, login |
-| **1.7** | useForm (B.2 完整接管) | 3-4 天 | (可选,先 B.1 跑通) |
-| **1.8** | usePaginate (B 类降级方案) | 1-2 天 | collection grid, search |
-| **1.9** | useStaticBlock | 0.5 天 | slideshow controls |
-| **1.10** | useBlockRouter | 0.5 天 | (utility) |
+| **1.5** | `<ImageTag>` 组件 + 标记替换 | 1-2 天 | 全部图片密集 section |
+| **1.6** | `<BlockSlot>` 组件 + 标记替换 | 0.5-1 天 | 几乎所有 section(用 block) |
+| **1.7** | `<StaticBlock>` 组件 | 0.5 天 | slideshow controls |
+| **1.8** | useForm (B.1 标记替换) | 1 天 | newsletter, contact, login |
+| **1.9** | useForm (B.2 完整接管) | 3-4 天 | (可选,先 B.1 跑通) |
+| **1.10** | usePaginate (B 类降级方案) | 1-2 天 | collection grid, search |
 | **1.11** | i18n locale 生成 + useT / useLocale | 2-3 天 | 全部 section |
 | **1.12** | CSS Modules 支持 | 2-3 天 | (可选,先禁用) |
 | **1.13** | App Block | 0.5 天 | (utility) |
+| **移除** | ~~useShopifyAttributes, useBlockLoop, useBlockContext, useBlockRouter~~ | — | v1 错误设计,无需实现 |
 
-**总工作量估算**:阶段 1 全部完成需 **~25-30 工作日**。
+**总工作量估算**:阶段 1 全部完成需 **~22-28 工作日**(v2 减少了 4 个 hook 的实现工作量)。
 
 ---
 
-## 9. 评审检查清单
+## 9. 评审检查清单(v2 修订)
 
-评审每个 hook 时,关注以下问题:
+评审每个 hook/组件时,关注以下问题:
 
 - [ ] **签名是否合理**?参数命名、类型、可选性
 - [ ] **SSR 行为是否清晰**?输出什么、跟踪什么、加入哪个 bridge
 - [ ] **CSR 行为是否清晰**?客户端拿到字符串后怎么处理
-- [ ] **水合是否安全**?DOM 与 React 树是否结构对齐
+- [ ] **水合是否安全**?DOM 与 React 树是否结构对齐(**v1 错误主要在此**)
+- [ ] **是否产生 HTML 元素碎片**?如果有,**必须**用组件+标记替换,不能返回字符串
+- [ ] **是否依赖 React 树中数据不可知的内容**(如 blocks 数组)?如果有,**必须**用 Shopify 机制(内容提供)而非 React 迭代
 - [ ] **边缘情况是否覆盖**?空值、嵌套、配对、不存在 block
 - [ ] **实现路径是否可行**?代码改动量、风险点
 - [ ] **是否阻塞下游**?不实现的话,哪些 section/snippet 没法做
 - [ ] **降级方案是否合理**?如果做不了,有什么 workaround
 
+**v1 → v2 三个错误的核心教训**:
+1. **不要用字符串 hook 输出 HTML 元素** — 改用组件 + 标记替换
+2. **不要造 hook 实现现有功能** — 插件已经处理 `shopify_attributes`,不需新 hook
+3. **不要用 React 迭代 Shopify 数据** — 改用 Shopify 机制(`content_for 'blocks'`)
+
 ---
 
-## 10. 等待评审
+## 10. 等待评审(v2 修订)
 
-按以下顺序逐个评审 hook(或批量评审同类):
+按以下顺序逐个评审(或批量评审同类):
 
-1. A 类(11 个)— 可批量通过
-2. B 类 3.1 useRawLiquid — 关键基础设施,先评审
-3. B 类 3.2 useForm — 决定 newsletter/contact 迁移路径
-4. B 类 3.3 usePaginate — 决定 collection grid 迁移路径
-5. B 类 3.4 useStaticBlock — 简单,先评审
-6. C 类 4.1 useBlockLoop — 核心,需详细评审
-7. C 类 4.2-4.3 — 简单,先评审
-8. D 类 5.1 useT — i18n 关键
-9. SSG 6.1-6.6 — 与 hook 评审并行
+1. **A 类(10 个,v1:11)** — 可批量评审,改动小
+   - ~~useImageTag~~ → 已改造为 `<ImageTag>` 组件,见 A' 类
+2. **A' 类 `<ImageTag>` 组件** — 重要评审项
+3. **B 类 3.1 useRawLiquid** — 关键基础设施
+4. **B 类 3.2 useForm** — 决定 newsletter/contact 迁移路径
+5. **B 类 3.3 usePaginate** — 决定 collection grid 迁移路径
+6. **C' 类 `<BlockSlot>` 组件** — 替代 v1 的 useBlockLoop,核心架构变更
+7. **C' 类 `<StaticBlock>` 组件** — 简单
+8. **D 类 5.1 useT** — i18n 关键
+9. **SSG 6.1-6.6** — 与 hook 评审并行
 
-**评审方式**:对每个 hook,回答"通过 / 打回需返工 / 需要更多信息"。我会根据评审结果调整实现方案。
+**评审方式**:对每个 hook/组件,回答"通过 / 打回需返工 / 需要更多信息"。我会根据评审结果调整实现方案。
