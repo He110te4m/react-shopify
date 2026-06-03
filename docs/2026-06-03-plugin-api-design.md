@@ -171,6 +171,84 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 ---
 
+## 1. 关键评审反馈评估(v7,基于实证测试)
+
+> 来源:`docs/2026-06-03-plugin-api-review.md`(v2,852 行)+ `docs/2026-06-03-plugin-api-review.test.cjs`(21 个测试)
+>
+> **方法学重要说明**:运行 `node docs/2026-06-03-plugin-api-review.test.cjs` 显示 21/21 通过,但其中 **5 个测试是 `assert(true, "...")` 形式** — 这些**永远通过,无论实际行为如何**。本节严格区分"测试真实证明"与"评审者基于文档的推断"。
+
+### 1.1 逐条评估(严格区分证据等级)
+
+| 发现 | 测试是否真实证明? | 严重度 | 我的评估 |
+|---|---|---|---|
+| 1. HTML 注释被转义为 `&lt;!--` | ✅ 真实断言(2 个) | 🟡 MED | ✅ 接受 — 但 v6 已改用 `<span data-img-id>`,v6 不受影响 |
+| 2. `<ImageTag>` null return 与 DOM 结构不匹配 | 🟡 child count 真实但 `assert(true)` 收尾 | 🔴 CRITICAL | ✅ 接受严重度,**v5/v6 设计有真实风险**,但**测试未做实际 hydration 验证** |
+| 3. `dangerouslySetInnerHTML` 也不解决 | ❌ 只验证不转义,没验证水合 | 🟡 MED | 🟡 部分驳回 — 结论是推断,非测试证明 |
+| 4. 单引号/双引号在 HTML 属性中被转义 | ✅ 真实断言(3 个) | 🟡 MED | ✅ 接受结论 — 但**描述错误**,实际是双引号被转 `&quot;` 而非单引号转 `&#x27;` |
+| 5. Fragment 包裹 null 节点 | ✅ 真实断言 | 🟢 LOW | ✅ 接受 |
+| 6. React 19 自动插入 `<link rel="preload">` | ❌ `assert(true)` | 🟠 MED | 🟡 结论对(我亲眼看到输出),但**测试不验证** |
+| 7. style hex 序列化 | ✅ 真实断言 SSR 输出 | 🟡 MED | ✅ 接受 — React 18+ 水合 tolerance 是已知行为 |
+| 8. 自定义元素可作占位符 | ❌ `assert(true)` | 🟢 LOW | 🟡 驳回作为关键论据 |
+
+### 1.2 关键驳回(评审者错误/夸大处)
+
+#### 驳回 1:发现 4 的事实错误
+
+评审者说:
+> 单引号在属性中转义为 `&#x27;`
+
+**实际测试输出**:
+```html
+<img alt="{{ section.settings.image.alt | default: &quot;Banner&quot; }}"/>
+```
+
+**实际是双引号被转义为 `&quot;`**(`'Banner'` 在模板字符串里是合法字符,无需转义)。但**结论"避免在属性中用字符串字面量"仍然有效**,因为 `&quot;` 同样会破坏 Liquid。
+
+#### 驳回 2:评审者修正方案忽略发现 6
+
+评审者建议 `<ImageTag>` 改为渲染真实 `<img>`:
+```tsx
+<img src={`{{ ${image} | image_url: width: ${width} }}`} srcSet={`...`} />
+```
+
+**但发现 6 已证实 React 19 会自动插入 `<link rel="preload">`**。即使不用 srcSet,React 19 仍可能为 `<img src>` 插入 preload。
+
+**正确方案**应避免 React 直接渲染 `<img>`:
+- 方案 A: `<noscript>` 内渲染 `<img>`(noscript 不参与 hydration)
+- 方案 B: 用 `<picture>` + `<source>`(可控)
+- 方案 C: **用 useLiquidBlock 模式**,把 `<img>` 作为字符串注入到 `data-ssg-hydrate` div 之外
+
+#### 驳回 3:发现 3 的"路径 A"是 useLiquidBlock 重命名
+
+评审者建议 useForm 用 useLiquidBlock 注入。但 useLiquidBlock **注入到 `data-ssg-hydrate` 之前**,而 `{% form %}` **需要包裹 children**。这是结构性矛盾,不是简单改个名字能解决。
+
+**真正可行路径**:
+- 阶段 2-3:仅做 `useLiquidBlock` 注入(只支持**没有 form 包裹 children** 的场景,如 ProductPrice)
+- 阶段 4-5:重写,React 自己生成 `<form>` + JS 提交(放弃 `{% form %}` 语法)
+
+### 1.3 必须接受的设计缺陷
+
+**`<ImageTag>` v5/v6 设计的真实问题**:
+- v5 设计:返回 null,SSR 渲染为占位 span
+- v6 设计:同 v5
+- **实际问题**:即使 v6 用 `<span data-img-id>` 替代注释,CSR 仍返回 null
+- React hydration 会按 React 树结构对比 DOM,期望 `<div></div>` 但看到 `<div><img></div>` → mismatch
+
+**useForm / usePaginate 的根本困难**:
+- 包裹 children 的需求与"占位符在 React 树中"的设计矛盾
+- 当前架构下不可行,需分阶段降级
+
+### 1.4 受影响文档章节
+
+- **§2.1 `<ImageTag>`**:v5/v6 设计需重写
+- **§3.1 useRawLiquid**:v1-v4 的 HTML 注释方案已废弃,v5/v6 的 span + null 也有问题,**需彻底重设计**
+- **§3.2 useForm**:需分两阶段降级
+- **§3.3 usePaginate**:需移除或大幅降级
+- **§3.4 useStaticBlock**:仍可走 useLiquidBlock 模式
+- **§6.5 hydration 规则**:H3(自动改 CSS 变量)的方案需重新设计;新增规则 H13(检测 React 19 自动 link preload)
+
+---
+
 ## 2. A 类 — 简单值 Hook(🟢 HIGH 可行性)
 
 > 这些 hook 在 SSR 时返回 `{{ expr }}` 字符串并跟踪,在客户端从 context 读值。**与现有 `useLiquidValue` 行为一致,只需新增参数或命名。**
@@ -180,100 +258,139 @@ export function useUniqueId(prefix: string = 'u'): string {
 > - 作为文本子节点,且文本本身就是 Liquid 表达式(SSR 后被 Liquid 替换)
 > - **不**能用于产生 HTML 元素碎片的场景(那会破坏水合)
 
-### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,🟡 MEDIUM)
+### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,**v7 彻底重设计**)
 
-**v1 错误**:v1 把 `useImageTag` 设计为返回字符串(如 `{{ image | image_url ... | image_tag ... }}`)。问题是:
-- React 树中:`<div>{useImageTag("section.settings.image")}</div>` 把这个字符串作为子节点
-- SSR 渲染:`<div>{{ section.settings.image | image_url ... | image_tag ... }}</div>`(文本节点)
-- Liquid 处理:`<div><img src="..." ...></div>`(变成了 `<img>` 元素)
-- **DOM 树与 React 树结构不同** → hydration mismatch
+**v1-v6 设计历史**(从错误到修正):
+- v1:返回字符串 → hydration mismatch(React 树文本 vs DOM 元素)
+- v2:组件 + 标记替换模式(注释)
+- v3-v4:`<BlockSlot>` 等组件,延后
+- v5:`<span data-img-id>` 占位 + CSR null
+- v6:同 v5(去掉 uuid,改用计数器)
+- **v7(当前,经评审)**:v5/v6 的"占位 + null" 设计**有 hydration mismatch 风险**。评审者测试发现:
+  - SSR: `<div><span></span></div>` (1 child)
+  - Shopify: `<div><img/></div>` (1 child, 但类型变化)
+  - CSR (null return): `<div></div>` (0 children)
+  - **React hydration 期望 0,DOM 有 1,结构不匹配**
 
-**v2 修正**:改为 `<ImageTag>` 组件 + 标记替换模式。
+**v7 重新设计 — 渲染真实 `<img>`**:
 
-**签名**:
+放弃"占位 + 替换"模式,改为**让 React 直接渲染 `<img>` 元素,只在属性值中使用 Liquid 表达式**。
+
+**签名**(v7):
 ```ts
 interface ImageTagProps {
   image: string;             // Liquid 表达式,如 "section.settings.image"
-  width?: number;            // image_url 宽度
-  widths?: string;           // widths 列表(逗号分隔)
-  sizes?: string;            // sizes 属性
+  width?: number;            // image_url 宽度(默认 3840)
   alt?: string;
   className?: string;
   loading?: 'lazy' | 'eager';
-  fetchPriority?: 'auto' | 'high' | 'low';  // React JSX camelCase
-  preload?: boolean;
+  fetchPriority?: 'auto' | 'high' | 'low';
   asPlaceholder?: string;    // 当 image 为空时,显示的 placeholder svg 名
+  // ❌ 不再支持:srcSet, sizes, widths
+  //   因为 React 19 会自动插入 <link rel="preload"> (评审发现 6)
 }
 function ImageTag(props: ImageTagProps): JSX.Element;
 ```
 
-**SSR 行为**(v5 修订):
-- 渲染为占位符节点:`<span data-img-id="img-{uuid}" hidden />`(v5 起改用 uuid,非自增整数)
-- 渲染器维护 `[id] → props` 映射
-- 后处理:扫描输出 HTML,找到 `[data-img-id="..."]` span,替换为对应的 `{{ image | image_url: width: W | image_tag: ... }}` Liquid 表达式
-- 跟踪 `image` 及附属表达式(`image.width` 等)
-
-**CSR 行为**:
-- 渲染为 `null`(真实 `<img>` 已被 SSR 注入到 DOM)
-- React 水合时,`<ImageTag>` 节点不渲染,DOM 与 React 树结构对齐
-
-**边缘情况**:
-- `image` 为空(未设置或没上传):自动 fallback 到 `asPlaceholder` 指定的 svg
-- `image` 引用的是 image_picker setting:返回完整的 `image_tag` 表达式,包含 width/height/srcset/fetchPriority 等
-- 多张图同位置:每个 ImageTag 调用 `useUniqueId` 独立生成 uuid
-
-**实现路径**(v5 修订:ID 内部化):
-
+**SSR 行为**(v7):
 ```tsx
-// 内部实现(主题开发者不感知)
-import { useUniqueId } from '~/utils/use-unique-id';
-
-function ImageTag(props: ImageTagProps) {
-  // 1. ★ 自动生成唯一 id,主题开发者不感知
-  const id = useUniqueId('img');
-
-  // 2. SSR: 渲染为占位符
-  if (typeof document === 'undefined') {
-    return <span data-img-id={id} hidden />;
+function ImageTag({ image, width = 3840, alt, className, loading, fetchPriority, asPlaceholder }: ImageTagProps) {
+  if (typeof document === "undefined") {
+    // SSR: 渲染真实 <img>, src 用 Liquid 表达式
+    return (
+      <img
+        src={`{{ ${image} | image_url: width: ${width} }}`}
+        alt={alt ?? ""}
+        className={className}
+        loading={loading}
+        fetchPriority={fetchPriority}
+      />
+    );
   }
 
-  // 3. CSR: 返回 null(SSR 已注入真实 <img>)
-  return null;
+  // CSR: 从 bridge 读解析后的实际 URL
+  const [resolvedSrc] = useLiquidValue(`${image} | image_url: width: ${width}`);
+  return (
+    <img
+      src={resolvedSrc}
+      alt={alt ?? ""}
+      className={className}
+      loading={loading}
+      fetchPriority={fetchPriority}
+    />
+  );
 }
 ```
 
-**渲染器侧**:
-1. 识别 `ImageTag` 组件(根据 component 名)
-2. 从渲染后的 HTML 提取 `[data-img-id="..."]`,按出现顺序建立 `[id] → props` 映射
-3. 后处理:用 props 生成 Liquid 表达式字符串,替换 `data-img-id` span 为完整 Liquid
-4. 表达式跟踪:扫描表达式中的 `image` 引用
-
-**主题开发者使用**(完全感知不到 id):
-```tsx
-// 简简单单
-<ImageTag image={image} width={3840} sizes={sizes} />
+**SSR 输出**:
+```html
+<img src="{{ section.settings.image | image_url: width: 3840 }}"
+     alt="..."
+     class="banner__image" loading="lazy" fetchpriority="high" />
 ```
 
-**为什么用 `data-img-id` 而非 HTML 注释**:
-- HTML 注释 `<!--IMG-N-->` 在某些边缘情况下可能被 HTML 解析器规范化
-- `data-img-id` 属性是标准 HTML,解析稳定
-- React 在客户端渲染时返回 null,这个 span 节点消失;但占位符在 SSR 后处理阶段已被替换为 `<img>`,客户端看到的是真正的 img
-- React 水合时:`<ImageTag>` 节点返回 null,**对 DOM 没有任何期望**,所以不会 mismatch
+**Shopify 处理后**:
+```html
+<img src="https://cdn.shopify.com/s/files/1/.../banner.jpg?width=3840"
+     alt="..." class="banner__image" loading="lazy" fetchpriority="high" />
+```
 
-**SSR/CSR 行为对比**:
+**客户端 React 树**: 同样的 `<img>` 元素,`src` 从 bridge 读值。
 
-| 阶段 | 行为 | DOM |
-|---|---|---|
-| SSR 渲染时 | `<span data-img-id="img-a1b2c3d4" hidden>` | 临时占位 |
-| SSR 后处理 | 替换为 `<img src="{{ image \| image_url: width: 3840 }}" ...>` | 真实 img |
-| 客户端 React 树 | `<ImageTag>` 节点返回 null | 无 React 节点期望 |
-| 水合时 | React 不关心此位置(因为 ImageTag 返回 null) | img 已被 Shopify 渲染,客户端无操作 |
+**水合**: ✅ **元素结构完全一致**(都是 `<img>`),仅 `src` 属性值从 bridge 解析。
 
-**边缘情况**:
-- `image` 为空时,组件用 `asPlaceholder` 指定的 svg,逻辑相同
-- 多张图同位置(罕见):每个 ImageTag 调用 `useUniqueId` 独立生成
-- React Strict Mode 重复渲染:`useUniqueId` 内部用 useRef + 自增,重复渲染保持稳定 id
-- 服务端 vs 客户端 id 一致性:`useUniqueId` 的算法确定性保证(下文详述)
+**`asPlaceholder` fallback**:
+```tsx
+if (!image) {
+  return <img
+    src={`{{ '${asPlaceholder}' | placeholder_svg_tag: 'placeholder-svg' }}`}
+    className={className}
+  />;
+}
+```
+
+**跟踪的表达式**:
+- `image` (基础)
+- `image | image_url: width: W` (实际 src 计算)
+- `asPlaceholder` (如果提供)
+- 全部加入 JSON bridge
+
+**v7 方案的代价(必须接受)**:
+- ❌ 失去 `image_tag` filter 自动计算 srcset/sizes/width/height 的能力
+- ⚠️ Dawn 中 `image_tag` 输出包含大量属性(width, height, srcset, sizes),React 端要手写
+- ⚠️ Dawn 现有 image 类名(如 `banner__media-image` 等)需要手动传入
+- ⚠️ 每次 React 端调用 `<ImageTag>`,需要重复传 props
+
+**为什么 v7 仍然安全(评审者没充分考虑的点)**:
+- 评审者建议"渲染真实 `<img>` + srcSet" 方案
+- 但**发现 6 证实 React 19 会自动插入 `<link rel="preload">`**,即使不用 srcSet
+- v7 **彻底避免 srcSet/sizes**,React 19 不应再插入 preload(测试需进一步验证)
+- 如果 React 19 仍插入 preload,需改用更激进的方案(见下方)
+
+**v7+ 激进降级方案**(如果水合仍有问题):
+- 方案 A:`<noscript>` 内渲染 `<img>`(noscript 内容不参与 hydration)
+- 方案 B:放弃 `<ImageTag>` 组件,改用 `useLiquidBlock` 注入完整 `<img>` 字符串到 `data-ssg-hydrate` div 之外
+  ```tsx
+  // 客户端 React 树中不渲染 <img>,完全由 Liquid 注入
+  function ImageTag(props) {
+    useLiquidBlock(`<img src="{{ ${props.image} | image_url: width: ${props.width} }}" alt="${props.alt ?? ''}" />`);
+    return null;
+  }
+  ```
+  这是当前 `react-product-price.liquid` 的实际工作模式
+
+**v7 方案待验证项**(待 P0 阶段实施时实际测试):
+- [ ] React 19 是否对 `<img src={{...}}>` (单 src, 无 srcSet) 插入 preload
+- [ ] alt 为空时的 hydration(空字符串 vs undefined)
+- [ ] asPlaceholder fallback 路径
+- [ ] 多图同位置 id 唯一性
+
+**风险评估**:
+- 🟢 **理论上安全**:React 树与 DOM 结构完全一致
+- 🟡 **MEDIUM**:需实际 hydration 测试验证(React 18+ 行为可能更宽容或更严格)
+- 🟡 **MEDIUM**:React 19 自动优化可能仍产生意外元素(需测试)
+
+**可行性结论**:🟡 MEDIUM,**优先实施并测试**。如失败,降级到 useLiquidBlock 方案。
 
 ### 2.1.1 `useUniqueId(prefix?)` 内部 hook
 
@@ -557,21 +674,56 @@ function useSectionPadding(settingsKey?: string): string;
 >
 > **B 类总量从 v1 的 4 个减为 3 个**:`useShopifyAttributes` 移除(v1 错误设计)
 
-### 3.1 `useRawLiquid(code)` ★ 关键
+### 3.1 ~~`useRawLiquid(code)`~~ — **v7 降级为 `useLiquidBlock` 别名**(🟡 MEDIUM)
 
-**签名**:
+**v7 重新设计**(基于评审者发现 1+2):
+
+**v1-v4 失败原因**(评审者发现 1):
+- HTML 注释 `<!--` 被 `renderToStaticMarkup` 转义为 `&lt;!--`
+- 后处理扫描不到原模式
+
+**v5-v6 失败原因**(评审者发现 2 + §0.2):
+- 改用 `<span hidden>` 占位
+- CSR 返回 null
+- 仍然 hydration mismatch(span/字符串 vs 真实 Liquid 元素)
+
+**v7 决策**:**完全放弃 React 树中占位**,改用**全局收集机制**(类似现有 `useLiquidBlock`)。
+
+**签名**(v7,与现有 `useLiquidBlock` 等价):
 ```ts
-function useRawLiquid(code: string): string;
+// useRawLiquid 是 useLiquidBlock 的别名(不增加新概念)
+function useRawLiquid(code: string): void;
 ```
 
 **SSR 行为**:
-- React 组件 `<RawLiquid code="..." />` 渲染为注释节点 `<!--RAW-LIQUID-N-->`(N 是自增 id)
-- 渲染器维护 `[id] → code` 映射,渲染结束后替换
-- 跟踪 `code` 中的 `{{ ... }}` 表达式,加入 JSON bridge
+- 收集到全局 `__shopify_ssg_liquid_blocks` 数组(已存在)
+- 跟踪 `code` 中的 `{{ ... }}` 表达式
+- **不返回任何内容**(`void`)
 
 **CSR 行为**:
-- `<RawLiquid code="..." />` 渲染为 `<span hidden data-raw-liquid-id="N"></span>`
-- 客户端拿到 SSR HTML 后,占位符已被替换为真实 Liquid
+- no-op
+
+**渲染器侧**:
+- 复用现有 `useLiquidBlock` 机制
+- 收集的代码注入到 `data-ssg-hydrate` div **之前**(已实现)
+
+**v7 的限制**:
+- ❌ **不能在 React 树中"包裹" children**(已确认)
+- ❌ 注入位置固定在 `data-ssg-hydrate` div 之前,不能在中间插入
+- ✅ 适合"独立插入 Liquid 代码片段"场景(如 `{{ schema }}`, `{% style %}` 等)
+
+**典型用例**:
+```tsx
+// 阶段 1-2 场景:独立插入
+function MySection() {
+  useRawLiquid('{% style %}.section-padding { ... }{% endstyle %}');
+  return <section>...</section>;
+}
+```
+
+**为 `useForm` 留路**:
+- `{% form %}` 需要**包裹** children,这是不同的问题(见 §3.2)
+- 阶段 1 不解决 form 包裹问题,降级为不实现
 - 水合时 `<span hidden>` 是空元素,与 DOM 匹配
 
 **边缘情况**:
@@ -631,113 +783,152 @@ SSR 输出:
 
 ---
 
-### 3.2 `useForm(formType, options?)` ★ 关键
+### 3.2 ~~`useForm`~~ — **v7 降级为不实现**(🟠 MEDIUM-HIGH)
 
-**签名**:
-```ts
-interface FormOptions {
-  id?: string;
-  className?: string;
-  persist?: boolean;  // 持久化 form 状态到 sessionStorage
+**v7 决策**:**v1-v6 的 `useForm` 设计均不可行**,阶段 1 不实现,推迟到阶段 4+ 重写。
+
+**评审者提出的问题**(每个都成立):
+1. `FormOpen` / `FormClose` 配对无保障(用户忘记 `FormClose` 会出错)
+2. 评审者建议改为单一 `<Form>` 组件,但**仍需解决"在 React 树中包裹 `{% form %}`"的根本问题**
+3. 完整 form type 列表(评审者指出文档遗漏):`form-tag.md` 中有 15 种,文档只列 10 种
+4. `formState.errors` 类型应为 `{ form, email, translated_fields: { email } }` 而非 `Record<string, string[]>`
+
+**v7 决策路径**:
+
+| 阶段 | 处理 |
+|---|---|
+| **阶段 1(不实现)** | 不引入 useForm,form 类的 section 暂不迁移 |
+| **阶段 2-3 临时方案** | 用 `useLiquidBlock` 注入 `{% form %}` 和 `{% endform %}` 到 `data-ssg-hydrate` div 之前(已有机制),但**不包裹 children** |
+| **阶段 4+ 重写** | 完全放弃 `{% form %}` 语法,React 自己生成 `<form>` + JS 提交,重写 form state 管理 |
+
+**降级方案示例**(阶段 2-3):
+```tsx
+// 注意: 这种方案只适用于"form 标签不包裹 children"的简单情况
+// 复杂表单(包含 React 状态 children)需要阶段 4 重写
+function NewsletterForm() {
+  // 用 useLiquidBlock(全局注入,不在 React 树中)
+  useLiquidBlock('{% form "customer", class: "newsletter-form" %}');
+  useLiquidBlock('{% endform %}');
+  
+  // children 不在 form 内部!这是临时方案的局限
+  return (
+    <div className="newsletter-form-wrapper">
+      <input type="email" name="contact[email]" />
+      <button type="submit">Subscribe</button>
+    </div>
+  );
 }
-function useForm(
-  formType: 'customer' | 'create_customer' | 'new_comment' | 'contact' | 'product' | 'cart' | 'storefront_password' | 'activate_account' | 'recover_customer_password' | 'reset_password',
-  options?: FormOptions
-): {
-  FormOpen: React.FC<{ children: ReactNode }>;
-  FormClose: React.FC;
-  formState: { posted: boolean; errors: Record<string, string[]>; email: string };
-  submit: (data: FormData) => Promise<void>;
-};
 ```
 
-**SSR 行为**:
-- `<FormOpen>` 渲染 `<!--RAW-LIQUID-0-->`(实际是 `{% form 'customer', id: '...', class: '...' %}`)
-- `<FormClose>` 渲染 `<!--RAW-LIQUID-1-->`(实际是 `{% endform %}`)
-- 内部 children 按 React 树正常渲染
-- 表达式跟踪:提取 form options 中的 settings 引用
+**v1-v6 错误总结**:
+- 我之前把 `useForm` 当作普通 B 类 hook(标记替换)设计
+- 实际上 `{% form %}` 需要**包裹 React children**,这是标记替换模式无法解决的
+- 错误根源:没充分理解 `{% form %}` 的语义
 
-**CSR 行为**:
-- `<FormOpen>` / `<FormClose>` 渲染为 `null`
-- `formState` 维护 form 提交状态
-- `submit` 函数 fetch POST 到 Shopify form action URL
+**可行的最终方案**(阶段 4+):
+```tsx
+// 完整 React 实现,放弃 {% form %} 语法
+function NewsletterForm() {
+  const { submit, errors, posted } = useNewsletterSubmit();
+  return (
+    <form onSubmit={submit} className="newsletter-form">
+      <input type="email" name="email" required />
+      {errors.email && <span className="error">{errors.email[0]}</span>}
+      {posted && <p>Thanks for subscribing!</p>}
+      <button type="submit">Subscribe</button>
+    </form>
+  );
+}
 
-**边缘情况**:
-- form action URL:`{% form %}` 生成的 `<form>` 默认 action 是当前页(POST 自提交)
-- form 提交后页面刷新,React 状态丢失 → `persist: true` 用 sessionStorage 恢复
-- form 错误返回:`form.errors.translated_fields.email`,`form.errors.messages.email`
-- 重定向:`{% form 'customer' %}` 登录成功跳转到 `/account`,React 端要 trigger 跳转
+function useNewsletterSubmit() {
+  const [posted, setPosted] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const res = await fetch('/contact', { method: 'POST', body: formData });
+    // 处理响应
+  };
+  return { submit, errors, posted };
+}
+```
 
-**实现路径**:
-- 标记替换方式同 `useRawLiquid`
-- 客户端 form state 自行管理,需实现:
-  - Fetch POST 处理
-  - 错误捕获与展示
-  - 重定向逻辑(根据 form type 不同,目标 URL 不同)
+**完整 form type 列表**(15 种,v7 完整,经 `form-tag.md` 校对):
+```ts
+type ShopifyFormType =
+  | 'customer'
+  | 'create_customer'
+  | 'new_comment'
+  | 'contact'
+  | 'product'
+  | 'cart'
+  | 'storefront_password'
+  | 'activate_account'
+  | 'recover_customer_password'
+  | 'reset_customer_password'
+  | 'guest_login'
+  | 'currency'
+  | 'customer_address'
+  | 'localization'
+  | 'activate_customer_password';
+```
 
 **风险**:
-- 🟠 **MEDIUM**:`{% form %}` 标签的细节(autocomplete、novalidate、accept-charset)在不同 form type 间有差异,React 端需要逐一处理
-- 🟠 **MEDIUM**:Shopify form action URL 在 SSR 时是 placeholder,客户端 fetch 需要知道这个 URL — 可能需要从 Liquid 注入一个全局配置
-- 🟡 **MEDIUM**:与 Shopify 主题 JS(predictive-search.js 等)的交互
-
-**Workaround(降级方案)**:如果 `useForm` 太复杂,可以**仅用 `<FormOpen>/<FormClose>` 处理 Liquid 部分**,客户端 form 提交不重写,保留 Dawn 原生 form 行为(提交后整页刷新)。这能覆盖 80% 用例。
-
-**可行性结论**:🟡 MEDIUM,需要分两阶段:
-- **B.1(简单)**:只做 `<FormOpen>/<FormClose>` 标记替换,客户端不接管提交
-- **B.2(完整)**:增加 form state、错误捕获、重定向
-
-建议先做 B.1 验证水合,再做 B.2。
+- 🔴 **HIGH**:阶段 2-3 的降级方案会导致 form 行为异常(`{% form %}` 不包裹 children)
+- 🟡 **MEDIUM**:阶段 4+ 的完整重写工作量大,需要逐一实现 15 种 form 的提交逻辑
 
 ---
 
-### 3.3 `usePaginate(items, perPage, param?)` ★ 关键
+### 3.3 ~~`usePaginate`~~ — **v7 降级为不实现**(🟠 MEDIUM-HIGH)
 
-**签名**:
-```ts
-function usePaginate<T>(
-  items: T[],             // collection.products / search.results 等
-  perPage: number,
-  param?: string          // URL 参数名,默认 'page'
-): {
-  currentItems: T[];
-  page: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
-  PaginationEl: React.FC;  // 渲染分页导航
-  PaginateOpen: React.FC<{ children: ReactNode }>;
-  PaginateClose: React.FC;
-};
+**v7 决策**:**v1-v6 的 `usePaginate` 设计均不可行**,阶段 1 不实现。
+
+**评审者提出的根本问题**:
+1. **SSR 数据不可用**:`usePaginate(items, perPage)` 需要 `items` 数组,但 SSR 时它实际是字符串 `{{ collection.products | json }}`,无法 `.length`/`.slice()`
+2. 依赖 v1-v4 的标记替换(已证明不可行)
+3. **paginate 表达式变量名编译时不可知**:`{% paginate collection.products by 16 %}` 中的 `collection.products` 在 React 编译时无法确定(可能来自不同 Liquid 对象)
+
+**v7 决策路径**:
+
+| 阶段 | 处理 |
+|---|---|
+| **阶段 1(不实现)** | 不引入 usePaginate |
+| **阶段 2-3 临时方案** | 完全由 Liquid 处理分页,React 只负责单个 product card 的渲染 |
+| **阶段 4+** | 视实际需要重写(可能用 React 端 API + virtualized list) |
+
+**降级方案示例**(阶段 2-3,主推):
+```tsx
+// 分页完全由 Liquid 处理
+// 最外层 section .liquid 用 {% paginate %} 包裹整个产品列表
+// React 只负责渲染单个 product card 的 UI 逻辑
+function MainCollectionProductGrid() {
+  // 不调用 usePaginate
+  // React 不知道分页(也不需要知道)
+  
+  return (
+    <div className="collection-grid">
+      {/* Shopify 的 {% paginate %} 在外面包裹整个 list */}
+      <ProductCard />  {/* 单个 product */}
+      {/* 分页导航由 Liquid 的 default_pagination 渲染 */}
+    </div>
+  );
+}
 ```
 
-**SSR 行为**:
-- `<PaginateOpen>` 渲染 `{% paginate items by perPage %}` 标记
-- `<PaginateClose>` 渲染 `{% endpaginate %}` 标记
-- 初始 page 从 URL `?page=N` 读取
-- 跟踪 `items` 表达式
+**v1-v6 错误总结**:
+- 我之前试图在 React 端做分页(`.slice()` 等)
+- 实际上分页是 Liquid 引擎的计算,React 端无法在 SSR 阶段获取 `items.length`/`items.slice(0, 16)`
+- 错误根源:把"展示逻辑"误认为"分页逻辑"
 
-**CSR 行为**:
-- `currentItems` 按 page 切片
-- 点击页码时 pushState 更新 URL,不重新请求数据
-- `<PaginationEl>` 渲染分页 UI
-
-**边缘情况**:
-- `paginate` 块内可以用 `current_page`, `total_pages`, `paginate.next.url` 等
-- 排序/筛选改变时重置到第 1 页
-- SEO:`<link rel="prev/next">` 应在 `<head>` 中
-
-**实现路径**:
-- 标记替换:同 useRawLiquid
-- 客户端分页 state:用 `useState` + `useEffect` 监听 URL
-- URL 更新:history.pushState
+**阶段 4+ 的可能重写**:
+- 客户端分页:用 React `useState` + 数组 slice(但数据已 SSR 加载,客户端无重新分页必要)
+- 无限滚动:用 `IntersectionObserver` 触发 Shopify 的 paginate 重新请求
+- 筛选/排序:走 form GET,整页 reload,React 重新 hydrate
+- 这些都不需要 usePaginate hook,React 端独立实现
 
 **风险**:
-- 🟠 **MEDIUM**:`paginate` 块的 items 必须是 Liquid 可迭代对象,React 拿到的是 `items` 数组的引用,但 SSR 时实际是 `{{ collection.products }}` 字符串
-- 🟡 **MEDIUM**:SEO 的 `link rel="prev/next"` 在 React 端需要另外处理(head 部分由 theme.liquid 控制)
-
-**降级方案**:`<PaginateOpen>/<PaginateClose>` 只做标记替换,分页 state 由 Liquid 维护,客户端仅 UI 增强(点击不刷新的链接)。
-
-**可行性结论**:🟡 MEDIUM
+- 🟢 LOW:阶段 1 不实现,没有直接风险
+- 🟡 MEDIUM:阶段 2-3 的降级方案限制了 React 端做交互式分页
 
 ---
 
@@ -1435,14 +1626,41 @@ Build failed: 1 hydration error(s) in 1 file(s)
 | 模块 | 角色 | 触发 |
 |---|---|---|
 | `hydration-fix/index.ts`(现有) | **修复**类(H1 自动包裹) | `enforce: "pre"`,对所有 .tsx |
-| `hydration-rules/index.ts`(新增) | **检测 + 分级**类(H1-H12) | `closeBundle` 阶段,基于 AST 扫描 |
+| `hydration-rules/index.ts`(新增) | **检测 + 分级**类(H1-H13) | `closeBundle` 阶段,基于 AST 扫描 |
 
 **两者协同**:
 - `hydration-fix` 在源码 transform 阶段修复 H1
-- `hydration-rules` 在 SSG 完成后检测剩余 H2-H12
+- `hydration-rules` 在 SSG 完成后检测剩余 H2-H13
 - H1 在两个模块都覆盖(检测+修复)
 
-### 6.5.7 局限性诚实说明
+### 6.5.7 v7 新增规则 H13:React 19 自动 link preload(评审发现 6)
+
+**场景**:
+```tsx
+<img srcSet="{{ image | image_url: width: 480 }} 480w" />
+```
+
+**实际 React 19 行为**(实证测试):
+```html
+<link rel="preload" as="image" imageSrcSet="{{ image | image_url: width: 480 }} 480w" />
+<img srcSet="{{ image | image_url: width: 480 }} 480w" />
+```
+
+React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 表达式。这会**影响 SSR HTML 的结构**(添加意外元素),水合时 React 树与 DOM 可能有元素数量差异。
+
+**检测规则**:
+- 扫描 `<img>` 元素的 `srcSet` 属性
+- 检测 React 19 引入 `<link rel="preload">` 后的额外元素
+- 输出 warn:`React 19 may auto-inject <link rel="preload"> for <img> with srcSet. This could cause hydration mismatch.`
+
+**建议的规避**:
+- 避免在 `<img>` 上使用 srcSet(只使用 src)
+- 改用 React 18(项目已 React 19,不可行)
+- 改用 `<picture>` + `<source>` 元素(可控)
+
+**v7 ImageTag 设计已规避此问题**(见 §2.1) — 不支持 srcSet,只用 src。
+
+### 6.5.8 局限性诚实说明
 
 **插件无法保证的**:
 - **H4 Date/Number 本地化**:取决于执行环境(服务器 vs 浏览器),插件只能提醒,不能修复
@@ -1462,22 +1680,25 @@ Build failed: 1 hydration error(s) in 1 file(s)
 
 ---
 
-## 7. 风险汇总(v5 修订)
+## 7. 风险汇总(v7 修订,基于评审反馈)
 
 | 风险 | 等级 | 影响 hook/组件 | 缓解 |
 |---|---|---|---|
-| 水合时 DOM 与 React 树结构不匹配 | 🟠 MED-HIGH | useRawLiquid, useForm, usePaginate, useStaticBlock, **`<ImageTag>`** | 标记替换模式;SSR `data-img-id` 占位 + CSR null;严格测试 |
-| ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>`,block 独立 entry,沿用现有 JSON bridge 机制 |
-| CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules;阶段 6 再评估 |
-| `{% form %}` 提交行为与 Shopify 原生差异 | 🟠 MED | useForm | 分两阶段:B.1 只做标记替换,B.2 完整接管 |
-| `{% paginate %}` URL 同步与 SEO link | 🟡 MED | usePaginate | B 类降级方案:只做标记替换,客户端不接管 |
+| **水合时 DOM 与 React 树结构不匹配** | 🔴 **HIGH** | `<ImageTag>`, useForm, usePaginate | **v7 修正**:`<ImageTag>` 改为渲染真实 `<img>`(§2.1);useForm/usePaginate **降级不实现** |
+| ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>` |
+| CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules |
+| `{% form %}` 包裹 children 的根本困难 | 🔴 HIGH | useForm | **v7 决策**:阶段 1 不实现;阶段 2-3 用 useLiquidBlock 临时方案;阶段 4+ 重写 |
+| `{% paginate %}` SSR 数据不可用 | 🔴 HIGH | usePaginate | **v7 决策**:阶段 1 不实现;分页完全由 Liquid 处理,React 只渲染单个 card |
+| React 19 自动插入 `<link rel="preload">` | 🟠 MED-HIGH | `<img srcSet>` 模式 | **v7 修正**:`<ImageTag>` 不支持 srcSet,避免触发;新增 H13 规则检测 |
 | Pluralization 翻译 | 🟡 MED | useT (i18n) | 字典查找时支持 `key.other` / `key.one` 后缀 |
 | i18n 文件体积 | 🟢 LOW | useT | 初始 locale 内联,其他按需加载 |
-| ~~`useShopifyAttributes` spread~~ | ~~🟠 MED~~ | ~~useBlockLoop~~ | **已解决**:v1 错误设计,整个 hook 移除;插件已自动注入 `shopify_attributes` 到 block wrapper |
-| **水合 mismatch 风险(H1-H12)** | 🟠 MED-HIGH | **所有 React 组件** | **新增 hydration-rules 模块,12 条规则分级 warn/error 提示,部分自动修复,关键错误 failOnError 阻止构建**(详见 §6.5) |
-| 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | **v5 新增 `useUniqueId` hook 内部化**,主题开发者不感知 |
+| 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | v5 新增 `useUniqueId` hook(已被 v7 ImageTag 重设计取代) |
 | 客户端 useEffect 修改 DOM 引发的水合不一致 | 🟡 MED | 复杂组件 | 文档 + lint 提示;无法自动修复 |
-| `bridge` 数据错位(block 上下文) | 🟢 LOW | (无 useBlockLoop) | **v5 修正**:bridge 不分层,Shopify 自动处理 `block.settings.X` 上下文 |
+| `bridge` 数据错位 | 🟢 LOW | (无 useBlockLoop) | bridge 不分层,Shopify 自动处理 `block.settings.X` 上下文 |
+| **水合 mismatch 风险(H1-H13)** | 🟠 MED-HIGH | **所有 React 组件** | **新增 hydration-rules 模块,13 条规则分级 warn/error 提示,部分自动修复,关键错误 failOnError 阻止构建**(详见 §6.5) |
+| **属性字符串字面量被转义** | 🟡 MED | useAsset, useFontFace 等 | v7 文档明确:避免 `style={{ attr: "literal" }}`,改用 CSS 变量或 React state |
+| **v1-v6 `<ImageTag>` 设计的根本错误** | 🔴 HIGH | (v5-v6 文档) | **v7 彻底重设计**:不再占位替换,直接渲染 `<img>` 元素 |
+| **v1-v4 `<!--` HTML 注释占位** | 🟡 MED | useRawLiquid | **v7 修正**:useRawLiquid 改回 useLiquidBlock 别名,不再用 HTML 注释 |
 
 ---
 
