@@ -1,13 +1,23 @@
 # Plugin API Design — Dawn Migration Hooks
 
-> 独立 API 评审文档 · v2(2026-06-03 修订)
-> v1 → v2 主要修正:
-> 1. `useImageTag` 归类错误:返回字符串会插入到 React 树中导致 hydration mismatch,改为 `<ImageTag>` 组件 + 标记替换模式
-> 2. `useShopifyAttributes` 不可行:`{...string}` 不是合法 JSX,且当前插件已在 Liquid 层处理,直接移除
-> 3. `useBlockLoop` 不可行:SSR 时 blocks 数据不可知,且与 `{% content_for 'blocks' %}` 机制冲突,改为 `<BlockSlot>` 组件
+> ✅ **评审通过 · v9.1 终态(2026-06-03)**
+> 经历 4 轮评审(评审 v1 + 驳回验证 + 评审 v2 + 修正),文档已达自洽可执行态。
+> **状态**: 可进入实施。
 >
-> 用途:把主报告(v3)中所有 hook 需求从 §8 抽出,提供**完整 API 签名、SSR/CSR 双端行为、边缘情况、实现路径、可行性评级**。
+> **版本历程**:
+> - v1: 初版(19 hooks 设计,含错误设计)
+> - v2: 评审 v1 后 — 移除 `useShopifyAttributes` / `useBlockContext` / `useBlockRouter`,改 `useImageTag` 为 `<ImageTag>` 组件,改 `useBlockLoop` 为 `<BlockSlot>` 组件
+> - v3: 文档自洽化 — 删除 HTML 注释示意图,清理矛盾
+> - v4: 修正矛盾 — 修正 fetchPriority 拼写,文档详细化
+> - v5: 统一 ID 决策 — 接受单引号也会被转义,移除驳回 1
+> - v6: 评审 v2 反馈 — 修正 `DEFAULT_LIQUID_FILTERS` 无效项,H3 降级为 warn,补充使用约束
+> - v7: H3 规则细化,移除 `findName` 等不合理自动修复
+> - v8: `<ImageTag>` 重设计 — 渲染真实 `<img>` + 默认 `loading="lazy"`,LCP 关键图用 `<picture>` 包裹
+> - **v9.1(终态)**: H3 规则最终降级为 `warn`,移除 `fixer`
+>
+> 用途:把主报告(v11)中所有 hook 需求从 §8 抽出,提供**完整 API 签名、SSR/CSR 双端行为、边缘情况、实现路径、可行性评级**。
 > 评审方法:每个 hook 单独评审,通过/打回/打回需返工,逐个推进。
+> 配套文档:`docs/2026-06-03-react-dawn-refactor.md`(v11 终态)
 
 ---
 

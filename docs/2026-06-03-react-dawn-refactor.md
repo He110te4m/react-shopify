@@ -1,11 +1,23 @@
 # react-dawn 彻底 React 重构方案
 
-> 评审报告 · v4(2026-06-03 修订)
-> v1 → v2:资源全部内化到 React、Section Block 升级为 Theme Block、新增 image-banner 迁移范例、i18n 切换到 React、10 项决策已确认
-> v3:assets 永久保留作 diff 对照
-> **v4(当前)**:API 设计评审后修正 — `useImageTag` 改为 `<ImageTag>` 组件;`useShopifyAttributes` 移除;`useBlockLoop` 改为 `<BlockSlot>` 组件;新增 **hydration 风险全景分析 + 12 条检测规则**;bridge 不分层;ID 生成内部化(`useUniqueId` hook)
-> 范围:`examples/react-dawn/` 全部 54 section + 38 snippet + 12 template(Dawn 15.4.1 实际数,v8 修订),以及为支撑迁移所需的 `packages/vite-plugin-react-shopify` 扩展
-> 原则:保留全部原生 Dawn 资源作对照,React 版本以独立 module 形式生成,原 section/snippet/block 文件全程不修改
+> ✅ **评审通过 · v11 终态(2026-06-03)**
+> 经历 11 轮迭代(v1 → v11),经多次设计评审 + 实证测试 + 驳回验证 + 终审,文档已达自洽可执行态。
+> **状态**: 可进入阶段 1 实施。
+>
+> **版本历程**:
+> - v1: 初版(资源内化假设,Block 类设计错位)
+> - v2: 资源全部内化,Section Block 升级为 Theme Block
+> - v3: assets 永久保留作 diff 对照
+> - v4: API 设计评审后修正 — `useImageTag` 改为 `<ImageTag>`,`useShopifyAttributes` 移除,`useBlockLoop` 改为 `<BlockSlot>`,bridge 不分层
+> - v5: 统一 ID 决策(自增计数器,无外部依赖)
+> - v6-v8: 评审反馈收敛 — `<ImageTag>` 重设计(默认 `loading="lazy"`),useForm/usePaginate 阶段 1 不实现
+> - v9: H3 hydration 规则降级为 warn(移除自动修复)
+> - v10: §6.2 范例代码与 API 签名对齐(`useSectionSettings` 解构,`useSectionIndex` 改 `useLiquidValue`)
+> - **v11(终态)**: 阶段 1 完工标准 + 测试策略 + 复杂 snippet(card-product/facets)独立设计评审
+>
+> 范围:`examples/react-dawn/` 全部 54 section + 38 snippet + 12 template(Dawn 15.4.1 实际数),以及为支撑迁移所需的 `packages/vite-plugin-react-shopify` 扩展
+> 原则:保留全部原生 Dawn资源作对照,React 版本以独立 module 形式生成,原 section/snippet/block 文件全程不修改
+> 配套文档:`docs/2026-06-03-plugin-api-design.md`(v9.1 终态)
 
 ---
 
