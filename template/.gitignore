@@ -1,0 +1,30 @@
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+node_modules/
+
+# Shopify CLI files
+.shopify/
+
+## Release files
+release
+*.zip
+
+# Vite build output
+assets/build/
+
+# Shopify importmap snippet (auto-generated)
+snippets/shopify-importmap.liquid
+
+# SSG compiled Liquid files (auto-generated)
+sections/react-*.liquid
+blocks/react-*.liquid
+snippets/react-*.liquid
+snippets/css-*.liquid
+templates/page.react-*.liquid
