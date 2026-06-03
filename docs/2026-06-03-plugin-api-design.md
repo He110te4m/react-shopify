@@ -24,7 +24,7 @@
 
 ### 0.2 占位符机制(关键设计)
 
-部分 hook 需要在 React 树中"占一个位置",在 SSR 结束后被替换为真实 Liquid 代码。设计:
+部分组件需要在 React 树中"占一个位置",在 SSR 结束后被替换为真实 Liquid 代码。设计:
 
 ```
 React 树:
@@ -46,20 +46,82 @@ SSR 收集占位符: ['{% form "customer" %}', '{% endform %}']
   </div>
 
 客户端:
-  React 树中 <!--RAW-LIQUID-0--> 渲染为 <span hidden data-raw-liquid="0"></span>
+  React 树中 <!--RAW-LIQUID-0--> 渲染为 <span hidden data-raw-liquid-id="0"></span>
   水合时,占位 span 是空 div,DOM 树结构对齐(无 hydration mismatch)
   真实 Liquid 在服务端已被 Shopify 求值,水合后 span 仍在但内容已渲染
 ```
 
-### 0.3 JSON Bridge 分层
+### 0.3 JSON Bridge:统一数据流,不分层
 
-| 层级 | 形式 | 何时使用 |
-|---|---|---|
-| **Section 级** | `<script type="application/json" data-ssg-liquid>` 在 `<div data-ssg-hydrate>` 之前,包含所有 section 级表达式 | 单一 section 的 settings/blocks 顶层 |
-| **Block 级** | 每个 block 单独一个 `<div data-ssg-block-id="X" data-ssg-hydrate>` + 自己的 JSON bridge | Block 内的 `block.settings.X`(避免跨 block 冲突) |
-| **Snippet 级** | 简单单层结构 | Snippet 内部 |
+> **v5 修正(用户反馈)**:v1-v4 把 bridge 分为"Section 级 / Block 级 / Snippet 级"。**这是错误的过度设计**。Bridge 本质是"Liquid 表达式 → 客户端 React state"的反向序列化通道,与 React 树的 Section/Block 划分**无关**。
+>
+> 一个 bridge 一份 map,key 是完整表达式字符串(包含 `block.settings.X` 等),value 是 Liquid 求值后的结果。Shopify 在 SSR 阶段会按上下文自动解析 `block.settings.X` 为当前 block 的值,React 端通过 `useBlockSettings("X")` 自动从当前 React tree 节点获取。
 
-**当前插件局限**:只有 section 级 bridge,block 级 bridge 不存在。需要新增。
+**修正后的统一数据流**:
+
+```
+SSR 阶段:
+  1. 渲染 React 树,跟踪所有 useLiquidValue / useSectionSettings / useBlockSettings 调用
+  2. 收集到的所有表达式,加入单次渲染的 __shopify_ssg_liquid_track: Set<string>
+  3. 渲染完成后,把这些表达式输出到单个 <script type="application/json" data-ssg-liquid>
+  4. 整个 .liquid 文件中,这个 bridge 出现一次
+
+Shopify SSR 阶段(在 .liquid 渲染时):
+  - 解析 {{ expr }} 时,按当前 Liquid 上下文(section / block / snippet)求值
+  - block.settings.X 自动指向当前 for-loop 块
+
+客户端 hydration:
+  - LiquidDataProvider 注入 bridge 数据
+  - useLiquidValue / useBlockSettings 等 hook 从 React tree 当前位置读值
+  - 当前 React tree 节点 = 当前 block(由 Shopify 的 {% content_for 'blocks' %} 决定)
+```
+
+**为什么不需要 block 独立的 bridge**:
+- Shopify 的 `{% for block in section.blocks %}` 在 `{{ block.settings.X }}` 求值时,**Liquid 引擎自动按当前 for-loop 迭代上下文解析**,不需要额外的命名空间
+- 客户端 React 也按 React tree 的位置自动路由到正确的 block
+- 唯一需要的是:**每个 block 是独立的 React entry**(由 `<BlockSlot>` + 独立 entry 实现),每个 entry 渲染自己**局部**的 JSON bridge
+
+**结论**:bridge 不分层,每 entry 一个 bridge,内部 key 用完整表达式字符串(包含 `block.settings.X`)。
+
+**v1-v4 "Section/Block 分层" 是错误设计**:
+- 多余的层级概念增加理解成本
+- 实际上 Shopify 引擎 + React tree 自然处理了"作用域"
+- v5 起文档统一使用"entry 级 bridge" 概念,一个 entry(section / block / snippet)对应一个 bridge
+
+### 0.4 ID 生成:内部化,不暴露
+
+> **v5 修正(用户反馈)**:v1-v4 让组件用自增计数器(如 `<!--IMG-N-->`)。这有两个问题:
+> 1. 主题开发者要了解 id 机制
+> 2. 自增 id 在 React tree 多次渲染时可能冲突
+>
+> **解决**:使用 `uuid` 依赖包生成稳定唯一 id,组件内部自动管理,**主题开发者不感知**。
+
+**实现方案**:
+- 插件 runtime 增加 `uuid` 依赖(轻量,~3KB gzipped)
+- 提供内部工具 `useUniqueId(prefix?)` hook
+- `<ImageTag>` / `<BlockSlot>` / `<StaticBlock>` 等组件内部调用此 hook
+- SSR 与客户端 id 保持一致(因为是确定性的 uuid v4 还是基于 React 树位置)
+
+**具体设计**(见 §2.1 ImageTag):
+- 占位符 id 来自 `useUniqueId('img')`,如 `img-a1b2c3d4`
+- React 树位置相同的组件,多次渲染的 id 相同(确定性)
+- 水合时,React 树与 DOM 的 id 自然对齐
+
+**为什么不直接用 React.useId()**:
+- React.useId() 是 React 18+ 提供的,生成 stable id 用于 server/client 对齐
+- 我们的占位符 id 只在 SSR 阶段存在,水合后被替换为真实 Liquid,**客户端 React 不需要看到这些 id**
+- React.useId() 的产物是 `:` 分隔符的字符串(避免 SSR/CSR 不一致),用 `:` 在 HTML 注释中可能引发解析问题
+- uuid v4 的字符串(`a1b2c3d4`)简单清晰,适合作为占位符后缀
+
+**结论**:用 `uuid` 包生成确定性 id,内部 hook `useUniqueId` 暴露给组件实现者,主题开发者**不直接使用**。
+
+### 0.5 React.useId() 的适用场景
+
+`useId()` 是为以下场景设计的:
+- 组件需要生成 server/client 稳定一致的 DOM id(如 `<label htmlFor>`、`<input id>`)
+- 这种 id **必须**在 React 树中存在,客户端水合时需要匹配
+
+我们的占位符 id 不属于这个场景 — 占位符在 SSR 后被替换,客户端 React tree 中无对应节点。**`useId()` 不适合本场景**。
 
 ---
 
@@ -106,17 +168,17 @@ interface ImageTagProps {
   alt?: string;
   className?: string;
   loading?: 'lazy' | 'eager';
-  fetchpriority?: 'auto' | 'high' | 'low';
+  fetchPriority?: 'auto' | 'high' | 'low';  // React JSX camelCase
   preload?: boolean;
   asPlaceholder?: string;    // 当 image 为空时,显示的 placeholder svg 名
 }
 function ImageTag(props: ImageTagProps): JSX.Element;
 ```
 
-**SSR 行为**:
-- 渲染为注释节点 `<!--IMG-N-->`(N 是自增 id)
+**SSR 行为**(v5 修订):
+- 渲染为占位符节点:`<span data-img-id="img-{uuid}" hidden />`(v5 起改用 uuid,非自增整数)
 - 渲染器维护 `[id] → props` 映射
-- 后处理:扫描输出 HTML,找到 `<!--IMG-N-->` 替换为对应的 `{{ image | image_url: width: W | image_tag: ... }}` Liquid 表达式
+- 后处理:扫描输出 HTML,找到 `[data-img-id="..."]` span,替换为对应的 `{{ image | image_url: width: W | image_tag: ... }}` Liquid 表达式
 - 跟踪 `image` 及附属表达式(`image.width` 等)
 
 **CSR 行为**:
@@ -125,29 +187,108 @@ function ImageTag(props: ImageTagProps): JSX.Element;
 
 **边缘情况**:
 - `image` 为空(未设置或没上传):自动 fallback 到 `asPlaceholder` 指定的 svg
-- `image` 引用的是 image_picker setting:返回完整的 `image_tag` 表达式,包含 width/height/srcset/fetchpriority 等
-- 多张图同位置:用 N 区分
+- `image` 引用的是 image_picker setting:返回完整的 `image_tag` 表达式,包含 width/height/srcset/fetchPriority 等
+- 多张图同位置:每个 ImageTag 调用 `useUniqueId` 独立生成 uuid
 
-**实现路径**:
-1. 定义虚拟组件 `ImageTag`:
-   ```tsx
-   function ImageTag({ image, width = 3840, ...rest, _id }: ImageTagProps & { _id: number }) {
-     // SSR: 返回 <span data-img-id={_id} hidden />
-     // CSR: 返回 null(在 hydration 阶段)
-   }
-   ```
-2. 在渲染器中,识别 `ImageTag` 组件,替换为标记
-3. 渲染后处理:用 props 生成 Liquid 表达式字符串,替换标记
+**实现路径**(v5 修订:ID 内部化):
+
+```tsx
+// 内部实现(主题开发者不感知)
+import { useUniqueId } from '~/utils/use-unique-id';
+
+function ImageTag(props: ImageTagProps) {
+  // 1. ★ 自动生成唯一 id,主题开发者不感知
+  const id = useUniqueId('img');
+
+  // 2. SSR: 渲染为占位符
+  if (typeof document === 'undefined') {
+    return <span data-img-id={id} hidden />;
+  }
+
+  // 3. CSR: 返回 null(SSR 已注入真实 <img>)
+  return null;
+}
+```
+
+**渲染器侧**:
+1. 识别 `ImageTag` 组件(根据 component 名)
+2. 从渲染后的 HTML 提取 `[data-img-id="..."]`,按出现顺序建立 `[id] → props` 映射
+3. 后处理:用 props 生成 Liquid 表达式字符串,替换 `data-img-id` span 为完整 Liquid
 4. 表达式跟踪:扫描表达式中的 `image` 引用
+
+**主题开发者使用**(完全感知不到 id):
+```tsx
+// 简简单单
+<ImageTag image={image} width={3840} sizes={sizes} />
+```
+
+**为什么用 `data-img-id` 而非 HTML 注释**:
+- HTML 注释 `<!--IMG-N-->` 在某些边缘情况下可能被 HTML 解析器规范化
+- `data-img-id` 属性是标准 HTML,解析稳定
+- React 在客户端渲染时返回 null,这个 span 节点消失;但占位符在 SSR 后处理阶段已被替换为 `<img>`,客户端看到的是真正的 img
+- React 水合时:`<ImageTag>` 节点返回 null,**对 DOM 没有任何期望**,所以不会 mismatch
+
+**SSR/CSR 行为对比**:
+
+| 阶段 | 行为 | DOM |
+|---|---|---|
+| SSR 渲染时 | `<span data-img-id="img-a1b2c3d4" hidden>` | 临时占位 |
+| SSR 后处理 | 替换为 `<img src="{{ image \| image_url: width: 3840 }}" ...>` | 真实 img |
+| 客户端 React 树 | `<ImageTag>` 节点返回 null | 无 React 节点期望 |
+| 水合时 | React 不关心此位置(因为 ImageTag 返回 null) | img 已被 Shopify 渲染,客户端无操作 |
+
+**边缘情况**:
+- `image` 为空时,组件用 `asPlaceholder` 指定的 svg,逻辑相同
+- 多张图同位置(罕见):每个 ImageTag 调用 `useUniqueId` 独立生成
+- React Strict Mode 重复渲染:`useUniqueId` 内部用 useRef + 自增,重复渲染保持稳定 id
+- 服务端 vs 客户端 id 一致性:`useUniqueId` 的算法确定性保证(下文详述)
+
+### 2.1.1 `useUniqueId(prefix?)` 内部 hook
+
+**签名**:
+```ts
+function useUniqueId(prefix?: string): string;
+```
+
+**实现**:
+```ts
+// frontend/utils/use-unique-id.ts
+let counter = 0;
+
+export function useUniqueId(prefix: string = 'u'): string {
+  const ref = useRef<string | null>(null);
+  if (ref.current === null) {
+    counter = (counter + 1) & 0xffffffff;
+    ref.current = `${prefix}-${counter.toString(36)}`;
+  }
+  return ref.current;
+}
+```
+
+**为什么不用 uuid npm 包**:
+- uuid 引入 ~3KB gzipped,对小工具是浪费
+- 上述实现仅 5 行,无外部依赖
+- 计数器保证唯一性(在同一 SSR 进程内)
+- 不要求跨进程稳定(占位符是临时的)
+
+**为什么不用 React.useId()**:
+- React.useId() 产物含 `:`(如 `:r0:`),HTML 属性中需转义
+- React.useId() 用于 server/client 一致性,但我们的占位符**只存在于 SSR 阶段**,客户端 null
+- 占位符在 SSR 后处理阶段已被替换为真实 Liquid,客户端看不到
+
+**客户端 vs 服务端 id 一致性保证**:
+- 不需要保证。占位符是临时的,被替换后消失
+- React 在客户端渲染 `<ImageTag>` 时直接返回 null,完全不依赖占位符的 id
 
 **风险**:
 - 🟡 **MEDIUM**:多张图同位置时,id 管理需要唯一性
-- 🟡 **MEDIUM**:Dawn 中 `image_tag` 的可选参数较多(width, height, sizes, widths, fetchpriority, loading, alt, class),组件 API 需完整覆盖
+- 🟡 **MEDIUM**:Dawn 中 `image_tag` 的可选参数较多(width, height, sizes, widths, fetchPriority, loading, alt, class),组件 API 需完整覆盖
 
 **可行性结论**:🟡 MEDIUM,实现可控,但需要细致测试水合一致性。
 
 **与 Dawn 行为的兼容性**:
-- Dawn 输出的 `<img>` 标签结构(包含 fetchpriority, sizes, widths)与本组件的 props 一一对应
+- Dawn 输出的 `<img>` 标签结构(包含 fetchPriority, sizes, widths)与本组件的 props 一一对应
+- **JSX 属性拼写**:React JSX 中是 `fetchPriority` (camelCase),映射到 HTML 的 `fetchpriority` (lowercase)。组件 API 保持 camelCase
 - 占位符模式与现有 `useLiquidBlock` 思路一致,但作用位置是"替换为完整 HTML 片段"而非"插入在 wrapper 之前"
 
 **类似组件(同样需要标记替换)**:
@@ -988,11 +1129,321 @@ interface Options {
 
 ---
 
-## 7. 风险汇总(v2 修订)
+## 6.5 Hydration 风险全景分析 + 插件检测策略(v5 新增,用户重点关注)
+
+> 用户反馈:"关于水合作用的潜在问题,我需要你详细说明,并且提供对应的场景与解决方案,我希望尽可能在插件测自动化支持,比如插件目前实现的 `@packages/vite-plugin-react-shopify/src/hydration-fix/index.ts`,如果确实难以覆盖完全,至少需要在构建时提供必要的 warning (潜在问题) 或者 error(明确有问题,但是无法自动兼容修复) 提示,并且适当的进行阻碍构建操作,避免异常代码直接发布。"
+
+### 6.5.1 现状回顾
+
+当前插件的 `hydration-fix` 模块:
+- 路径:`@packages/vite-plugin-react-shopify/src/hydration-fix/index.ts`
+- 实现:用 OXC 解析 TSX 源码,遍历 AST,检测相邻 `JSXText` + `JSXExpressionContainer`,自动用模板字面量 `{\`...\`}` 包裹
+- 处理:**仅**一类问题(相邻文本+表达式)
+- 触发:在 `transform` 阶段对所有 `.tsx`/`.jsx` 文件应用,`enforce: "pre"`
+- 输出:`log.warn` 而非 error,继续构建
+
+**v5 扩展计划**:在现有基础上,新增 8 类常见 hydration mismatch 的自动检测/修复,并在 `validate` 阶段输出分级提示。
+
+### 6.5.2 完整问题清单
+
+| # | 问题 | 触发场景 | 严重度 | 插件可自动修复? | 插件可检测? |
+|---|---|---|---|---|---|
+| H1 | 相邻 JSXText + JSXExpressionContainer | `<li>title = {title}</li>` | 🟡 常见 | ✅ 已实现 | ✅ 已实现 |
+| H2 | 条件渲染结构差异 | `{cond && <Banner />}` 与 SSR 状态不一致 | 🔴 严重 | ❌ | ⚠️ 静态扫描可识别语法(条件+JSX) |
+| H3 | 内联颜色 hex → rgb 转换 | `<div style={{ backgroundColor: "#fff" }} />` | 🟡 常见 | ⚠️ 自动改为 CSS 变量 | ✅ 可识别 |
+| H4 | Date/Number 本地化差异 | `{new Date().toLocaleString()}` | 🔴 严重 | ❌ 取决于环境 | ❌ |
+| H5 | Conditional className 拼接 | `clsx(cond && "a", "b")` | 🟡 常见 | ❌ | ❌ |
+| H6 | 条件注释/`<></>` Fragment 结构 | `<>{cond ? <A/> : null}</>` | 🟠 中等 | ❌ | ⚠️ |
+| H7 | 文本节点与 `<br/>` / `<wbr/>` 混排 | `<div>line1<br/>line2</div>` | 🟢 罕见 | ❌ | ❌ |
+| H8 | dangerouslySetInnerHTML 内容 | HTML 实体编码差异 | 🟠 中等 | ❌ | ❌ |
+| H9 | useState 初始化依赖外部变量 | `useState(Math.random())` | 🔴 严重 | ❌ | ✅ 可识别(SSR 警告) |
+| H10 | 客户端修改 useEffect 后的 DOM | useEffect 副作用未完成就水合 | 🟡 常见 | ❌ | ❌ |
+| H11 | JSX 字符串字面量含 Liquid 表达式 | `<div>{"{% if x %}"}</div>` | 🟡 Dawn 兼容 | ❌ | ⚠️ |
+| H12 | Suspense / Async Server Components 边界 | React 19 新功能 | 🟠 中等 | ❌ | ❌ |
+
+### 6.5.3 详细场景与方案
+
+#### H1 相邻 JSXText + JSXExpressionContainer(已实现)
+
+**场景**:
+```tsx
+// ❌ 错误
+<button>-{step}</button>
+<li>title = {title}</li>
+
+// ✅ 正确(模板字面量)
+<button>{`-${step}`}</button>
+<li>{`title = ${title}`}</li>
+```
+
+**当前实现**:`hydration-fix/index.ts` 自动转换。
+
+**改进**:从 `log.warn` 升级为默认 warn + 配置选项(可设为 error)。
+
+#### H2 条件渲染结构差异
+
+**场景**:
+```tsx
+// ❌ 危险
+{showBanner && <Banner />}
+
+// SSR: showBanner = true → 渲染 <Banner />
+// 客户端 useState(false) → 渲染空 → mismatch
+```
+
+**正确做法**:
+```tsx
+// ✅ 用 hidden 属性
+<section hidden={!showBanner}>
+  <Banner />
+</section>
+```
+
+**插件检测**:
+- 在 `validate` 阶段,扫描 JSX 中 `cond && <Component/>` 模式
+- 输出 warn:`Hydration risk: conditional render. Use 'hidden' attribute instead.`
+- 配置项 `ssg.hydration.condRender: 'warn' | 'error' | 'off'`
+
+**无法自动修复**:因为业务逻辑决定何时显示,插件无法智能判断。
+
+#### H3 内联颜色 hex 转换
+
+**场景**:
+```tsx
+// ❌ 浏览器把 hex 规范化为 rgb
+<div style={{ backgroundColor: "#6c63ff" }} />
+// SSR: style="background-color:#6c63ff"
+// 客户端: style="background-color:rgb(108, 99, 255)" → mismatch
+```
+
+**正确做法**:
+```tsx
+// ✅ 用 CSS 变量
+<div style={{ "--accent": "#6c63ff" } as React.CSSProperties} />
+```
+```css
+.elem { background-color: var(--accent, #6c63ff); }
+```
+
+**插件自动修复**:
+- 检测 `style={{ backgroundColor: "..." }}`(其他颜色属性同理)
+- 自动改为 `style={{ "--color-name": "..." } as React.CSSProperties }`
+- 转换名规则:`backgroundColor` → `--bg-color`,`color` → `--text-color`,等
+- 输出 warn 让开发者确认转换是否合理
+
+#### H4 Date/Number 本地化
+
+**场景**:
+```tsx
+// ❌ 危险
+<span>{new Date().toLocaleString()}</span>
+<span>{(12345.67).toLocaleString()}</span>
+```
+
+**正确做法**:
+```tsx
+// ✅ useState + useEffect 同步
+const [date, setDate] = useState('');
+useEffect(() => { setDate(new Date().toLocaleString()); }, []);
+```
+
+**插件检测**:
+- 扫描 `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` 调用
+- 输出 warn:`Hydration risk: locale-dependent method. Use useState + useEffect.`
+
+**无法自动修复**。
+
+#### H5 Conditional className 拼接
+
+**场景**:
+```tsx
+// ❌ 条件 class 字符串拼接(SSR/CSR 拼接顺序不一致会导致字符串不同)
+<div className={`base ${cond ? "active" : ""}`} />
+```
+
+**正确做法**:
+```tsx
+// ✅ clsx
+import { clsx } from "~/utils/classes";
+<div className={clsx("base", cond && "active")} />
+```
+
+**插件检测**:
+- 扫描 `className={\`... \${... ? ... : ...}\`}` 模板字面量
+- 输出 warn:`Hydration risk: conditional class. Use clsx() instead.`
+
+#### H9 useState 初始化依赖外部变量
+
+**场景**:
+```tsx
+// ❌ 危险
+const [count, setCount] = useState(Math.random());
+const [name, setName] = useState(initial);
+```
+
+**正确做法**:
+```tsx
+// ✅ 默认值 + useEffect 同步
+const [count, setCount] = useState(0);
+useEffect(() => { setCount(initial); }, [initial]);
+```
+
+**插件检测**:
+- 扫描 `useState(<非字面量>)` 模式
+- 输出 warn:`Hydration risk: useState initialized with non-literal. Use useState(literal) + useEffect to sync.`
+
+#### H10 useEffect 副作用修改 DOM
+
+**场景**:
+```tsx
+// ❌ useEffect 修改了 SSR 渲染的 DOM
+useEffect(() => {
+  document.title = `Page ${page}`;
+}, [page]);
+```
+
+**这种行为通常没问题**(useEffect 在水合后运行),但如果修改的是关键 DOM 结构,可能引发问题。
+
+**插件检测**:❌ 难以静态扫描(useEffect 内容未知)。
+
+#### H11 JSX 字符串字面量含 Liquid 表达式(Dawn 兼容)
+
+**场景**:
+```tsx
+// Dawn 兼容写法:JSX 字符串包含 Liquid 表达式
+<div>
+  {"{%- if section.settings.show_banner -%}"}
+  <Banner />
+  {"{%- endif -%}"}
+</div>
+```
+
+**SSR 行为**:React 渲染这些字符串为文本节点,Liquid 引擎解析为实际控制流。
+
+**风险**:React 客户端水合时,这些文本节点是字面量字符串(未解析的 Liquid),但 Shopify 已处理为真实元素。**潜在 mismatch**。
+
+**正确做法**:用 `<RawLiquid>` / `<ImageTag>` 等组件,不要用 JSX 字符串。
+
+**插件检测**:
+- 扫描 JSX 中的字符串字面量,匹配 `{%` `{{` `{%-` `{{-` 等 Liquid 标记
+- 输出 warn:`Liquid string in JSX: prefer <RawLiquid> or <ImageTag> components.`
+
+### 6.5.4 插件实现方案
+
+**新增文件**:`packages/vite-plugin-react-shopify/src/hydration-rules/index.ts`
+
+**规则注册**:
+```ts
+type Severity = 'off' | 'warn' | 'error';
+
+interface HydrationRule {
+  id: string;                  // 'H1', 'H2', ...
+  severity: Severity;
+  detector: (ast: AST.Program) => Issue[];
+  fixer?: (source: string, issues: Issue[]) => string;  // 可选自动修复
+}
+
+const rules: HydrationRule[] = [
+  { id: 'H1', severity: 'warn', detector: detectH1, fixer: fixH1 },     // 已有
+  { id: 'H2', severity: 'warn', detector: detectH2 },
+  { id: 'H3', severity: 'error', detector: detectH3, fixer: fixH3 },
+  { id: 'H4', severity: 'warn', detector: detectH4 },
+  { id: 'H5', severity: 'warn', detector: detectH5 },
+  { id: 'H9', severity: 'warn', detector: detectH9 },
+  { id: 'H11', severity: 'warn', detector: detectH11 },
+];
+```
+
+**配置项**:
+```ts
+interface Options {
+  ssg?: {
+    hydration?: {
+      rules?: Record<string, Severity>;  // 覆盖默认
+      // 例: { H2: 'error', H9: 'off' }
+      failOnError?: boolean;             // 任何 error 级别问题 fail 构建
+    };
+  };
+}
+```
+
+**执行时机**:在 `compileAllEntries` 之后,但在 `writeFileSync` 之前。如果 `failOnError: true` 且有任何 error,throw 阻止写入。
+
+**输出**:
+```
+[hydration] H2 (warn) frontend/sections/MainProduct.tsx:42
+  Conditional render detected. Use 'hidden' attribute instead.
+  > {showBanner && <Banner />}
+
+[hydration] H3 (error) frontend/sections/HeroBanner.tsx:18
+  Inline color style detected. Auto-fixed to CSS variable.
+  > style={{ backgroundColor: "#6c63ff" }}
+  ↓
+  > style={{ "--bg-color": "#6c63ff" } as React.CSSProperties}
+
+Build failed: 1 hydration error(s) in 1 file(s)
+```
+
+### 6.5.5 分级处理
+
+| 级别 | 行为 | 适用 |
+|---|---|---|
+| `off` | 不检测 | 已知忽略(legacy 代码) |
+| `warn` | log.warn,继续构建 | 默认值,潜在风险 |
+| `error` + `failOnError: false` | log.error,继续构建 | CI 报警但允许通过 |
+| `error` + `failOnError: true` | throw 阻止构建 | CI 强制要求 |
+
+**默认配置**:
+- H1 (相邻文本):`warn`,自动修复
+- H2 (条件渲染):`warn`,仅提示
+- H3 (内联颜色):`error`,自动修复为 CSS 变量
+- H4 (locale 方法):`warn`,仅提示
+- H5 (条件 class):`warn`,仅提示
+- H9 (useState 外部):`warn`,仅提示
+- H11 (JSX Liquid 字符串):`warn`,仅提示
+
+**Dawn 迁移的特别考虑**:
+- H11 在 Dawn 迁移中**会大量触发**(因为 Dawn 代码里有大量 `{% if %}` `{% for %}` 嵌在 JSX)
+- 阶段 1-2 时应将 H11 设为 `off` 或 `warn`
+- 阶段 3+ 逐步收紧
+
+### 6.5.6 与现有 hydration-fix 的关系
+
+| 模块 | 角色 | 触发 |
+|---|---|---|
+| `hydration-fix/index.ts`(现有) | **修复**类(H1 自动包裹) | `enforce: "pre"`,对所有 .tsx |
+| `hydration-rules/index.ts`(新增) | **检测 + 分级**类(H1-H12) | `closeBundle` 阶段,基于 AST 扫描 |
+
+**两者协同**:
+- `hydration-fix` 在源码 transform 阶段修复 H1
+- `hydration-rules` 在 SSG 完成后检测剩余 H2-H12
+- H1 在两个模块都覆盖(检测+修复)
+
+### 6.5.7 局限性诚实说明
+
+**插件无法保证的**:
+- **H4 Date/Number 本地化**:取决于执行环境(服务器 vs 浏览器),插件只能提醒,不能修复
+- **H10 useEffect DOM 修改**:静态分析无法预测运行时行为
+- **业务逻辑条件**:插件不知道 `cond` 在 SSR 时是 true 还是 false,只知道"有条件渲染"
+- **三方库副作用**:外部 hook(如 redux、zustand)的 hydration 行为插件无法控制
+
+**插件能做的**:
+- **静态语法扫描**:识别潜在风险模式
+- **自动修复**:对可推导的修复(如 H1, H3)自动应用
+- **构建时阻塞**:`failOnError` 阻止有问题的代码上线
+- **详细文档**:每条规则附带示例代码和推荐做法
+
+**最终用户责任**:
+- 业务逻辑层面的 hydration 安全(条件渲染、动态数据)
+- 测试覆盖:Dawn 与 React 版本的浏览器渲染对比
+
+---
+
+## 7. 风险汇总(v5 修订)
 
 | 风险 | 等级 | 影响 hook/组件 | 缓解 |
 |---|---|---|---|
-| 水合时 DOM 与 React 树结构不匹配 | 🟠 MED-HIGH | useRawLiquid, useForm, usePaginate, useStaticBlock, **`<ImageTag>`** | 用 Fragment 包裹占位符;SSR 渲染为注释节点,客户端渲染为 null;严格测试 |
+| 水合时 DOM 与 React 树结构不匹配 | 🟠 MED-HIGH | useRawLiquid, useForm, usePaginate, useStaticBlock, **`<ImageTag>`** | 标记替换模式;SSR `data-img-id` 占位 + CSR null;严格测试 |
 | ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>`,block 独立 entry,沿用现有 JSON bridge 机制 |
 | CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules;阶段 6 再评估 |
 | `{% form %}` 提交行为与 Shopify 原生差异 | 🟠 MED | useForm | 分两阶段:B.1 只做标记替换,B.2 完整接管 |
@@ -1000,8 +1451,10 @@ interface Options {
 | Pluralization 翻译 | 🟡 MED | useT (i18n) | 字典查找时支持 `key.other` / `key.one` 后缀 |
 | i18n 文件体积 | 🟢 LOW | useT | 初始 locale 内联,其他按需加载 |
 | ~~`useShopifyAttributes` spread~~ | ~~🟠 MED~~ | ~~useBlockLoop~~ | **已解决**:v1 错误设计,整个 hook 移除;插件已自动注入 `shopify_attributes` 到 block wrapper |
-| `<ImageTag>` 替换为 HTML 片段时 DOM 元素插入位置 | 🟡 MED | `<ImageTag>` | 标记替换模式;SSR 注释节点 + CSR null;在测试中验证水合 |
-| `<BlockSlot>` 与现有 `content_for 'blocks'` 机制的语义对齐 | 🟢 LOW | `<BlockSlot>` | 直接替换,无新机制 |
+| **水合 mismatch 风险(H1-H12)** | 🟠 MED-HIGH | **所有 React 组件** | **新增 hydration-rules 模块,12 条规则分级 warn/error 提示,部分自动修复,关键错误 failOnError 阻止构建**(详见 §6.5) |
+| 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | **v5 新增 `useUniqueId` hook 内部化**,主题开发者不感知 |
+| 客户端 useEffect 修改 DOM 引发的水合不一致 | 🟡 MED | 复杂组件 | 文档 + lint 提示;无法自动修复 |
+| `bridge` 数据错位(block 上下文) | 🟢 LOW | (无 useBlockLoop) | **v5 修正**:bridge 不分层,Shopify 自动处理 `block.settings.X` 上下文 |
 
 ---
 
