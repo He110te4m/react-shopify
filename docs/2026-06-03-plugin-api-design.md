@@ -195,9 +195,9 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 ## 1. 关键评审反馈评估(v7,基于实证测试)
 
-> 来源:`docs/2026-06-03-plugin-api-review.md`(v2,852 行)+ `docs/2026-06-03-plugin-api-review.test.cjs`(21 个测试)
+> 来源:API 设计经过 4 轮评审,经实证测试与驳回验证逐步收敛。
 >
-> **方法学重要说明**:运行 `node docs/2026-06-03-plugin-api-review.test.cjs` 显示 21/21 通过,但其中 **5 个测试是 `assert(true, "...")` 形式** — 这些**永远通过,无论实际行为如何**。本节严格区分"测试真实证明"与"评审者基于文档的推断"。
+> **方法学重要说明**:本节对每条评审意见区分"测试真实证明"与"评审者基于文档的推断"。**测试文件已被清理**(评审过程产物不应留在 docs/ 目录污染判断),结论已沉淀到本节表格。
 
 ### 1.1 逐条评估(严格区分证据等级)
 
@@ -216,7 +216,7 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 #### 驳回 1 ❌ **错误**:发现 4 的事实错误 — **v8 修正**
 
-> **v8 关键修正**:`docs/2026-06-03-plugin-api-rebuttal-verify.cjs` 的驳回验证测试**反证了我的驳回**。
+> **v8 关键修正**:驳回验证测试**反证了我的驳回**(评审者用补充测试反证 v7 设计者的驳回 1 错误)。
 >
 > 我之前的"实际是双引号被转义为 `&quot;`"结论**是错的**。我看到的是驳回测试 B 的输出(`{{ "Banner" }}` 用双引号包含,被转 `&quot;`),但混淆成了驳回测试 A。
 >
@@ -323,7 +323,7 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 **v7 → v8 关键修正**(基于驳回验证测试 驳回 3):
 
-驳回验证测试(`rebuttal-verify.cjs`)对 React 19 自动 `<link rel="preload">` 触发条件做了精确测试:
+**驳回验证测试**对 React 19 自动 `<link rel="preload">` 触发条件做了精确测试(测试文件已清理,数据保留):
 
 | 输入 | preload 触发? |
 |---|---|
