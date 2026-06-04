@@ -11,6 +11,21 @@ import type { SettingSchema, InputSettings } from "./settings";
 /** The four Shopify theme component categories. */
 export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
 
+interface ThemeBlockOrAppBlockDefinition {
+  type: "@theme" | "@app" | string;
+  name?: never;
+  limit?: never;
+  settings?: never;
+  blocks?: never;
+}
+
+interface SectionBlockDefinition {
+  type: string;
+  name?: string;
+  limit?: number;
+  settings?: SettingSchema[];
+}
+
 /**
  * A block definition within a section's `blocks` attribute.
  *
@@ -23,12 +38,7 @@ export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
  * | `limit`    | No       | Max number of blocks of this type that can be used.                 |
  * | `settings` | No       | Input or sidebar settings exposed to the merchant for this block.    |
  */
-export interface BlockDefinition {
-  type: string;
-  name?: string;
-  limit?: number;
-  settings?: SettingSchema[];
-}
+export type BlockDefinition = ThemeBlockOrAppBlockDefinition | SectionBlockDefinition;
 
 /**
  * Template/group scope filter used by `enabled_on` / `disabled_on`.

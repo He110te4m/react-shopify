@@ -70,11 +70,86 @@ describe("validate/rules", () => {
       expect(result).toContain("empty string default");
     });
 
-    it("handles setting without id", () => {
-      const result = rules.checkEmptyStringDefault({ type: "text", default: "" });
-      expect(result).toContain("(no id)");
-    });
+  it("handles setting without id", () => {
+    const result = rules.checkEmptyStringDefault({ type: "text", default: "" });
+    expect(result).toContain("(no id)");
   });
+});
+
+describe("checkBlocksCoexistence", () => {
+  it("returns null for empty blocks array", () => {
+    expect(rules.checkBlocksCoexistence([], "test-comp")).toBeNull();
+  });
+
+  it("returns null for undefined blocks", () => {
+    expect(rules.checkBlocksCoexistence(undefined, "test-comp")).toBeNull();
+  });
+
+  it("returns null for single entry", () => {
+    expect(
+      rules.checkBlocksCoexistence([{ type: "@theme" }], "test-comp"),
+    ).toBeNull();
+  });
+
+  it("returns null when all entries are theme/app references", () => {
+    expect(
+      rules.checkBlocksCoexistence(
+        [{ type: "@theme" }, { type: "@app" }, { type: "slide" }],
+        "test-comp",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when all entries are section blocks", () => {
+    expect(
+      rules.checkBlocksCoexistence(
+        [
+          { type: "product", name: "Product" },
+          { type: "collection", name: "Collection", limit: 2 },
+        ],
+        "test-comp",
+      ),
+    ).toBeNull();
+  });
+
+  it("warns when section block and @theme are mixed", () => {
+    const result = rules.checkBlocksCoexistence(
+      [
+        { type: "product", name: "Product" },
+        { type: "@theme" },
+      ],
+      "test-comp",
+    );
+    expect(result).not.toBeNull();
+    expect(result).toContain("test-comp");
+    expect(result).toContain("mutually exclusive");
+    expect(result).toContain("@theme");
+    expect(result).toContain("Product");
+  });
+
+  it("warns when section block and theme block filename are mixed", () => {
+    const result = rules.checkBlocksCoexistence(
+      [
+        { type: "slide" },
+        { type: "product", name: "Product", settings: [] },
+      ],
+      "test-comp",
+    );
+    expect(result).not.toBeNull();
+    expect(result).toContain("mutually exclusive");
+  });
+
+  it("warns when section block has only limit (no name)", () => {
+    const result = rules.checkBlocksCoexistence(
+      [
+        { type: "@app" },
+        { type: "product", limit: 3 },
+      ],
+      "test-comp",
+    );
+    expect(result).not.toBeNull();
+  });
+});
 });
 
 describe("validateShopifyMeta", () => {
@@ -114,5 +189,20 @@ describe("validateShopifyMeta", () => {
       { kebabName: "test-comp", filePath: "/test.tsx" },
     );
     expect(warnings).toHaveLength(0);
+  });
+
+  it("warns when blocks mix section and theme/app kinds", () => {
+    const warnings = validateShopifyMeta(
+      {
+        name: "Test",
+        blocks: [
+          { type: "product", name: "Product" },
+          { type: "@theme" },
+        ],
+      },
+      { kebabName: "test-comp", filePath: "/test.tsx" },
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("mutually exclusive");
   });
 });

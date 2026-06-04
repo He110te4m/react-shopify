@@ -7,7 +7,6 @@
  */
 
 import type { ShopifyMeta, PresetDefinition, BlockDefinition, PresetBlock } from "../types/shopify";
-import { MAX_NAME_LENGTH } from "../validate/rules";
 
 /**
  * Convert a flat `ShopifyMeta` object into the `{% schema %}...{% endschema %}`
@@ -42,38 +41,26 @@ function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
 }
 
 /**
- * Derive a human-readable block name from its `type` when the user didn't
- * supply one. Mirrors the `deriveName` logic used for section-level names
- * but stripped of the PascalCase splitter (block `type` is always kebab/
- * snake-case per Shopify convention).
+ * Serialize a block definition from a section's `blocks` attribute.
  *
- * @example
- * defaultBlockName("slide")              // "Slide"
- * defaultBlockName("text-block")         // "Text Block"
- * defaultBlockName("image_with_caption") // "Image With Caption"
- * defaultBlockName("@app")               // "App"
+ * Per {@link BlockDefinition}, there are two valid shapes:
+ *
+ * - **Theme/App block reference** (`{ type: "@theme" | "@app" | <filename> }`):
+ *   only `type` is emitted. Shopify does not allow `name`, `limit`, or
+ *   `settings` for these entries.
+ * - **Section block** (`{ type: string, name?, limit?, settings? }`): all
+ *   provided fields are forwarded verbatim. `name` is never auto-derived —
+ *   the merchant-visible block name must be supplied by the developer.
  */
-function defaultBlockName(type: string): string {
-  const name = type
-    .replace(/^@/, "")
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-  return name.length > MAX_NAME_LENGTH ? name.slice(0, MAX_NAME_LENGTH) : name;
-}
-
-/** Serialize a block definition, auto-deriving `name` from `type` if missing. */
 function serializeBlockDefinition(
   block: BlockDefinition,
 ): Record<string, unknown> {
   const { type, name, limit, settings } = block;
-  return {
-    type,
-    name: name ?? defaultBlockName(type),
-    ...(limit != null ? { limit } : {}),
-    ...(settings ? { settings } : {}),
-  };
+  const result: Record<string, unknown> = { type };
+  if (name !== undefined) result.name = name;
+  if (limit != null) result.limit = limit;
+  if (settings) result.settings = settings;
+  return result;
 }
 
 /** Convert an `InputSettings` map to a JSON-safe object, dropping empty strings. */

@@ -1,13 +1,20 @@
 /**
  * @file Shop setup Meta validation entry point.
  *
- * Runs {@link checkNameLength} and {@link checkEmptyStringDefault} against
- * a component's `shopifyMeta` during SSG compilation. Logs warnings and
- * auto-truncates names that exceed Shopify's limit.
+ * Runs {@link checkNameLength}, {@link checkEmptyStringDefault}, and
+ * {@link checkBlocksCoexistence} against a component's `shopifyMeta` during
+ * SSG compilation. Logs warnings and auto-truncates names that exceed
+ * Shopify's limit.
  */
 
 import { logger } from "../core/logger";
-import { checkNameLength, checkEmptyStringDefault, MAX_NAME_LENGTH } from "./rules";
+import {
+  checkNameLength,
+  checkEmptyStringDefault,
+  checkBlocksCoexistence,
+  MAX_NAME_LENGTH,
+} from "./rules";
+import type { BlockDefinition } from "../types/shopify";
 
 const log = logger("validate");
 
@@ -21,6 +28,7 @@ export interface ValidateContext {
 export interface ValidatableMeta {
   name: string;
   settings?: { id?: string; type: string; default?: unknown }[];
+  blocks?: BlockDefinition[];
 }
 
 /**
@@ -43,6 +51,9 @@ export function validateShopifyMeta(meta: ValidatableMeta, context: ValidateCont
       if (w) warnings.push(w);
     }
   }
+
+  const blocksWarning = checkBlocksCoexistence(meta.blocks, context.kebabName);
+  if (blocksWarning) warnings.push(blocksWarning);
 
   for (const w of warnings) {
     log.warn(w);

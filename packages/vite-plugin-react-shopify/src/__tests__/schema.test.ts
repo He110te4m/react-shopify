@@ -4,6 +4,88 @@ import type { ShopifyMeta } from "../types";
 
 const base: ShopifyMeta = { name: "Test" };
 
+describe("generateSchema — section blocks array", () => {
+  /** Extract the value of the top-level `"blocks": [...]` field. */
+  function extractBlocksArray(schema: string): string {
+    const match = schema.match(/"blocks":\s*(\[[\s\S]*?\])(?=\s*[,\n}])/);
+    expect(match).not.toBeNull();
+    return match![1];
+  }
+
+  it("emits only `type` for theme block filename references", () => {
+    const out = generateSchema({
+      ...base,
+      blocks: [{ type: "react-color-block" }, { type: "react-text-block" }],
+    });
+    const blocksJson = extractBlocksArray(out);
+    expect(blocksJson).toContain('"type": "react-color-block"');
+    expect(blocksJson).toContain('"type": "react-text-block"');
+    expect(blocksJson).not.toContain('"name"');
+  });
+
+  it("emits only `type` for @theme and @app references", () => {
+    const out = generateSchema({
+      ...base,
+      blocks: [{ type: "@theme" }, { type: "@app" }],
+    });
+    const blocksJson = extractBlocksArray(out);
+    expect(blocksJson).toContain('"type": "@theme"');
+    expect(blocksJson).toContain('"type": "@app"');
+    expect(blocksJson).not.toContain('"name"');
+  });
+
+  it("emits explicit name/limit/settings for section blocks", () => {
+    const out = generateSchema({
+      ...base,
+      blocks: [
+        {
+          type: "product",
+          name: "Product",
+          limit: 4,
+          settings: [
+            { type: "text", id: "title", label: "Title" },
+          ],
+        },
+      ],
+    });
+    const blocksJson = extractBlocksArray(out);
+    expect(blocksJson).toContain('"type": "product"');
+    expect(blocksJson).toContain('"name": "Product"');
+    expect(blocksJson).toContain('"limit": 4');
+    expect(blocksJson).toContain('"settings"');
+    expect(blocksJson).toContain('"id": "title"');
+  });
+
+  it("treats a bare type-only entry as a theme block reference (no name/limit/settings)", () => {
+    const out = generateSchema({
+      ...base,
+      blocks: [{ type: "product" }],
+    });
+    const blocksJson = extractBlocksArray(out);
+    expect(blocksJson).toContain('"type": "product"');
+    expect(blocksJson).not.toContain('"name"');
+    expect(blocksJson).not.toContain('"limit"');
+    expect(blocksJson).not.toContain('"settings"');
+  });
+
+  it("promotes entry to section block as soon as any extra field is present", () => {
+    const out = generateSchema({
+      ...base,
+      blocks: [
+        { type: "a", limit: 1 },
+        { type: "b", settings: [{ type: "text", id: "x", label: "X" }] },
+      ],
+    });
+    const blocksJson = extractBlocksArray(out);
+    expect(blocksJson).toContain('"type": "a"');
+    expect(blocksJson).toContain('"limit": 1');
+    expect(blocksJson).not.toContain('"name": "a"');
+    expect(blocksJson).toContain('"type": "b"');
+    expect(blocksJson).toContain('"settings"');
+    expect(blocksJson).not.toContain('"name": "b"');
+  });
+});
+
 describe("generateSchema — preset block serialization", () => {
   it("emits name, settings, and nested blocks for normal preset blocks", () => {
     const out = generateSchema({

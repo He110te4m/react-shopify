@@ -2,6 +2,8 @@
  * @file Validation rules for Shopify component metadata.
  */
 
+import type { BlockDefinition } from "../types/shopify";
+
 /** Maximum allowed length for `shopifyMeta.name` (Shopify limit). */
 export const MAX_NAME_LENGTH = 25;
 
@@ -36,4 +38,62 @@ export function checkEmptyStringDefault(
     return `Setting "${label}" (type: ${setting.type}) has empty string default`;
   }
   return null;
+}
+
+/** A block kind discriminator used by {@link checkBlocksCoexistence}. */
+type BlockKind = "section" | "theme-or-app";
+
+/**
+ * Classify a block entry as a section block (inline schema definition with
+ * `name` / `limit` / `settings`) or a theme/app block reference (bare `type`
+ * only, e.g. `"@theme"`, `"@app"`, or a theme block filename).
+ */
+function classifyBlock(block: BlockDefinition): BlockKind {
+  if (
+    block.name !== undefined ||
+    block.limit !== undefined ||
+    block.settings !== undefined
+  ) {
+    return "section";
+  }
+  return "theme-or-app";
+}
+
+/**
+ * Check that a section's `blocks` array does not mix incompatible block kinds.
+ *
+ * Per Shopify, a section's `blocks` attribute must contain EITHER:
+ *
+ * - only **section blocks** (inline definitions with `name` / `limit` /
+ *   `settings`), OR
+ * - only **theme/app block references** (`{ type: "@theme" | "@app" |
+ *   <filename> }`).
+ *
+ * Mixing the two is rejected by the theme editor. The `kebabName` is the
+ * kebab-cased component name used for log context.
+ *
+ * @returns A warning message when kinds are mixed, or `null` if compatible.
+ */
+export function checkBlocksCoexistence(
+  blocks: BlockDefinition[] | undefined,
+  kebabName: string,
+): string | null {
+  if (!blocks || blocks.length < 2) return null;
+
+  const firstKind = classifyBlock(blocks[0]);
+  const conflict = blocks.find((b) => classifyBlock(b) !== firstKind);
+  if (!conflict) return null;
+
+  const [sectionExample, themeAppExample] =
+    firstKind === "section"
+      ? [blocks[0], conflict]
+      : [conflict, blocks[0]];
+
+  return (
+    `[${kebabName}] shopifyMeta.blocks mixes section blocks and theme/app block ` +
+    `references — these are mutually exclusive. ` +
+    `Section-block example: ${JSON.stringify(sectionExample)}. ` +
+    `Theme/app-block example: ${JSON.stringify(themeAppExample)}. ` +
+    `Either remove inline section blocks, or remove the @theme/@app/filename references.`
+  );
 }
