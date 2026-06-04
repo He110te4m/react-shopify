@@ -535,7 +535,7 @@ vitePluginShopify({
       snippet: "react-",                   // snippet 前缀
     },
     outputName: "",                        // 自定义输出文件名模板
-    cssPrefix: "css",                      // 共享 CSS snippet 前缀
+    cssPrefix: "css-",                     // 共享 CSS snippet 前缀
   },
 
   // === 依赖映射 ===

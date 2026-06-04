@@ -68,7 +68,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
       snippet: options.ssg?.prefix?.snippet ?? defaultPrefix.snippet,
     },
     outputName: options.ssg?.outputName ?? "",
-    cssPrefix: options.ssg?.cssPrefix ?? "css",
+    cssPrefix: options.ssg?.cssPrefix ?? "css-",
   };
 
   const importMap: Required<ImportMapOptions> = {

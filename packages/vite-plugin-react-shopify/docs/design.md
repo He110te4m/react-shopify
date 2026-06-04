@@ -360,7 +360,7 @@ SSR 渲染时:
     directories: ["sections", "blocks", "templates", "snippets"],
     prefix: { template: "page.react-", section: "react-", block: "react-", snippet: "react-" },
     outputName: "",
-    cssPrefix: "css",
+    cssPrefix: "css-",
   },
   importMap: {
     react: "{{ 'react.js' | asset_url }}",
@@ -597,7 +597,7 @@ shared.css  ── 引用次数: 3 → 生成 snippets/css-shared.liquid
 {% endstylesheet %}
 ```
 
-**Snippet 命名**：`{cssPrefix}-{cssBaseName}`，默认 `css-shared`。文件名的 hash 部分会被 `getCssBaseName()` 移除。
+**Snippet 命名**：`{cssPrefix}{cssBaseName}`，默认 `css-SharedCard.liquid`（保留 Vite 输出的 hash，避免与 Shopify CLI / OS 文件监听冲突）。
 
 ### 内联 CSS
 

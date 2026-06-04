@@ -62,7 +62,7 @@ export function generateSharedCssSnippets(
     if (count < 2) continue;
 
     const cssName = path.basename(cssFile, path.extname(cssFile));
-    const snippetName = `${options.ssg.cssPrefix || "css-"}${cssName}`;
+    const snippetName = `${options.ssg.cssPrefix}${cssName}`;
     const cssContent = readCssFile(cssFile, options.buildDir, options.themeRoot);
 
     fs.writeFileSync(
