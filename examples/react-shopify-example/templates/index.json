@@ -113,6 +113,25 @@
         "retina": "shopify://shop_images/theme_cover_image.jpg",
         "title": "ShopifyImage — image_url | image_tag Demo"
       }
+    },
+    "react_multi_component_section_9Uyfbm": {
+      "type": "react-multi-component-section",
+      "name": "Multi-Component Image Test",
+      "settings": {
+        "title": "Multi-Component auto-load Test",
+        "hero_img": "shopify://shop_images/theme_cover_image.jpg",
+        "card_1_img": "shopify://shop_images/theme_cover_image.jpg",
+        "card_2_img": "shopify://shop_images/theme_cover_image.jpg",
+        "card_3_img": "shopify://shop_images/theme_cover_image.jpg"
+      }
+    },
+    "react_video_section_kfr94C": {
+      "type": "react-video-section",
+      "name": "Video Section (React)",
+      "settings": {
+        "hero_video": "shopify://files/videos/precise-nav-video.mp4",
+        "title": "ShopifyVideo — video_tag Demo"
+      }
     }
   },
   "order": [
@@ -123,6 +142,8 @@
     "react_todo_list_FrdqkC",
     "react_settings_tracker_test_UyLCHw",
     "react_product_price_xWPMQk",
-    "react_image_section_J7tPmw"
+    "react_image_section_J7tPmw",
+    "react_multi_component_section_9Uyfbm",
+    "react_video_section_kfr94C"
   ]
 }

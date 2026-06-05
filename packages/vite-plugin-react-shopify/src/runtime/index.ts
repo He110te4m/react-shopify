@@ -22,6 +22,9 @@ export type { LiquidTypeMode } from "./hooks";
 export { LiquidDataContext, LiquidDataProvider } from "./provider";
 
 export { ShopifyImage } from "./ShopifyImage";
+export { ShopifyVideo } from "./ShopifyVideo";
+export type { ShopifyVideoProps } from "./ShopifyVideo";
+
 export type {
   ShopifyImageProps,
   ImageLoading,
