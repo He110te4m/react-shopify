@@ -20,3 +20,12 @@ export {
 export type { LiquidTypeMode } from "./hooks";
 
 export { LiquidDataContext, LiquidDataProvider } from "./provider";
+
+export { ShopifyImage } from "./ShopifyImage";
+export type {
+  ShopifyImageProps,
+  ImageLoading,
+  ImageFetchPriority,
+  ImageDecoding,
+  ImageCrop,
+} from "./ShopifyImage";

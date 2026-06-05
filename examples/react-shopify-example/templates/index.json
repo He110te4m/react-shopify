@@ -102,6 +102,17 @@
         "price_input": "19900",
         "compare_price_input": "$99.99"
       }
+    },
+    "react_image_section_J7tPmw": {
+      "type": "react-image-section",
+      "name": "Image Section (React)",
+      "settings": {
+        "hero": "shopify://shop_images/theme_cover_image.jpg",
+        "lazy": "shopify://shop_images/theme_cover_image.jpg",
+        "eager": "shopify://shop_images/theme_cover_image.jpg",
+        "retina": "shopify://shop_images/theme_cover_image.jpg",
+        "title": "ShopifyImage — image_url | image_tag Demo"
+      }
     }
   },
   "order": [
@@ -111,6 +122,7 @@
     "react_block_test_AbCdEf",
     "react_todo_list_FrdqkC",
     "react_settings_tracker_test_UyLCHw",
-    "react_product_price_xWPMQk"
+    "react_product_price_xWPMQk",
+    "react_image_section_J7tPmw"
   ]
 }
