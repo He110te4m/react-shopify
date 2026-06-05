@@ -312,154 +312,130 @@ export function useUniqueId(prefix: string = 'u'): string {
 > - 作为文本子节点,且文本本身就是 Liquid 表达式(SSR 后被 Liquid 替换)
 > - **不**能用于产生 HTML 元素碎片的场景(那会破坏水合)
 
-### 2.1 ~~`useImageTag`~~ → `<ImageTag>` 组件(A' 类,**v8 彻底重设计**)
+### 2.1 `<ShopifyImage>` 组件(A' 类,**v9 终态,已实施**)
 
-**v1-v7 设计历史**(从错误到修正):
-- v1:返回字符串 → hydration mismatch
-- v2-v4:组件 + 标记替换(注释)
-- v5-v6:`<span data-img-id>` 占位 + CSR null(评审发现 2 证实不可行)
-- **v7**:放弃占位,渲染真实 `<img>` 元素 + Liquid 表达式属性(驳回验证测试**进一步发现问题**)
-- **v8(当前)**:v7 进一步修正 — **必须默认 `loading="lazy"`**
+> ✅ **已实施**(`packages/vite-plugin-react-shopify/src/runtime/ShopifyImage.tsx`)。
+> 经历 v1-v8 从 `useImageTag` → `<ImageTag>` 多轮设计迭代,最终在 v9 定型为
+> **`dangerouslySetInnerHTML` + `image_url | image_tag` 完整管道**的方案。
 
-**v7 → v8 关键修正**(基于驳回验证测试 驳回 3):
+**核心设计**:
 
-**驳回验证测试**对 React 19 自动 `<link rel="preload">` 触发条件做了精确测试(测试文件已清理,数据保留):
+SSR 时通过 `dangerouslySetInnerHTML` 输出完整的 Liquid `image_url | image_tag` 管道,
+避免 React 水合与 Liquid 生成 HTML 的矛盾:
 
-| 输入 | preload 触发? |
-|---|---|
-| `<img src="...">` (极简) | ✓ **触发** |
-| `<img src="..." loading="lazy">` | ✗ **不触发** |
-| `<img src="..." className="x">` | ✓ 触发 |
-| `<img alt="">` 无 src | ✗ 不触发 |
-| `<picture><source srcSet><img src>` | ✗ **不触发** |
-| `<img src="{{ ... }}">` (Liquid) | ✓ 触发 |
+```liquid
+{{ section.settings.image | image_url: width: 800, crop: 'center' | image_tag: loading: 'lazy', alt: 'Photo' }}
+```
 
-**关键发现**:
-- ❌ **不是 srcSet 触发**(我之前驳回 3 的部分依据是错的)
-- ❌ **不是 className 触发**(任意额外属性都触发)
-- ✅ **"无 `loading='lazy'`" 是触发条件** — React 19 把没明确 lazy 的 img 视为 LCP 候选,自动预加载
-- ✅ `<picture>` 包裹也避免 preload
+Shopify 在请求时将其解析为完整 `<img>` 标签(含 `srcset`、`sizes` 等属性)。
 
-**v8 设计 — 默认 `loading="lazy"`,移除 `fetchPriority`**:
+**签名**:
 
 ```ts
-interface ImageTagProps {
-  image: string;             // Liquid 表达式,如 "section.settings.image"
-  width?: number;            // image_url 宽度(默认 3840)
+interface ShopifyImageProps {
+  image: string;              // Liquid 表达式,如 "section.settings.image"
+
+  // ── image_url filter params ──
+  width?: number;             // CDN 裁剪宽度
+  height?: number;            // CDN 裁剪高度
+  crop?: 'top' | 'center' | 'bottom' | 'left' | 'right';
+
+  // ── image_tag filter params ──
   alt?: string;
-  className?: string;
-  loading?: 'lazy' | 'eager'; // 默认 'lazy'(避免 React 19 自动 preload)
-  asPlaceholder?: string;    // 当 image 为空时,显示的 placeholder svg 名
-  // ❌ 不再支持:srcSet, sizes, widths, fetchPriority
-  //   fetchPriority 与 loading 互斥
-}
-function ImageTag(props: ImageTagProps): JSX.Element;
-```
-
-**SSR 行为**(v8):
-```tsx
-function ImageTag({
-  image,
-  width = 3840,
-  alt,
-  className,
-  loading = 'lazy',  // ★ 默认 lazy(避免 React 19 preload)
-  asPlaceholder,
-}: ImageTagProps) {
-  if (typeof document === "undefined") {
-    return (
-      <img
-        src={`{{ ${image} | image_url: width: ${width} }}`}
-        alt={alt ?? ""}
-        className={className}
-        loading={loading}
-      />
-    );
-  }
-
-  // CSR
-  const [resolvedSrc] = useLiquidValue(`${image} | image_url: width: ${width}`);
-  return (
-    <img
-      src={resolvedSrc}
-      alt={alt ?? ""}
-      className={className}
-      loading={loading}
-    />
-  );
+  loading?: 'lazy' | 'eager'; // 未传时由 section.index 自动推断(§2.1.2)
+  fetchPriority?: 'high' | 'low' | 'medium' | 'auto';
+  decoding?: 'async' | 'sync' | 'auto';
+  preload?: boolean;          // image_tag preload(Shopify Link HTTP header)
+  tagWidth?: number;          // <img> HTML width 属性
+  tagHeight?: number;         // <img> HTML height 属性
+  sizes?: string;             // HTML sizes 属性
+  widths?: string;            // 自定义 srcset widths(如 "200, 300, 400")
 }
 ```
 
-**SSR 输出**(默认 loading='lazy'):
-```html
-<img src="{{ section.settings.image | image_url: width: 3840 }}"
-     alt="..." class="banner__image" loading="lazy" />
+**SSR 行为**:
+- `dangerouslySetInnerHTML` 输出 `{{ image | image_url: ... | image_tag: ... }}`
+- 表达式被跟踪到 JSON bridge
+- 不渲染 JSX `<img>`,避免 React 19 自动 preload 问题
+
+**CSR 行为**:
+- 从 JSON bridge 读解析后的 URL
+- `dangerouslySetInnerHTML` 输出 `<img>` 标签
+- 两边都用 innerHTML → React 不比较子树 → 无水合 mismatch
+
+**参数严格拆分**:
+
+| Filter | 参数 | 说明 |
+|--------|------|------|
+| `image_url` | `width`, `height`, `crop` | CDN 裁剪,`image_tag` 的前置依赖 |
+| `image_tag` | `alt`, `loading`, `fetchPriority`, `decoding`, `preload`, `tagWidth`, `tagHeight`, `sizes`, `widths` | HTML 属性,均对应 Shopify 文档 |
+
+**风险评估**:🟢 **LOW** — 已在 example 项目验证,146 单测全过。
+
+### 2.1.1 与 v1-v8 `<ImageTag>` 历史方案对比
+
+| 维度 | v1-v7 `<ImageTag>` | v8 `<ImageTag>` | **v9 `<ShopifyImage>`** |
+|------|--------------------|-----------------|------------------------|
+| 水合策略 | HTML 注释/span 占位(均失败) | JSX `<img>` + `loading="lazy"` | `dangerouslySetInnerHTML` 双端 |
+| `image_tag` filter | ❌ 不用 | ❌ 不用 | ✅ **完整管道** |
+| `srcset`/`sizes` | React 手写 | 不支持 | ✅ Liquid 自动生成 |
+| React 19 preload | 不受控 | 靠 `loading="lazy"` 规避 | ✅ 无影响(不渲染 JSX `<img>`) |
+| `fetchPriority` | 支持 | ❌ 移除(与 lazy 互斥) | ✅ 支持 `high`/`low`/`medium`/`auto` |
+
+### 2.1.2 `section.index` 自动推断
+
+当 `loading` / `fetchPriority` / `preload` **未显式传入**时,组件根据 `section.index` 自动推断:
+
+| `section.index` | `loading` | `fetchPriority` | `preload` |
+|-----------------|-----------|-----------------|-----------|
+| `< 4` | `eager` | `high` | `true` |
+| `4 ≤ idx < 8` | `lazy` | `medium` | `false` |
+| `≥ 8` | `lazy` | `low` | `false` |
+
+同一 section 内所有 `ShopifyImage` 共享一组 Liquid 变量(通过 `__shopify_ssg_liquid_track` Set 引用探测 section 边界)。
+
+### 2.1.3 `<ShopifyVideo>` 组件(A' 类,**v9 新增,已实施**)
+
+> ✅ **已实施**(`packages/vite-plugin-react-shopify/src/runtime/ShopifyVideo.tsx`)。
+> 与 `<ShopifyImage>` 架构一致:SSR 用 `dangerouslySetInnerHTML` 输出完整 Liquid `video_tag` 表达式。
+
+**核心设计**:
+
+```liquid
+{{ media | video_tag: image_size: '400x', autoplay: true, loop: true, muted: true, controls: true }}
 ```
 
-**Shopify 处理后**:
-```html
-<img src="https://cdn.shopify.com/.../banner.jpg?width=3840"
-     alt="..." class="banner__image" loading="lazy" />
-```
+Shopify 解析为完整 `<video>` 标签(含 `<source>` 元素和 poster 回退图)。
 
-**客户端 React 树** + **水合**: 元素结构完全一致,`src` 从 bridge 解析。
+**签名**:
 
-**v8 方案的代价(必须接受)**:
-- ❌ 失去 `image_tag` filter 自动计算 srcset/sizes/width/height 的能力
-- ❌ 失去 `fetchPriority` 精细控制(改由 `loading` 间接控制)
-- ⚠️ Dawn 中 `image_tag` 输出包含大量属性(width, height, srcset, sizes),React 端要手写
-- ⚠️ Dawn 现有 image 类名需要手动传入
+```ts
+interface ShopifyVideoProps {
+  media: string;              // Liquid 表达式,如 "section.settings.video"
 
-**LCP 关键图(必须 `eager` 的图)的降级方案**:
-
-如一张图是页面的 LCP 关键图(如 hero banner),需要 `loading="eager"` + `fetchPriority="high"` 以提升 LCP 分数。**这种情况 React 19 会插入 preload link**。
-
-**降级方案 A:用 `<picture>` 包裹**(测试证实有效,推荐):
-```tsx
-function HeroImage(props) {
-  return (
-    <picture>
-      <source srcSet={`{{ ${props.image} | image_url: width: 800 }} 800w`} />
-      <img src={`{{ ${props.image} | image_url: width: 3840 }}`}} loading="eager" />
-    </picture>
-  );
+  // ── video_tag filter params ──
+  imageSize?: string;         // poster 尺寸,如 "400x" / "800x600"
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  controls?: boolean;
 }
 ```
-测试证实 `<picture>` 包裹的 `<img>` **不触发 React 19 自动 preload**。
 
-**降级方案 B:`useLiquidBlock` 模式**(彻底规避,最保守):
-```tsx
-function HeroImage(props) {
-  // 客户端 React 树中不渲染 <img>,完全由 Liquid 注入
-  useLiquidBlock(`<img src="{{ ${props.image} | image_url: width: 3840 }}" loading="eager" fetchpriority="high" alt="${props.alt ?? ''}" />`);
-  return null;
-}
-```
-- `<img>` 完全在 `data-ssg-hydrate` div **之外**(由 useLiquidBlock 注入)
-- 不参与 React hydration(无 mismatch 风险)
-- 失去 client-side state 管理(如交互式图片)
-- 适用于纯展示的 LCP 关键图
+**SSR 行为**:
+- `dangerouslySetInnerHTML` 输出 `{{ media | video_tag: ... }}`
+- 表达式被跟踪到 JSON bridge
 
-**默认行为**:`loading="eager"` 图用 `useLiquidBlock` 模式;`loading="lazy"` 图用 `<ImageTag>` 组件。
+**CSR 行为**:
+- 从 JSON bridge 读解析后的 URL
+- `dangerouslySetInnerHTML` 输出 `<video>` 标签
 
-**跟踪的表达式**:
-- `image` (基础)
-- `image | image_url: width: W` (实际 src 计算)
-- 全部加入 JSON bridge
+**video_tag 默认行为**:
+- `playsinline` 和 `preload="metadata"` 由 Liquid 自动添加
+- 自动生成 `<source>` 元素(mp4 + HLS m3u8)
+- 自动添加 fallback poster `<img>`
 
-**v8 方案待验证项**(待 P0 阶段实施时实际测试):
-- [ ] React 19 对 `<img src={{...}} loading="lazy">` 不插入 preload(已通过驳回验证测试 C 证实)
-- [ ] alt 为空时的 hydration(空字符串 vs undefined)
-- [ ] asPlaceholder fallback 路径
-- [ ] 多图同位置 id 唯一性
-- [ ] `<picture>` 包裹的实际 hydration 行为
-
-**风险评估**:
-- 🟢 **理论上安全**:`loading="lazy"` 默认值 + 不支持 srcSet 规避 React 19 preload
-- 🟡 **MEDIUM**:LCP 关键图需降级方案,增加复杂度
-- 🟡 **MEDIUM**:`<picture>` 包裹的实际 hydration 行为需测试
-
-**可行性结论**:🟡 MEDIUM,**优先实施并测试**。
+**风险评估**:🟢 **LOW** — 架构与 `<ShopifyImage>` 一致,无水合问题。
 
 ### 2.1.1 `useUniqueId(prefix?)` 内部 hook
 
