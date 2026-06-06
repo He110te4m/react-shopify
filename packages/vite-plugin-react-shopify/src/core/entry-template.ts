@@ -1,4 +1,5 @@
 import type { SSGEntry } from "../types/ssg";
+import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, TAG_SLOT } from "../constants/attributes";
 
 export function generateEntryModule(entry: SSGEntry, componentRel: string): string {
   const { kebabName } = entry;
@@ -8,24 +9,28 @@ export function generateEntryModule(entry: SSGEntry, componentRel: string): stri
     `import { hydrateRoot } from 'react-dom/client'`,
     `import { LiquidDataProvider } from 'vite-plugin-react-shopify/runtime'`,
     ``,
-    `const SELECTOR = '[data-ssg-component="${kebabName}"]'`,
+    `const SELECTOR = '[${ATTR_COMPONENT}="${kebabName}"]'`,
     `const roots = new Map()`,
     ``,
+    `if (typeof customElements !== 'undefined' && !customElements.get('${TAG_SLOT}')) {`,
+    `  customElements.define('${TAG_SLOT}', class extends HTMLElement {})`,
+    `}`,
+    ``,
     `function readLiquidData(el) {`,
-    `  const script = el.querySelector(':scope > script[data-ssg-liquid]')`,
+    `  const script = el.querySelector(':scope > script[${ATTR_LIQUID_BRIDGE}]')`,
     `  if (!script) return {}`,
     `  try { return JSON.parse(script.textContent || '{}') } catch { return {} }`,
     `}`,
     ``,
     `function hydrate(el) {`,
-    `  const h = el.querySelector(':scope > [data-ssg-hydrate]') || (el.matches('[data-ssg-hydrate]') ? el : null)`,
+    `  const h = el.querySelector(':scope > [${ATTR_HYDRATE}]') || (el.matches('[${ATTR_HYDRATE}]') ? el : null)`,
     `  if (!h || roots.has(h)) return`,
     `  const liquidData = readLiquidData(el)`,
     `  roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))))`,
     `}`,
     ``,
     `function unmount(el) {`,
-    `  const h = el.querySelector(':scope > [data-ssg-hydrate]') || (el.matches('[data-ssg-hydrate]') ? el : null)`,
+    `  const h = el.querySelector(':scope > [${ATTR_HYDRATE}]') || (el.matches('[${ATTR_HYDRATE}]') ? el : null)`,
     `  if (h && roots.has(h)) { roots.get(h).unmount(); roots.delete(h) }`,
     `}`,
     ``,

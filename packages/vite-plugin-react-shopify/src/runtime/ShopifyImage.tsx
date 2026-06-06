@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { GW_TRACK } from "../constants/attributes";
 import { useLiquidContext, trackExpr, pushLiquidBlock, esc, isSSR as isSsrFn } from "./utils";
 
 export type ImageLoading = "lazy" | "eager";
@@ -114,7 +115,7 @@ let _cachedAutoVars: { loadVar: string; fetchVar: string; preVar: string } | nul
 function getAutoLoadVars(): typeof _cachedAutoVars {
   if (!isSsrFn()) return null;
 
-  const tracker = (globalThis as any).__shopify_ssg_liquid_track as
+  const tracker = (globalThis as any)[GW_TRACK] as
     | Set<string>
     | undefined;
 

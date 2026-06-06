@@ -4,6 +4,7 @@
 
 import { useContext } from "react";
 import { LiquidDataContext } from "./provider";
+import { GW_TRACK, GW_BLOCKS } from "../constants/attributes";
 
 /** HTML-escape a string for safe innerHTML usage. */
 export function esc(s: string): string {
@@ -25,7 +26,7 @@ export function isSSR(): boolean {
  * Must be called **only during SSR**.
  */
 export function trackExpr(expr: string): void {
-  const tracker = (globalThis as any).__shopify_ssg_liquid_track as
+  const tracker = (globalThis as any)[GW_TRACK] as
     | Set<string>
     | undefined;
   if (tracker) tracker.add(expr);
@@ -59,7 +60,7 @@ export function useLiquidContext(): {
  * injects it before the JSON bridge.
  */
 export function pushLiquidBlock(code: string): void {
-  const blocks = (globalThis as any).__shopify_ssg_liquid_blocks as
+  const blocks = (globalThis as any)[GW_BLOCKS] as
     | string[]
     | undefined;
   if (blocks) blocks.push(code);

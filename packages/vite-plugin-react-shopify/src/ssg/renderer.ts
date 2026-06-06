@@ -12,6 +12,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import { logger } from "../core/logger";
+import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS } from "../constants/attributes";
 import { normalizeVoidElements, normalizeStyleAttributes, unwrapHtmlEntities } from "./post-process";
 
 /**
@@ -124,27 +125,27 @@ export function renderEntry(
     }
 
     // Global state: tells hooks what type of Liquid entity we're rendering.
-    (globalThis as any).__shopify_ssg_target = entry.targetType;
+    (globalThis as any)[GW_TARGET] = entry.targetType;
 
     // Build and register the Liquid filter map so hooks output correct filters.
     const prefix = entry.targetType === "block" ? "block.settings." : "section.settings.";
     const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
-    (globalThis as any).__shopify_ssg_liquid_filters = filterMap;
+    (globalThis as any)[GW_FILTERS] = filterMap;
 
     const trackedExpressions = new Set<string>();
-    (globalThis as any).__shopify_ssg_liquid_track = trackedExpressions;
+    (globalThis as any)[GW_TRACK] = trackedExpressions;
 
     const liquidBlocks: string[] = [];
-    (globalThis as any).__shopify_ssg_liquid_blocks = liquidBlocks;
+    (globalThis as any)[GW_BLOCKS] = liquidBlocks;
 
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
 
     // Clean up global registries immediately after rendering to prevent
     // bleeding state between successive entries.
-    delete (globalThis as any).__shopify_ssg_liquid_track;
-    delete (globalThis as any).__shopify_ssg_liquid_blocks;
-    delete (globalThis as any).__shopify_ssg_liquid_filters;
+    delete (globalThis as any)[GW_TRACK];
+    delete (globalThis as any)[GW_BLOCKS];
+    delete (globalThis as any)[GW_FILTERS];
 
     html = normalizeVoidElements(html);
     html = normalizeStyleAttributes(html);

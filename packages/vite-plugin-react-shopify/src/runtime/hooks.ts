@@ -9,6 +9,7 @@
  */
 import { useContext, useEffect, useState, useMemo } from "react";
 import { LiquidDataContext } from "./provider";
+import { GW_TRACK, GW_BLOCKS, GW_FILTERS } from "../constants/attributes";
 
 /**
  * Returns the Liquid filter suffix (e.g. `" | img_url: 'master'"`) for a given
@@ -16,7 +17,7 @@ import { LiquidDataContext } from "./provider";
  * renderer before SSR rendering.
  */
 function getLiquidFilter(expr: string): string {
-  const filterMap = (globalThis as any).__shopify_ssg_liquid_filters as Record<string, string> | undefined;
+  const filterMap = (globalThis as any)[GW_FILTERS] as Record<string, string> | undefined;
   return filterMap?.[expr] ?? "";
 }
 
@@ -34,7 +35,7 @@ function useLiquidRaw(expr: string): string | undefined {
   const data = useContext(LiquidDataContext) as Record<string, any>;
 
   if (typeof (globalThis as any).document === "undefined") {
-    const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
+    const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
     if (tracker) tracker.add(expr);
     const filter = getLiquidFilter(expr);
     return `{{ ${expr}${filter} }}`;
@@ -62,7 +63,7 @@ function useLiquidRawValues<T extends Record<string, string>>(
   const data = useContext(LiquidDataContext) as Record<string, any>;
 
   if (typeof (globalThis as any).document === "undefined") {
-    const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
+    const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
     const values = {} as Record<string, string | undefined>;
     for (const [key, expr] of Object.entries(map)) {
       if (tracker) tracker.add(expr);
@@ -302,12 +303,12 @@ function useLiquidBlock(code: string): string {
   useMemo(() => {
     if (!isSSR) return;
 
-    const blocks = (globalThis as any).__shopify_ssg_liquid_blocks as string[] | undefined;
+    const blocks = (globalThis as any)[GW_BLOCKS] as string[] | undefined;
     if (blocks) blocks.push(code);
 
     // Also track any Liquid expressions referenced inside the block code so
     // they are included in the JSON bridge.
-    const tracker = (globalThis as any).__shopify_ssg_liquid_track as Set<string> | undefined;
+    const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
     if (tracker) {
       let match: RegExpExecArray | null;
       while ((match = LIQUID_EXPR_RE.exec(code)) !== null) {

@@ -34,3 +34,4 @@ export type {
   ImageDecoding,
   ImageCrop,
 } from "./ShopifyImage";
+export { useLiquid } from "./hooks-v2.5";

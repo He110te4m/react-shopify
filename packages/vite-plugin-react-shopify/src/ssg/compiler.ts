@@ -24,6 +24,7 @@ import { renderEntry, resolveScriptAsset } from "./renderer";
 import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
 import { validateShopifyMeta } from "../validate";
+import { isStaticComponent } from "./static-analyzer";
 
 const log = logger("ssg:compiler");
 
@@ -108,8 +109,9 @@ async function compileEntry(
     log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
       entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
 
-    // Resolve script asset
-    const scriptAsset = resolveScriptAsset(entry.kebabName, manifest);
+    // Skip hydration JS for static components
+    const source = fs.readFileSync(entry.filePath, "utf-8");
+    const scriptAsset = isStaticComponent(source, entry.filePath) ? null : resolveScriptAsset(entry.kebabName, manifest);
 
     // Assemble Liquid
     const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
