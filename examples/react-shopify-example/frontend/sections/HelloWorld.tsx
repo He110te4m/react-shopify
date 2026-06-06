@@ -2,6 +2,8 @@ import type { ShopifyMeta } from "vite-plugin-react-shopify";
 import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
 import SharedCard from "../components/SharedCard/SharedCard";
 
+import "./HelloWorld.css";
+
 export const shopifyMeta = {
   name: "Hello World (React)",
   settings: [
@@ -21,16 +23,16 @@ export default function HelloWorld() {
 
   return (
     <main>
-      <section className="welcome full-width">
-        <div className="welcome-content">
+      <section className="react-welcome full-width">
+        <div className="react-welcome-content">
           <div>
             <h1>{title}</h1>
-            <p className="welcome-description">{description}</p>
+            <p className="react-welcome-description">{description}</p>
           </div>
         </div>
       </section>
 
-      <section className="highlights">
+      <section className="react-highlights">
         <SharedCard title="React + Shopify" accentColor={accentColor}>
           <p>Write sections, blocks, and templates as React components. The SSG compiler converts them to Shopify Liquid files at build time.</p>
         </SharedCard>

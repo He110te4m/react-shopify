@@ -115,3 +115,7 @@ body {
 .shopify-section > .full-width {
   grid-column: 1 / -1;
 }
+
+.shopify-section + .shopify-section {
+  margin-top: 128px;
+}

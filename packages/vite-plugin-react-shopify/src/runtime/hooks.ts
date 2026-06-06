@@ -226,23 +226,45 @@ function useLiquidValues<T extends Record<string, string>, const Types extends T
   return parsed as InferValues<T, Types>;
 }
 
-/**
- * Reads a section-level setting value.
- *
- * Equivalent to `useLiquidRaw(\`section.settings.${key}\`)`.
- */
-function useSectionSettings(key: string): { value: string | undefined } {
-  return { value: useLiquidRaw(`section.settings.${key}`) };
+type SettingsHook = {
+  (key: string): [string | undefined, Setter<string | undefined>];
+  (key: string, type: "string"): [string | undefined, Setter<string | undefined>];
+  (key: string, type: "number"): [number, Setter<number>];
+  (key: string, type: "boolean"): [boolean, Setter<boolean>];
+};
+
+function createSettingsHook(prefix: string): SettingsHook {
+  const hook = (
+    key: string,
+    type: LiquidTypeMode = "string",
+  ): [any, Setter<any>] => {
+    const expr = `${prefix}${key}`;
+    return (useLiquidValue as (e: string, t?: LiquidTypeMode) => any)(expr, type);
+  };
+  return hook as SettingsHook;
 }
 
 /**
- * Reads a block-level setting value.
+ * Reads a section-level setting value with React state.
  *
- * Equivalent to `useLiquidRaw(\`block.settings.${key}\`)`.
+ * Equivalent to `useLiquidValue(\`section.settings.${key}\`[, type])`.
  */
-function useBlockSettings(key: string): { value: string | undefined } {
-  return { value: useLiquidRaw(`block.settings.${key}`) };
-}
+const useSectionSettings = createSettingsHook("section.settings.");
+
+/**
+ * Reads a block-level setting value with React state.
+ *
+ * Equivalent to `useLiquidValue(\`block.settings.${key}\`[, type])`.
+ */
+const useBlockSettings = createSettingsHook("block.settings.");
+
+/**
+ * Reads a theme-level setting value with React state.
+ *
+ * Equivalent to `useLiquidValue(\`settings.${key}\`[, type])`.
+ * Theme settings use the `settings.X` namespace (no `section.` prefix).
+ */
+const useThemeSettings = createSettingsHook("settings.");
 
 /**
  * Reads a snippet parameter by name.
@@ -300,12 +322,16 @@ function useLiquidBlock(code: string): string {
   return "";
 }
 
+const useRawLiquid = useLiquidBlock;
+
 export {
   useLiquidValue,
   useLiquidValues,
   useLiquidBlock,
+  useRawLiquid,
   useSectionSettings,
   useBlockSettings,
+  useThemeSettings,
   useSnippetParams,
   useBlockParams,
 };
