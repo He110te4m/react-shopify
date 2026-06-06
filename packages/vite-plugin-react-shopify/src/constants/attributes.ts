@@ -17,6 +17,7 @@ export const GW_TARGET = '__shopify_ssg_target' as const;
 export const GW_TRACK = '__shopify_ssg_liquid_track' as const;
 export const GW_BLOCKS = '__shopify_ssg_liquid_blocks' as const;
 export const GW_FILTERS = '__shopify_ssg_liquid_filters' as const;
+export const GW_TRACK_MAP = '__shopify_ssg_tracked' as const;
 
 export const EVENT_SECTION_LOAD = 'shopify:section:load' as const;
 export const EVENT_SECTION_UNLOAD = 'shopify:section:unload' as const;

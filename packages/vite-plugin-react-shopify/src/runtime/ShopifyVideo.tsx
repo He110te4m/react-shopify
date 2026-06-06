@@ -1,11 +1,10 @@
 import { useMemo } from "react";
-import { useLiquidContext, trackExpr, esc } from "./utils";
+import { Island } from "./Island";
+import { useShopifyContext } from "./ShopifyContext";
 
 export interface ShopifyVideoProps
   extends Omit<React.HTMLAttributes<HTMLSpanElement>, "dangerouslySetInnerHTML"> {
   media: string;
-
-  // ── video_tag filter params ──────────────────────────────────────────
 
   imageSize?: string;
   autoplay?: boolean;
@@ -30,44 +29,14 @@ function buildVideoTagParams(opts: {
   return parts.join(", ");
 }
 
-interface VideoSource {
-  format: string;
-  mime_type: string;
-  url: string;
-}
-
-interface VideoData {
-  sources?: VideoSource[];
-  preview_image?: { src: string };
-  alt?: string | null;
-  media_type?: string;
-}
-
-function buildClientVideo(video: VideoData, opts: ShopifyVideoProps): string {
-  const parts: string[] = [];
-
-  if (opts.autoplay) parts.push("autoplay");
-  if (opts.loop) parts.push("loop");
-  if (opts.muted) parts.push("muted");
-  if (opts.controls) parts.push("controls");
-
-  // Match video_tag defaults: playsinline + preload=metadata
-  let videoAttrs = 'playsinline="playsinline" preload="metadata"';
-  if (parts.length) videoAttrs += " " + parts.join(" ");
-
-  const srcs = (video.sources ?? [])
-    .map((s) => `<source src="${esc(s.url)}" type="${esc(s.mime_type)}">`)
-    .join("");
-
-  // video_tag auto-generates a fallback <img> from the poster
-  const poster = video.preview_image?.src;
-  if (poster) {
-    videoAttrs += ` poster="${esc(poster)}"`;
-  }
-
-  return `<video ${videoAttrs}>${srcs}</video>`;
-}
-
+/**
+ * Renders a Shopify-hosted video using the Liquid
+ * {@code video_tag} filter.
+ *
+ * Uses the unified <Island> primitive — on SSR the Liquid expression is
+ * rendered inside a custom element. On CSR the element is empty,
+ * preserving the Liquid-rendered <video> DOM intact.
+ */
 export function ShopifyVideo({
   media,
   imageSize,
@@ -79,42 +48,30 @@ export function ShopifyVideo({
   style,
   ...rest
 }: ShopifyVideoProps) {
-  const { isSsr, get } = useLiquidContext();
+  const { isSSR, track } = useShopifyContext();
 
   const videoTagParams = useMemo(
     () => buildVideoTagParams({ imageSize, autoplay, loop, muted, controls }),
     [imageSize, autoplay, loop, muted, controls],
   );
 
-  const innerHtml = useMemo(() => {
-    if (isSsr) {
-      trackExpr(media);
-      const tagPart = videoTagParams
-        ? ` | video_tag: ${videoTagParams}`
-        : " | video_tag";
-      return `{{ ${media}${tagPart} }}`;
-    }
+  const expression = useMemo(() => {
+    if (!isSSR) return "";
+    track(media);
+    const tagPart = videoTagParams
+      ? ` | video_tag: ${videoTagParams}`
+      : " | video_tag";
+    return `{{ ${media}${tagPart} }}`;
+  }, [isSSR, media, videoTagParams, track]);
 
-    const raw: any = get(media);
-    if (!raw) return "";
-
-    if (typeof raw === "object" && raw !== null) {
-      return buildClientVideo(raw as VideoData, {
-        media, autoplay, loop, muted, controls,
-      });
-    }
-
-    return `<video src="${esc(String(raw))}"></video>`;
-  }, [isSsr, media, videoTagParams, get, autoplay, loop, muted, controls]);
-
-  if (!innerHtml) return null;
+  if (!expression && !isSSR) return null;
 
   return (
-    <span
+    <Island
+      as="span"
+      expression={expression}
       className={className}
       style={{ display: "contents", ...style }}
-      dangerouslySetInnerHTML={{ __html: innerHtml }}
-      suppressHydrationWarning
       {...rest}
     />
   );

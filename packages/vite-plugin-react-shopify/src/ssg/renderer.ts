@@ -12,7 +12,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import { logger } from "../core/logger";
-import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS } from "../constants/attributes";
+import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS, GW_TRACK_MAP } from "../constants/attributes";
 import { normalizeVoidElements, normalizeStyleAttributes, unwrapHtmlEntities } from "./post-process";
 
 /**
@@ -72,6 +72,7 @@ export interface RenderResult {
   html: string;
   trackedExpressions: Set<string>;
   liquidBlocks: string[];
+  trackMap: Map<string, any>;
   entryMeta: any;
 }
 
@@ -132,6 +133,9 @@ export function renderEntry(
     const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
     (globalThis as any)[GW_FILTERS] = filterMap;
 
+    const trackMap = new Map<string, any>();
+    (globalThis as any)[GW_TRACK_MAP] = trackMap;
+
     const trackedExpressions = new Set<string>();
     (globalThis as any)[GW_TRACK] = trackedExpressions;
 
@@ -143,6 +147,7 @@ export function renderEntry(
 
     // Clean up global registries immediately after rendering to prevent
     // bleeding state between successive entries.
+    delete (globalThis as any)[GW_TRACK_MAP];
     delete (globalThis as any)[GW_TRACK];
     delete (globalThis as any)[GW_BLOCKS];
     delete (globalThis as any)[GW_FILTERS];
@@ -151,7 +156,7 @@ export function renderEntry(
     html = normalizeStyleAttributes(html);
     html = unwrapHtmlEntities(html);
 
-    return { html, trackedExpressions, liquidBlocks, entryMeta: entry.meta };
+    return { html, trackedExpressions, liquidBlocks, trackMap, entryMeta: entry.meta };
   });
 }
 

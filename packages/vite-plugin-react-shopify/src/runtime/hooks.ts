@@ -9,7 +9,7 @@
  */
 import { useContext, useEffect, useState, useMemo } from "react";
 import { LiquidDataContext } from "./provider";
-import { GW_TRACK, GW_BLOCKS, GW_FILTERS } from "../constants/attributes";
+import { GW_TRACK, GW_BLOCKS, GW_FILTERS, GW_TRACK_MAP } from "../constants/attributes";
 
 /**
  * Returns the Liquid filter suffix (e.g. `" | img_url: 'master'"`) for a given
@@ -37,6 +37,8 @@ function useLiquidRaw(expr: string): string | undefined {
   if (typeof (globalThis as any).document === "undefined") {
     const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
     if (tracker) tracker.add(expr);
+    const trackMap = (globalThis as any)[GW_TRACK_MAP] as Map<string, any> | undefined;
+    if (trackMap) trackMap.set(expr, {});
     const filter = getLiquidFilter(expr);
     return `{{ ${expr}${filter} }}`;
   }
@@ -64,9 +66,11 @@ function useLiquidRawValues<T extends Record<string, string>>(
 
   if (typeof (globalThis as any).document === "undefined") {
     const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
+    const trackMap = (globalThis as any)[GW_TRACK_MAP] as Map<string, any> | undefined;
     const values = {} as Record<string, string | undefined>;
     for (const [key, expr] of Object.entries(map)) {
       if (tracker) tracker.add(expr);
+      if (trackMap) trackMap.set(expr, {});
       const filter = getLiquidFilter(expr);
       values[key] = `{{ ${expr}${filter} }}`;
     }
@@ -306,6 +310,8 @@ function useLiquidBlock(code: string): string {
     const blocks = (globalThis as any)[GW_BLOCKS] as string[] | undefined;
     if (blocks) blocks.push(code);
 
+    const trackMap = (globalThis as any)[GW_TRACK_MAP] as Map<string, any> | undefined;
+
     // Also track any Liquid expressions referenced inside the block code so
     // they are included in the JSON bridge.
     const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
@@ -315,7 +321,10 @@ function useLiquidBlock(code: string): string {
         const fullExpr = match[1].trim();
         const pipeIdx = fullExpr.indexOf("|");
         const exprName = pipeIdx >= 0 ? fullExpr.substring(0, pipeIdx).trim() : fullExpr;
-        if (exprName) tracker.add(exprName);
+        if (exprName) {
+          tracker.add(exprName);
+          if (trackMap) trackMap.set(exprName, {});
+        }
       }
     }
   }, [code, isSSR]);

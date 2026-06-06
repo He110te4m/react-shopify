@@ -97,7 +97,7 @@ async function compileEntry(
     const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot);
     if (!renderResult) return;
 
-    const { html, trackedExpressions, liquidBlocks } = renderResult;
+    const { html, trackedExpressions, liquidBlocks, trackMap } = renderResult;
 
     validateShopifyMeta(entry.meta, { kebabName: entry.kebabName, filePath: entry.filePath });
 
@@ -109,7 +109,7 @@ async function compileEntry(
     log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
       entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
 
-    // Skip hydration JS for static components
+    // Skip hydration JS for static components (recursively checks imports)
     const source = fs.readFileSync(entry.filePath, "utf-8");
     const scriptAsset = isStaticComponent(source, entry.filePath) ? null : resolveScriptAsset(entry.kebabName, manifest);
 
@@ -121,7 +121,7 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
-    }, [...trackedExpressions], liquidBlocks);
+    }, [...trackedExpressions], liquidBlocks, trackMap);
 
     // Write output
     const outputPath = getOutputPath(entry, {

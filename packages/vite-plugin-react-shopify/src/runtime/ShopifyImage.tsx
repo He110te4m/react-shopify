@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { GW_TRACK } from "../constants/attributes";
-import { useLiquidContext, trackExpr, pushLiquidBlock, esc, isSSR as isSsrFn } from "./utils";
+import { Island } from "./Island";
+import { useShopifyContext } from "./ShopifyContext";
 
 export type ImageLoading = "lazy" | "eager";
 export type ImageFetchPriority = "high" | "low" | "medium" | "auto";
@@ -108,25 +108,16 @@ function buildImageTagParams(opts: {
 const EAGER_THRESHOLD = 4;
 const MEDIUM_THRESHOLD = 8;
 
-let _lastTracker: Set<string> | null = null;
 let _autoVarId = 0;
 let _cachedAutoVars: { loadVar: string; fetchVar: string; preVar: string } | null = null;
 
-function getAutoLoadVars(): typeof _cachedAutoVars {
-  if (!isSsrFn()) return null;
+function getAutoLoadVars(inject: (code: string) => void, track: (path: string) => void): typeof _cachedAutoVars | null {
+  const id = _autoVarId++;
+  const lv = `img_ld_${id}`;
+  const fv = `img_fp_${id}`;
+  const pv = `img_pl_${id}`;
 
-  const tracker = (globalThis as any)[GW_TRACK] as
-    | Set<string>
-    | undefined;
-
-  if (tracker && tracker !== _lastTracker) {
-    _lastTracker = tracker;
-    const id = _autoVarId++;
-    const lv = `img_ld_${id}`;
-    const fv = `img_fp_${id}`;
-    const pv = `img_pl_${id}`;
-
-    const code = `{%- liquid
+  const code = `{%- liquid
   assign ${lv} = 'lazy'
   assign ${fv} = 'low'
   assign ${pv} = false
@@ -139,11 +130,9 @@ function getAutoLoadVars(): typeof _cachedAutoVars {
   endif
 -%}`;
 
-    pushLiquidBlock(code);
-    trackExpr("section.index");
-    _cachedAutoVars = { loadVar: lv, fetchVar: fv, preVar: pv };
-  }
-
+  inject(code);
+  track("section.index");
+  _cachedAutoVars = { loadVar: lv, fetchVar: fv, preVar: pv };
   return _cachedAutoVars;
 }
 
@@ -153,8 +142,10 @@ function getAutoLoadVars(): typeof _cachedAutoVars {
  * Renders a Shopify-hosted image using the Liquid
  * {@code image_url | image_tag} pipeline.
  *
- * When {@code loading}, {@code fetchPriority}, or {@code preload} are not
- * explicitly set, defaults are inferred from {@code section.index}.
+ * Uses the unified <Island> primitive — on SSR the Liquid expression is
+ * rendered inside a custom element so Shopify processes it. On CSR the
+ * element is empty, preserving the Liquid-rendered DOM (with optimized
+ * srcset/sizes) intact.
  */
 export function ShopifyImage({
   image,
@@ -174,18 +165,18 @@ export function ShopifyImage({
   style,
   ...rest
 }: ShopifyImageProps) {
-  const { isSsr, get } = useLiquidContext();
+  const { isSSR, inject, track } = useShopifyContext();
 
   // ── auto-loading ─────────────────────────────────────────────────────
   const needAuto =
-    loading === undefined ||
-    fetchPriority === undefined ||
-    preload === undefined;
+    isSSR &&
+    (loading === undefined ||
+     fetchPriority === undefined ||
+     preload === undefined);
 
   const autoVars = useMemo(
-    () => (needAuto ? getAutoLoadVars() : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    () => (needAuto ? getAutoLoadVars(inject, track) : null),
+    [needAuto],
   );
 
   // ── build Liquid params ──────────────────────────────────────────────
@@ -209,47 +200,23 @@ export function ShopifyImage({
     });
   }, [alt, loading, fetchPriority, decoding, preload, autoVars, tagWidth, tagHeight, sizes, widths]);
 
-  // ── compute inner HTML ───────────────────────────────────────────────
-  const innerHtml = useMemo(() => {
-    if (isSsr) {
-      trackExpr(image);
-      const urlPart = imageUrlParams ? ` | image_url: ${imageUrlParams}` : "";
-      const tagPart = imageTagParams ? ` | image_tag: ${imageTagParams}` : "";
-      return `{{ ${image}${urlPart}${tagPart} }}`;
-    }
+  // ── build expression ─────────────────────────────────────────────────
+  const expression = useMemo(() => {
+    if (!isSSR) return "";
+    track(image);
+    const urlPart = imageUrlParams ? ` | image_url: ${imageUrlParams}` : "";
+    const tagPart = imageTagParams ? ` | image_tag: ${imageTagParams}` : "";
+    return `{{ ${image}${urlPart}${tagPart} }}`;
+  }, [isSSR, image, imageUrlParams, imageTagParams, track]);
 
-    const src = get(image);
-    if (!src) return "";
-
-    const idx = Number(get("section.index") ?? NaN);
-    const effLoad = loading ?? (!Number.isNaN(idx) && idx < EAGER_THRESHOLD ? "eager" : "lazy");
-    const effFetch = fetchPriority ?? (
-      !Number.isNaN(idx)
-        ? idx < EAGER_THRESHOLD ? "high"
-        : idx < MEDIUM_THRESHOLD ? "medium"
-        : "low"
-      : undefined
-    );
-
-    const attrs: string[] = [`src="${esc(String(src))}"`];
-    if (alt) attrs.push(`alt="${esc(alt)}"`);
-    if (tagWidth != null) attrs.push(`width="${tagWidth}"`);
-    if (tagHeight != null) attrs.push(`height="${tagHeight}"`);
-    if (effLoad) attrs.push(`loading="${effLoad}"`);
-    if (effFetch) attrs.push(`fetchpriority="${effFetch}"`);
-    if (decoding) attrs.push(`decoding="${decoding}"`);
-    if (sizes) attrs.push(`sizes="${esc(sizes)}"`);
-    return `<img ${attrs.join(" ")}>`;
-  }, [isSsr, image, imageUrlParams, imageTagParams, get, alt, tagWidth, tagHeight, loading, fetchPriority, decoding, sizes]);
-
-  if (!innerHtml) return null;
+  if (!expression && !isSSR) return null;
 
   return (
-    <span
+    <Island
+      as="span"
+      expression={expression}
       className={className}
       style={{ display: "contents", ...style }}
-      dangerouslySetInnerHTML={{ __html: innerHtml }}
-      suppressHydrationWarning
       {...rest}
     />
   );

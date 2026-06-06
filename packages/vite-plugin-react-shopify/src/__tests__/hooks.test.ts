@@ -68,14 +68,14 @@ describe("runtime hooks — SSR path", () => {
   it("useSectionSettings delegates with section prefix", async () => {
     const { useSectionSettings } = await importHooks();
     const result = useSectionSettings("title");
-    expect(result.value).toBe("{{ section.settings.title }}");
+    expect(result[0]).toBe("{{ section.settings.title }}");
     expect(g.__shopify_ssg_liquid_track.has("section.settings.title")).toBe(true);
   });
 
   it("useBlockSettings delegates with block prefix", async () => {
     const { useBlockSettings } = await importHooks();
     const result = useBlockSettings("color");
-    expect(result.value).toBe("{{ block.settings.color }}");
+    expect(result[0]).toBe("{{ block.settings.color }}");
     expect(g.__shopify_ssg_liquid_track.has("block.settings.color")).toBe(true);
   });
 
@@ -408,7 +408,7 @@ describe("runtime hooks — SSR with liquid filters", () => {
     };
     const { useSectionSettings } = await importHooks();
     const result = useSectionSettings("description");
-    expect(result.value).toBe("{{ section.settings.description | newline_to_br }}");
+    expect(result[0]).toBe("{{ section.settings.description | newline_to_br }}");
   });
 
   it("useBlockSettings applies filter when set", async () => {
@@ -417,6 +417,6 @@ describe("runtime hooks — SSR with liquid filters", () => {
     };
     const { useBlockSettings } = await importHooks();
     const result = useBlockSettings("color");
-    expect(result.value).toBe("{{ block.settings.color | img_url: 'master' }}");
+    expect(result[0]).toBe("{{ block.settings.color | img_url: 'master' }}");
   });
 });
