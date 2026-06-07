@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
+import { useLiquid, BlockSlot } from "vite-plugin-react-shopify/runtime";
 
 const settings = [
   { type: "text", id: "title", label: "Section Title", default: "Block Test Section" },
@@ -41,16 +41,12 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function BlockTestSection() {
-  const [title] = useLiquidValue("section.settings.title");
-  const [layout] = useLiquidValue("section.settings.layout");
-  const [borderColor] = useLiquidValue("section.settings.border_color");
-  const [initialCount] = useLiquidValue("section.settings.initial_count", "number");
+  const [title] = useLiquid<string>("section.settings.title");
+  const [layout] = useLiquid<string>("section.settings.layout");
+  const [borderColor] = useLiquid<string>("section.settings.border_color");
+  const [initialCount] = useLiquid<number>("section.settings.initial_count", { type: "number" });
 
   const [count, setCount] = useState(initialCount);
-
-  useEffect(() => {
-    setCount(initialCount);
-  }, [initialCount]);
 
   return (
     <section
@@ -127,6 +123,25 @@ export default function BlockTestSection() {
           +1
         </button>
       </div>
+
+      {/* BlockSlot: child blocks render precisely here, between the counter and footer */}
+      <div style={{
+        padding: "1rem",
+        border: "1px dashed #ccc",
+        borderRadius: "6px",
+      }}>
+        <p style={{ margin: "0 0 0.5rem", color: "#666", fontSize: "0.85rem" }}>
+          ↓ Blocks inserted here ↓
+        </p>
+        <BlockSlot />
+        <p style={{ margin: "0.5rem 0 0", color: "#666", fontSize: "0.85rem" }}>
+          ↑ Blocks inserted above ↑
+        </p>
+      </div>
+
+      <footer style={{ fontSize: "0.75rem", color: "#999" }}>
+        Section footer — rendered after BlockSlot
+      </footer>
     </section>
   );
 }

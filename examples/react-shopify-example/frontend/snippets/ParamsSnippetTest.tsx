@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue, useLiquidValues } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   type: "snippet" as const,
@@ -9,21 +9,19 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ParamsSnippetTest() {
-  const [title] = useLiquidValue("product_title");
-  const [price] = useLiquidValue("product_price");
-  const p = useLiquidValues({
-    image: "product_image",
-    badge: "product_badge",
-  });
+  const [title] = useLiquid<string>("product_title");
+  const [price] = useLiquid<string>("product_price");
+  const [image] = useLiquid<string>("product_image");
+  const [badge] = useLiquid<string>("product_badge");
 
   const [unusedParamsDetected, setUnusedParamsDetected] = useState<string[]>([]);
 
   useEffect(() => {
     const unused: string[] = [];
-    if (p.image === undefined) unused.push("product_image=undefined (useEffect中访问，SSR未追踪)");
-    else unused.push(`product_image=${p.image}`);
-    if (p.badge === undefined) unused.push("product_badge=undefined (useEffect中访问，SSR未追踪)");
-    else unused.push(`product_badge=${p.badge}`);
+    if (image === undefined) unused.push("product_image=undefined (useEffect中访问，SSR未追踪)");
+    else unused.push(`product_image=${image}`);
+    if (badge === undefined) unused.push("product_badge=undefined (useEffect中访问，SSR未追踪)");
+    else unused.push(`product_badge=${badge}`);
     setUnusedParamsDetected(unused);
   }, []);
 

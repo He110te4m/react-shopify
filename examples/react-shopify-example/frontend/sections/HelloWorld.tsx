@@ -1,5 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 import SharedCard from "../components/SharedCard/SharedCard";
 
 import "./HelloWorld.css";
@@ -17,9 +17,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function HelloWorld() {
-  const [title] = useLiquidValue("section.settings.title");
-  const [description] = useLiquidValue("section.settings.description");
-  const [accentColor] = useLiquidValue("section.settings.accent_color");
+  const [title] = useLiquid<string>("section.settings.title");
+  const [description] = useLiquid<string>("section.settings.description");
+  const [accentColor] = useLiquid<string>("section.settings.accent_color");
 
   return (
     <main>

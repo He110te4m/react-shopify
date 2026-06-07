@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 const settings = [
   { type: "text", id: "title", label: "Title", default: "Todo List" },
@@ -25,8 +25,8 @@ interface Todo {
 let nextId = 1;
 
 export default function TodoList() {
-  const [title] = useLiquidValue("section.settings.title");
-  const [placeholder] = useLiquidValue("section.settings.placeholder");
+  const [title] = useLiquid<string>("section.settings.title");
+  const [placeholder] = useLiquid<string>("section.settings.placeholder");
 
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");

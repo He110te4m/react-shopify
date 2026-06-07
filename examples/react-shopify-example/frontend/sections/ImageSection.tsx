@@ -1,5 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue, ShopifyImage } from "vite-plugin-react-shopify/runtime";
+import { useLiquid, ShopifyImage } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   name: "Image Section (React)",
@@ -14,7 +14,7 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ImageSection() {
-  const [title] = useLiquidValue("section.settings.title");
+  const [title] = useLiquid<string>("section.settings.title");
 
   return (
     <section style={{ padding: "2rem 0" }}>

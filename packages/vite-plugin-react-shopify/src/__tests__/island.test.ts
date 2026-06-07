@@ -2,21 +2,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const g = globalThis as any;
 
-let mockContextData: Record<string, any> = {};
-
 const capturedElements: any[] = [];
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
   capturedElements.length = 0;
   return {
     ...react,
-    useContext: vi.fn(() => mockContextData),
+    useContext: vi.fn(() => ({})),
     useMemo: vi.fn((fn: () => any) => fn()),
+    useRef: vi.fn(() => ({ current: null })),
+    useLayoutEffect: vi.fn(),
     createElement: vi.fn((type: any, props: any, ...children: any[]) => {
       const el = { type, props: { ...props, children: children.length ? children : undefined } };
       capturedElements.push(el);
       return el;
     }),
+    memo: vi.fn((Comp: any, compare: any) => Comp),
   };
 });
 
@@ -31,12 +32,13 @@ function lastElement(): any {
 describe("Island — SSR path", () => {
   beforeEach(() => {
     g.document = undefined;
-    mockContextData = {};
+    g.__shopify_ssg_island_counter = { count: 0 };
     capturedElements.length = 0;
   });
 
   afterEach(() => {
     delete g.document;
+    delete g.__shopify_ssg_island_counter;
   });
 
   it("renders custom element with Liquid expression as innerHTML", async () => {
@@ -49,6 +51,15 @@ describe("Island — SSR path", () => {
       "{{ image | image_tag: loading: 'eager' }}",
     );
     expect(el.props.suppressHydrationWarning).toBe(true);
+  });
+
+  it("renders `data-ssg-i` with auto-incremented key", async () => {
+    const { Island } = await importIsland();
+    Island({ expression: "{{ a }}" });
+    Island({ expression: "{{ b }}" });
+
+    expect(lastElement().props["data-ssg-i"]).toBe("i1");
+    expect(capturedElements[0].props["data-ssg-i"]).toBe("i0");
   });
 
   it("uses custom 'as' tag name", async () => {
@@ -65,34 +76,12 @@ describe("Island — SSR path", () => {
 
     const el = lastElement();
     expect(el.props.className).toBe("my-class");
-    expect(el.props.style).toEqual({ display: "contents" });
-  });
-
-  it("content_for expression works", async () => {
-    const { Island } = await importIsland();
-    Island({ expression: "{% content_for 'blocks' %}" });
-
-    const el = lastElement();
-    expect(el.props.dangerouslySetInnerHTML.__html).toBe("{% content_for 'blocks' %}");
-  });
-
-  it("children are not passed on SSR (ignored)", async () => {
-    const { Island } = await importIsland();
-    Island({
-      expression: "{{ expr }}",
-      children: "fallback",
-    });
-
-    const el = lastElement();
-    // SSR: no children in the element
-    expect(el.props.children).toBeUndefined();
   });
 });
 
-describe("Island — CSR path", () => {
+describe("Island — client path", () => {
   beforeEach(() => {
     g.document = {};
-    mockContextData = {};
     capturedElements.length = 0;
   });
 
@@ -100,38 +89,21 @@ describe("Island — CSR path", () => {
     delete g.document;
   });
 
-  it("renders empty custom element (no innerHTML)", async () => {
+  it("renders placeholder sentinel as innerHTML", async () => {
     const { Island } = await importIsland();
     Island({ expression: "{{ image | image_tag: loading: 'eager' }}" });
 
     const el = lastElement();
     expect(el.type).toBe("shopify-island");
-    expect(el.props.dangerouslySetInnerHTML).toBeUndefined();
-    expect(el.props.suppressHydrationWarning).toBeUndefined();
+    expect(el.props.dangerouslySetInnerHTML.__html).toBe("__SSG_ISLAND__");
+    expect(el.props.suppressHydrationWarning).toBe(true);
   });
 
-  it("passes CSR fallback children", async () => {
+  it("passes ref for useLayoutEffect restoration", async () => {
     const { Island } = await importIsland();
-    Island({ expression: "{{ expr }}", children: "fallback" });
+    Island({ expression: "{{ expr }}" });
 
     const el = lastElement();
-    expect(el.type).toBe("shopify-island");
-    expect(el.props.children).toEqual(["fallback"]);
-  });
-
-  it("passes className and style on CSR", async () => {
-    const { Island } = await importIsland();
-    Island({ expression: "{{ expr }}", className: "my-class", style: { display: "contents" } });
-
-    const el = lastElement();
-    expect(el.props.className).toBe("my-class");
-    expect(el.props.style).toEqual({ display: "contents" });
-  });
-});
-
-describe("Island — custom element registration", () => {
-  it("does not throw when customElement is undefined (SSR)", () => {
-    // This is tested implicitly by the SSR tests above
-    // Import happens at module level and handles undefined customElements
+    expect(el.props.ref).toBeDefined();
   });
 });

@@ -23,7 +23,7 @@ import { bundleEntry } from "./bundler";
 import { renderEntry, resolveScriptAsset } from "./renderer";
 import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
-import { validateShopifyMeta } from "../validate";
+import { validateShopifyMeta, validateBlockSlot } from "../validate";
 import { isStaticComponent } from "./static-analyzer";
 
 const log = logger("ssg:compiler");
@@ -100,6 +100,9 @@ async function compileEntry(
     const { html, trackedExpressions, liquidBlocks, trackMap } = renderResult;
 
     validateShopifyMeta(entry.meta, { kebabName: entry.kebabName, filePath: entry.filePath });
+
+    // Post-render: check BlockSlot usage matches declared blocks config
+    validateBlockSlot(html, { kebabName: entry.kebabName, filePath: entry.filePath }, entry.meta.blocks);
 
     // Categorize CSS
     const cssFiles = entryCssFiles.get(entry.kebabName) || [];

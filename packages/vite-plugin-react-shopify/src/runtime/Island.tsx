@@ -1,20 +1,41 @@
-import { useMemo, createElement } from "react";
+/**
+ * @file Unified hydration boundary for Liquid-owned DOM content.
+ *
+ * Two-phase capture strategy:
+ *
+ * **SSR phase** (Node): Renders a custom element with
+ * `dangerouslySetInnerHTML` containing the Liquid placeholder expression
+ * (e.g. `{% raw %}{{ ... }}{% endraw %}`).  Also stores an auto-incremented
+ * *island key* in the `data-ssg-i` attribute so the client-side hydrate
+ * function can pre-capture the element's real innerHTML (what Liquid
+ * generated on the production server) **before** React mounts.
+ *
+ * **Client phase** (browser): The pre-capture step (run by
+ * `entry-template.ts`) swaps each island element's innerHTML to a known
+ * sentinel string (`__SSG_ISLAND__`) and saves the original Liquid output
+ * on a hidden expando.  Island renders
+ * `dangerouslySetInnerHTML={{ __html: '__SSG_ISLAND__' }}` so React
+ * hydration sees an exact match and leaves the DOM alone.  A
+ * `useLayoutEffect` then restores the real innerHTML from the expando.
+ *
+ * Finally, `React.memo(() => true)` prevents any future re-render, freezing
+ * the Liquid content for the lifetime of the component.
+ */
+import {
+  useRef,
+  useLayoutEffect,
+  createElement,
+  memo,
+} from "react";
 import { useShopifyContext } from "./ShopifyContext";
+import {
+  GW_ISLAND_COUNTER,
+  ATTR_ISLAND,
+  TAG_ISLAND,
+} from "../constants/attributes";
 
-// Register <shopify-island> custom element for hydration boundary.
-// Only runs in browser environments where customElements is available.
-{
-  const g = globalThis as any;
-  if (
-    typeof g.customElements !== "undefined" &&
-    !g.customElements.get("shopify-island")
-  ) {
-    g.customElements.define(
-      "shopify-island",
-      class extends g.HTMLElement {},
-    );
-  }
-}
+/** Sentinel string that replaces real innerHTML before hydration. */
+const ISLAND_PLACEHOLDER = "__SSG_ISLAND__";
 
 export type IslandProps = {
   expression: string;
@@ -24,43 +45,68 @@ export type IslandProps = {
   children?: React.ReactNode;
 };
 
-/**
- * Unified hydration boundary for Liquid-owned DOM content.
- *
- * SSR: renders a custom element wrapping the Liquid expression.
- * CSR: renders only the custom element (empty) — React skips
- * hydration of the interior, preserving Liquid-rendered DOM.
- *
- * Covers:
- *   Scenario 1 — `{% content_for 'blocks' %}`
- *   Scenario 2 — `{{ image | image_tag: ... }}`, `{{ video | video_tag: ... }}`
- */
-export function Island({
+function IslandImpl({
   expression,
-  as: Tag = "shopify-island",
+  as: Tag = TAG_ISLAND,
   className,
   style,
-  children,
   ...rest
 }: IslandProps) {
-  const { isSSR } = useShopifyContext();
+  const ctx = useShopifyContext();
+  const ref = useRef<any>(null);
 
-  const innerHTML = useMemo(
-    () => (isSSR ? expression : undefined),
-    [isSSR, expression],
-  );
+  // ── SSR ───────────────────────────────────────────────────────────────
+  if (ctx.phase === "ssg") {
+    // Auto-assign a stable key from the global counter
+    const counter: { count: number } =
+      (globalThis as any)[GW_ISLAND_COUNTER] ?? { count: 0 };
+    const key = `i${counter.count++}`;
+    (globalThis as any)[GW_ISLAND_COUNTER] = counter;
 
-  if (isSSR) {
     return createElement(Tag, {
+      ...rest,
       className,
       style,
-      dangerouslySetInnerHTML: { __html: innerHTML! },
+      [ATTR_ISLAND]: key,
       suppressHydrationWarning: true,
-      ...rest,
+      dangerouslySetInnerHTML: { __html: expression },
     });
   }
 
-  // CSR: empty element. React vdom has no children → no hydration
-  // mismatch to patch. Liquid-rendered DOM inside the element stays.
-  return createElement(Tag, { className, style, ...rest }, children);
+  // ── Client (hydrating / mounted) ────────────────────────────────────
+  // The pre-capture step in entry-template replaced the real innerHTML with
+  // ISLAND_PLACEHOLDER and stored the original in `_ssgHtml`.  We render
+  // the same placeholder so React hydration sees a match.
+  // After commit, useLayoutEffect restores the real content.
+
+  useLayoutEffect(() => {
+    if (ref.current && (ref.current as any)._ssgHtml !== undefined) {
+      const html: string = (ref.current as any)._ssgHtml;
+      if (html && html !== ISLAND_PLACEHOLDER) {
+        ref.current.innerHTML = html;
+      }
+      delete (ref.current as any)._ssgHtml;
+    }
+  });
+
+  return createElement(Tag, {
+    ...rest,
+    ref,
+    className,
+    style,
+    suppressHydrationWarning: true,
+    dangerouslySetInnerHTML: { __html: ISLAND_PLACEHOLDER },
+  });
 }
+
+/**
+ * **`React.memo(() => true)`** – permanent bail-out.
+ *
+ * Once the Liquid content is rendered / restored, no prop change should
+ * ever cause a re-render of the island wrapper because the DOM inside is
+ * managed by Liquid / Shopify, not by React.
+ *
+ * The comparison function always returns `true` (props are "equal") so
+ * React skips re-rendering unconditionally.
+ */
+export const Island = memo(IslandImpl, () => true);

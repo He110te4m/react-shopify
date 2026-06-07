@@ -1,5 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 import ImageHero from "../components/ImageHero/ImageHero";
 import ImageCard from "../components/ImageCard/ImageCard";
 
@@ -21,7 +21,7 @@ export const shopifyMeta = {
  * should be shared because they are in the same section.
  */
 export default function MultiComponentSection() {
-  const [title] = useLiquidValue("section.settings.title");
+  const [title] = useLiquid<string>("section.settings.title");
 
   return (
     <section style={{ padding: "2rem 0" }}>

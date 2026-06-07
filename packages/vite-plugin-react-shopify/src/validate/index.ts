@@ -12,6 +12,7 @@ import {
   checkNameLength,
   checkEmptyStringDefault,
   checkBlocksCoexistence,
+  checkBlockSlot,
   MAX_NAME_LENGTH,
 } from "./rules";
 import type { BlockDefinition } from "../types/shopify";
@@ -54,6 +55,26 @@ export function validateShopifyMeta(meta: ValidatableMeta, context: ValidateCont
 
   const blocksWarning = checkBlocksCoexistence(meta.blocks, context.kebabName);
   if (blocksWarning) warnings.push(blocksWarning);
+
+  for (const w of warnings) {
+    log.warn(w);
+  }
+
+  return warnings;
+}
+
+/**
+ * Post-render validation: check that `<BlockSlot />` usage matches
+ * the declared `blocks` configuration.
+ *
+ * Called from {@link compileEntry} after SSR rendering.
+ */
+export function validateBlockSlot(
+  html: string,
+  context: ValidateContext,
+  blocks?: BlockDefinition[],
+): string[] {
+  const warnings = checkBlockSlot(html, blocks, context.kebabName);
 
   for (const w of warnings) {
     log.warn(w);

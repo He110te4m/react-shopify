@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue, useLiquidValues } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   name: "Settings Tracker Test",
@@ -20,19 +20,17 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function SettingsTrackerTest() {
-  const [title] = useLiquidValue("section.settings.title");
-  const [description] = useLiquidValue("section.settings.description");
-  const [showBanner] = useLiquidValue("section.settings.show_banner", "boolean");
-  const [bannerPosition] = useLiquidValue("section.settings.banner_position");
+  const [title] = useLiquid<string>("section.settings.title");
+  const [description] = useLiquid<string>("section.settings.description");
+  const [showBanner] = useLiquid<boolean>("section.settings.show_banner", { type: "boolean" });
+  const [bannerPosition] = useLiquid<string>("section.settings.banner_position");
 
-  const unused = useLiquidValues({
-    effect_only_text: "section.settings.effect_only_text",
-  });
+  const [effectOnlyText] = useLiquid<string>("section.settings.effect_only_text");
 
   const [effectResult, setEffectResult] = useState("(等待 hydrate)");
 
   useEffect(() => {
-    if (unused.effect_only_text) setEffectResult(unused.effect_only_text);
+    if (effectOnlyText) setEffectResult(effectOnlyText);
   }, []);
 
   return (

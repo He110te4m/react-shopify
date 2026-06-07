@@ -12,7 +12,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { Manifest } from "vite";
 import { logger } from "../core/logger";
-import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS, GW_TRACK_MAP } from "../constants/attributes";
+import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS, GW_TRACK_MAP, GW_ISLAND_COUNTER } from "../constants/attributes";
 import { normalizeVoidElements, normalizeStyleAttributes, unwrapHtmlEntities } from "./post-process";
 
 /**
@@ -142,6 +142,10 @@ export function renderEntry(
     const liquidBlocks: string[] = [];
     (globalThis as any)[GW_BLOCKS] = liquidBlocks;
 
+    // Island key counter — auto-incremented by <Island> during SSR so each
+    // island gets a unique `data-ssg-i` attribute for client pre-capture.
+    (globalThis as any)[GW_ISLAND_COUNTER] = { count: 0 };
+
     const element = createElement(Component);
     let html = renderToStaticMarkup(element);
 
@@ -151,6 +155,7 @@ export function renderEntry(
     delete (globalThis as any)[GW_TRACK];
     delete (globalThis as any)[GW_BLOCKS];
     delete (globalThis as any)[GW_FILTERS];
+    delete (globalThis as any)[GW_ISLAND_COUNTER];
 
     html = normalizeVoidElements(html);
     html = normalizeStyleAttributes(html);

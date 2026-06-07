@@ -15,15 +15,27 @@ function readLiquidData(el) {
   try { return JSON.parse(script.textContent || '{}') } catch { return {} }
 }
 
+function captureIslands(el) {
+  const nodes = el.querySelectorAll('[data-ssg-i]');
+  const alsoSelf = el.matches && el.matches('[data-ssg-i]');
+  const all = alsoSelf ? [el, ...nodes] : Array.from(nodes);
+  for (const node of all) {
+    if (node._ssgHtml !== undefined) continue;
+    node._ssgHtml = node.innerHTML;
+    node.innerHTML = '__SSG_ISLAND__';
+  }
+}
+
 function hydrate(el) {
-  const h = el.querySelector(':scope > [data-ssg-hydrate]') || (el.matches('[data-ssg-hydrate]') ? el : null);
+  const h = el.querySelector(':scope > [data-ssg-h]') || (el.matches('[data-ssg-h]') ? el : null);
   if (!h || roots.has(h)) return;
   const liquidData = readLiquidData(el);
+  captureIslands(h);
   roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))));
 }
 
 function unmount(el) {
-  const h = el.querySelector(':scope > [data-ssg-hydrate]') || (el.matches('[data-ssg-hydrate]') ? el : null);
+  const h = el.querySelector(':scope > [data-ssg-h]') || (el.matches('[data-ssg-h]') ? el : null);
   if (h && roots.has(h)) { roots.get(h).unmount(); roots.delete(h) }
 }
 
@@ -76,8 +88,13 @@ describe("nested section+block isolation", () => {
     expect(entriesModule).toContain(selector);
   });
 
+  it("captureIslands runs before hydrateRoot", () => {
+    const fnMatch = entriesModule.match(/function captureIslands\([^)]*\)\s*\{([^}]+)\}/s);
+    expect(fnMatch).not.toBeNull();
+  });
+
   it("does not interfere with sibling hydration containers", () => {
-    expect(entriesModule).toContain(":scope > [data-ssg-hydrate]");
+    expect(entriesModule).toContain(":scope > [data-ssg-h]");
   });
 
   it("roots Map prevents double-hydrating the same container", () => {
