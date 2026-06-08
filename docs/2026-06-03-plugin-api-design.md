@@ -1,19 +1,10 @@
-# Plugin API Design — Dawn Migration Hooks
+# Plugin API Design — v3.0 Runtime API
 
-> ✅ **评审通过 · v9.1 终态(2026-06-03)**
-> 经历 4 轮评审(评审 v1 + 驳回验证 + 评审 v2 + 修正),文档已达自洽可执行态。
-> **状态**: 可进入实施。
+> ✅ **v3.0 更新(2026-06-08)** — 匹配当前代码实现。v1-v9 的 14+ hook 设计已简化为 2 个核心原语 + 4 个组件。
+> 历史:经历 v1-v9.1 多轮设计迭代(4 轮评审),v3.0 起大幅简化 API 表面。
+> **状态**: 核心 API 已实施(useLiquid/useLiquidCode/Island/BlockSlot/ShopifyImage/ShopifyVideo)。i18n 和 StaticBlock 待实施。
 >
-> **版本历程**:
-> - v1: 初版(19 hooks 设计,含错误设计)
-> - v2: 评审 v1 后 — 移除 `useShopifyAttributes` / `useBlockContext` / `useBlockRouter`,改 `useImageTag` 为 `<ImageTag>` 组件,改 `useBlockLoop` 为 `<BlockSlot>` 组件
-> - v3: 文档自洽化 — 删除 HTML 注释示意图,清理矛盾
-> - v4: 修正矛盾 — 修正 fetchPriority 拼写,文档详细化
-> - v5: 统一 ID 决策 — 接受单引号也会被转义,移除驳回 1
-> - v6: 评审 v2 反馈 — 修正 `DEFAULT_LIQUID_FILTERS` 无效项,H3 降级为 warn,补充使用约束
-> - v7: H3 规则细化,移除 `findName` 等不合理自动修复
-> - v8: `<ImageTag>` 重设计 — 渲染真实 `<img>` + 默认 `loading="lazy"`,LCP 关键图用 `<picture>` 包裹
-> - **v9.1(终态)**: H3 规则最终降级为 `warn`,移除 `fixer`
+> **v3.0 关键变化**:14+ 专用 hook → 2 个核心原语(`useLiquid`/ `useLiquidCode`) + Island 水合边界 + 4 个组件。纯 JS 工具函数移到用户空间。
 >
 > 用途:把主报告(v11)中所有 hook 需求从 §8 抽出,提供**完整 API 签名、SSR/CSR 双端行为、边缘情况、实现路径、可行性评级**。
 > 评审方法:每个 hook 单独评审,通过/打回/打回需返工,逐个推进。
@@ -32,168 +23,129 @@
 | **SSR**(Node.js, esbuild 临时 bundle) | 渲染 React 树,产出 HTML | 跟踪 Liquid 表达式,生成占位符,组装最终 Liquid |
 | **CSR**(浏览器) | 拿到 SSR 产出的 HTML 后,接管 hydration | 从 JSON bridge 读值,接管 React state |
 
-### 0.2 占位符机制(v8 修正,不用占位符)
+### 0.2 Island 水合边界机制
 
-> **v8 重大修正**:**放弃"在 React 树中占位 + 后处理替换"模式**(v1-v4 HTML 注释 / v5-v7 span+data-img-id 都被评审证实不可行)。改为**全局收集 + 注入到 `data-ssg-hydrate` div 之前**(沿用现有 `useLiquidBlock` 机制)。
+> **v3.0 起**:用 **Island 模式**替代了 v1-v8 所有的占位符方案(HTML 注释 / span / 标记替换)。
+> 核心思路:在 React 树中用 `<Island>` 包裹「需要 Liquid 生成 HTML」的区域,
+> 通过自定义元素 + `dangerouslySetInnerHTML` + 客户端 capture/restore 两阶段,实现 SSR 与 CSR 的水合一致。
 
-**当前方案(无占位符)**:
-
-```
-SSR 阶段(在 React 渲染之外,无 DOM 影响):
-  useLiquidBlock('{% style %}.section-padding { ... }{% endstyle %}')
-  ↓ 推入全局 __shopify_ssg_liquid_blocks 数组
-
-渲染器(在 React renderToStaticMarkup 之后):
-  __shopify_ssg_liquid_blocks 内容
-  ↓ 注入到 <div data-ssg-hydrate> 之前
-
-最终 HTML:
-  {% style %}.section-padding { ... }{% endstyle %}  ← 从 React 树之外注入
-  <div data-ssg-hydrate>React 树输出</div>
-
-客户端:
-  useLiquidBlock 行为 = no-op
-  React 树结构 = SSR HTML 结构 → 水合一致
-```
-
-**为什么放弃占位符模式**:
-- v1-v4 HTML 注释:被 `renderToStaticMarkup` 转义为 `&lt;!--`(实证发现 1)
-- v5-v6 span + null return:hydration mismatch(child count: SSR 1 → CSR 0,实证发现 2)
-- v7 真实 `<img>` + null return:已改为渲染真实 `<img>`,不需要占位符
-
-**当前可用的"插入 Liquid"机制**:
-| API | 位置 | 用途 |
-|---|---|---|
-| `useLiquidBlock(code)` | `data-ssg-hydrate` div **之前** | 独立的 Liquid 片段(`{% style %}`, `{{ 'icon' | inline_asset_content }}` 等) |
-| `useRawLiquid(code)` | 同上(v8 改为 useLiquidBlock 别名) | 同上 |
-| **无 "在 React 树中间占位" 机制** | — | 当前架构不支持,需重设计 |
-
-**适合"在 React 树中间"插入的场景**(如 `{% form %}` 包裹 children):
-- 当前架构**不支持**
-- 阶段 1 不实现 useForm / usePaginate
-- 阶段 4+ 重写(详见 §3.2 §3.3)
-
-### 0.3 JSON Bridge:统一数据流,不分层
-
-> **v5 修正(用户反馈)**:v1-v4 把 bridge 分为"Section 级 / Block 级 / Snippet 级"。**这是错误的过度设计**。Bridge 本质是"Liquid 表达式 → 客户端 React state"的反向序列化通道,与 React 树的 Section/Block 划分**无关**。
->
-> 一个 bridge 一份 map,key 是完整表达式字符串(包含 `block.settings.X` 等),value 是 Liquid 求值后的结果。Shopify 在 SSR 阶段会按上下文自动解析 `block.settings.X` 为当前 block 的值,React 端通过 `useBlockSettings("X")` 自动从当前 React tree 节点获取。
-
-**修正后的统一数据流**:
+**Island 工作流**:
 
 ```
 SSR 阶段:
-  1. 渲染 React 树,跟踪所有 useLiquidValue / useSectionSettings / useBlockSettings 调用
-  2. 收集到的所有表达式,加入单次渲染的 __shopify_ssg_liquid_track: Set<string>
-  3. 渲染完成后,把这些表达式输出到单个 <script type="application/json" data-ssg-liquid>
-  4. 整个 .liquid 文件中,这个 bridge 出现一次
-
-Shopify SSR 阶段(在 .liquid 渲染时):
-  - 解析 {{ expr }} 时,按当前 Liquid 上下文(section / block / snippet)求值
-  - block.settings.X 自动指向当前 for-loop 块
+  React 树中放入 <Island expression="{{ image_url | image_tag }}" />
+  ↓ renderToStaticMarkup
+  <ssg-island data-ssg-i="i3" suppressHydrationWarning>
+    {{ section.settings.image | image_url: width: 800 | image_tag }}
+  </ssg-island>
+  ↓ Shopify Liquid 引擎处理
+  <ssg-island data-ssg-i="i3">
+    <img src="..." srcset="..." sizes="..." loading="lazy" />  ← 实际 HTML
+  </ssg-island>
 
 客户端 hydration:
-  - LiquidDataProvider 注入 bridge 数据
-  - useLiquidValue / useBlockSettings 等 hook 从 React tree 当前位置读值
-  - 当前 React tree 节点 = 当前 block(由 Shopify 的 {% content_for 'blocks' %} 决定)
+  1. entry-template 预捕获:将每个 Island 的 innerHTML 替换为 "__SSG_ISLAND__" 哨兵,
+     真实 HTML 保存到 el._ssgHtml
+  2. React hydrateRoot:看到 innerHTML = "__SSG_ISLAND__" → 与 React 树匹配 → 水合成功
+  3. Island.useLayoutEffect:从 el._ssgHtml 恢复真实 HTML → DOM 完整
+  4. React.memo(() => true):永久阻止重新渲染,Liquid 内容冻结
 ```
 
-**为什么不需要 block 独立的 bridge**:
-- Shopify 的 `{% for block in section.blocks %}` 在 `{{ block.settings.X }}` 求值时,**Liquid 引擎自动按当前 for-loop 迭代上下文解析**,不需要额外的命名空间
-- 客户端 React 也按 React tree 的位置自动路由到正确的 block
-- 唯一需要的是:**每个 block 是独立的 React entry**(由 `<BlockSlot>` + 独立 entry 实现),每个 entry 渲染自己**局部**的 JSON bridge
+**可用的「插入 Liquid」机制**:
 
-**结论**:bridge 不分层,每 entry 一个 bridge,内部 key 用完整表达式字符串(包含 `block.settings.X`)。
+| API | 位置 | 用途 |
+|---|---|---|
+| `useLiquidCode(code)` | `data-ssg-hydrate` div **之前** | 独立的 Liquid 片段(`{% style %}`, `{% content_for "block" %}` 等) |
+| `<Island expression={...}>` | React 树**中间** | 需要 Liquid 生成 HTML 的区域(图片、视频、`{% form %}` 等) |
+| `<BlockSlot />` | React 树**中间** | `{% content_for 'blocks' %}` block 注入点(Island 模式封装) |
 
-**v1-v4 "Section/Block 分层" 是错误设计**:
-- 多余的层级概念增加理解成本
-- 实际上 Shopify 引擎 + React tree 自然处理了"作用域"
-- v5 起文档统一使用"entry 级 bridge" 概念,一个 entry(section / block / snippet)对应一个 bridge
+**不在 React 树中的 Liquid**(如 `{% style %}`, `{% schema %}`):
+- `useLiquidCode` 推入 `globalThis.__shopify_ssg_liquid_blocks`,由 `liquid-assembler.ts` 注入到 wrapper 之外
 
-### 0.4 ID 生成:内部化,不暴露(v6 重写,统一论证)
+**不适合用 Island 的场景**(如 `{% form %}` 包裹 children):
+- Island 适合「完整 HTML 片段」,不适合「开启/关闭标签包裹 React children」
+- `useForm` 阶段 1 不实现,阶段 4+ 重写(详见 §3.2)
 
-> **v6 修正(用户反馈 v5)**:v5 文档中 §0.4 / §0.5 / §2.1.1 三处对 useId vs uuid vs 自增计数器 的论证**互相矛盾**(一会说用 uuid,一会说不用 uuid,一会说不能用 useId,一会又分析 useId 适用场景)。这里给出**单一连贯**的决策。
+### 0.3 JSON Bridge:统一数据流,不分层
 
-**核心事实**:**占位符 id 不进入最终产物**。
-- SSR 阶段:`<ImageTag>` 渲染为 `<span data-img-id="img-1" hidden>`
-- SSR 后处理:`<span data-img-id="img-1" hidden>` 被替换为完整的 `<img src="...">` 标签
-- 客户端水合:占位符已不存在,`<ImageTag>` 组件返回 null,React 不需要这个 id
-- **最终 HTML 中,这个 id 从未出现过**
+**核心设计**:bridge 本质是"Liquid 表达式 → 客户端 React state"的反向序列化通道。
+一个 entry(section / block / snippet)对应一个 bridge,key 是完整表达式字符串(如 `"section.settings.image"`)。
 
-**这个事实的推论**:
-- ❌ **不需要 server/client 稳定 id** — 客户端永远不读它
-- ❌ **不需要跨进程全局唯一** — 每次 SSR 是一次性渲染
-- ❌ **不需要 HTML 属性安全的格式** — 它不进 DOM 属性
-- ❌ **不需要跨渲染稳定** — 占位符临时,被替换后消失
-- ✅ **只需要**:单次 SSR 渲染内唯一,够区分多个组件
+**实际实现流程**:
 
-**候选方案对比**:
-
-| 方案 | 满足需求? | 代价 | 评价 |
-|---|---|---|---|
-| **自增计数器** | ✅ | 5 行代码,0 KB | 满足所有要求,**最简单** |
-| `React.useId()` | ✅ | 0 行(React 自带) | 满足,但它提供的"server/client 稳定"特性对我们是**浪费** |
-| `uuid` npm 包 | ✅ | 3 KB gzipped,1 个依赖 | 满足,但提供"全局唯一"是**过度设计** |
-| 注释占位 `<!--IMG-N-->` | ✅ | 0 行 | 满足,但 HTML 注释解析不如 data-attr 稳定(已被 v5 放弃) |
-
-**决策**:**自增计数器**(5 行实现,无依赖)。
-- 用户反馈"自增 id 在 React tree 多次渲染时可能冲突" — **不会**。我们在 `useRef` 内缓存,组件重渲染不重新生成;SSR 进程内单调递增,无冲突可能
-- "不引入外部依赖" — 0 KB 体积,符合 Dawn 迁移期"压体积"原则
-- "5 行实现,可读可改" — 不需要 uuid 的全局唯一(跨进程)能力,因为占位符不进最终产物
-
-**对比 v5 矛盾**:
-
-| v5 错误表述 | v6 修正 |
-|---|---|
-| "uuid v4 的字符串简单清晰" → 暗示用 uuid | **不**用 uuid,因为自增计数器已经够用 |
-| "React.useId() 含 `:`" | `:` 没问题(不进 DOM),但 useId 的 server/client 稳定特性对我们是浪费 |
-| "uuid 引入 3KB" → 不该用 | 不该用,**但理由是"过度设计"**而不是"3KB 太大"(对比自增计数器才有"过度"概念) |
-
-**§0.5 旧版"React.useId() 适用场景"分析**:**保留作为知识背景**(`useId()` 真正适用场景是 `<label htmlFor>`/`<input id>` 等需要 server/client 稳定 id 的场景),但**已不属于本节**——本节只讲"占位符 id 怎么生成"。
-
-**§2.1.1 旧版"为什么不用 useId"**:**删除**。既然 v6 决策是"自增计数器",对比对象是"uuid 是不是过度",而不是"useId 是不是合适"。
-
-**实现** (5 行,无外部依赖):
-
-```ts
-// frontend/utils/use-unique-id.ts
-let counter = 0;
-export function useUniqueId(prefix: string = 'u'): string {
-  const ref = useRef<string | null>(null);
-  if (ref.current === null) {
-    counter = (counter + 1) & 0xffffffff;
-    ref.current = `${prefix}-${counter.toString(36)}`;
-  }
-  return ref.current;
-}
 ```
+SSR 阶段:
+  1. useLiquid("section.settings.image") → ctx.track("section.settings.image")
+     ↓ 写入 globalThis.__shopify_ssg_liquid_track Map
+  2. renderToStaticMarkup 完成后,调用 buildLiquidBridge()
+     ↓ 从 Map 读取所有跟踪项,生成:
+     <script type="application/json" data-ssg-liquid>
+       { "section.settings.image": {{ section.settings.image | json }} }
+     </script>
+  3. liquid-assembler.ts 将 bridge 注入到 section wrapper 内,data-ssg-h 前
 
-**主题开发者使用**(完全不感知):
-```tsx
-<ImageTag image={image} width={3840} />
-```
+Shopify Liquid 引擎处理:
+  {{ section.settings.image | json }} → 实际图片 URL(JSON 转义)
 
-**客户端 vs 服务端 id 一致性保证**:
-- **不需要保证**。占位符是临时的,被替换后消失
-- React 在客户端渲染 `<ImageTag>` 时直接返回 null,完全不依赖占位符的 id
+客户端 hydration:
+  1. entry-template 中 readLiquidData(el):
+     el.querySelector(':scope > script[data-ssg-liquid]') → JSON.parse()
+  2. LiquidDataProvider 注入 bridge 数据到 React context
+  3. useLiquid(path) → ctx.read(path) → bridge[path]
+
+为什么 key 用完整表达式:
+  - "section.settings.image" vs "block.settings.heading" 天然区分作用域
+  - Shopify Liquid 引擎按 for-loop 上下文自动解析 block.settings.X
+  - 客户端 bridge[key] 即返回正确值,无需分层
+
+✨ v3.0 简化:所有 Liquid 值读取统一走 useLiquid,不再区分 section/block/theme 来源。
+  路径字符串本身携带了作用域信息,`useLiquid("section.settings.X")` 和 `useLiquid("block.settings.X")`
+  在同一个 bridge 中共存。
+
+### 0.4 Island 内部 ID 分配
+
+> **v3.0**:`useUniqueId` 不再作为公共 API。Island 内部使用自增计数器分配 `data-ssg-i="i3"`,
+> 用于客户端预捕获阶段定位元素。id 不进入最终产物(客户端 `useLayoutEffect` 恢复后即被替换),
+> 无需 server/client 稳定或跨进程唯一。实现:`globalThis.__shopify_ssg_island_counter`,5 行,无外部依赖。
 
 ---
 
-## 1. Hook 分类总览
+## 1. API 分类总览 (v3.0)
 
-按实现复杂度与可行性分为 4 类:
+> **v3.0 重大简化**:v1-v9 的 14+ 专用 hook 已被替换为 2 个核心原语 (`useLiquid` / `useLiquidCode`) + 4 个组件 (`Island` / `BlockSlot` / `ShopifyImage` / `ShopifyVideo`)。
+> 设计哲学:插件提供**最小核心 API**,纯 JS 工具函数（`useImageBehavior` / `useColorScheme` 等）在用户空间 (`frontend/utils/`) 实现。
 
-| 类别 | 标记 | 描述 | 数量 |
-|---|---|---|---|
-| **A 类 — 简单值 hook** | 🟢 HIGH | 行为类似现有 `useLiquidValue`,只是参数不同 | 10(v1:11) |
-| **A' 类 — 标记替换组件** | 🟡 MEDIUM | 输出 HTML 片段,需标记替换避免水合 mismatch | 1(useImageTag 改造) |
-| **B 类 — 标记替换 hook** | 🟡 MEDIUM | 需要在 React 树中插入占位符,SSR 后字符串替换 | 3(v1:4,useShopifyAttributes 移除) |
-| **C 类 — 组件化 slot** | 🟢 HIGH | 利用 Shopify 现有 `{% content_for 'blocks' %}` 机制 | 1(`<BlockSlot>` 替代 useBlockLoop) |
-| **D 类 — i18n hook** | 🟢 HIGH | 字典查找,build 时生成 | 2 |
+按职责分为 4 类:
 
----
+| 类别 | 标记 | API | 描述 |
+|------|------|-----|------|
+| **核心原语** | 🟢 DONE | `useLiquid<T>(path, opts?)` | 统一读 Liquid 值,替换所有专用读 hook |
+| | 🟢 DONE | `useLiquidCode(code, expr?)` | 注入原始 Liquid 片段到 wrapper 之外 |
+| **水合边界** | 🟢 DONE | `<Island expression={...}>` | 通用 hydration 边界,包裹需要 Liquid 生成 HTML 的区域 |
+| | 🟢 DONE | `<BlockSlot />` | block 注入点,渲染 `{% content_for 'blocks' %}` |
+| **媒体组件** | 🟢 DONE | `<ShopifyImage>` | CDN 图片,`image_url \| image_tag` 管道 |
+| | 🟢 DONE | `<ShopifyVideo>` | `video_tag` 管道 |
+| **上下文** | 🟢 DONE | `LiquidDataProvider` | bridge 数据注入到 React context |
+| **用户空间** | 🟢 不进插件 | `useImageBehavior` / `useColorScheme` / `useBlockType` / `clsx` 等 | 纯 JS utility,在 `frontend/utils/` 中实现 |
+| **待实现** | 🟡 TODO | i18n 系统 | `useT` / `useLocale` / `LocaleProvider` |
+| | 🟡 TODO | `<StaticBlock>` | 静态 block 注入 |
 
-## 1. 关键评审反馈评估(v7,基于实证测试)
+**v1-v9 中已移除的 hook 对照**:
+
+| 已移除 | 替代方案 |
+|--------|---------|
+| `useSectionSettings(key)` | `useLiquid("section.settings." + key)` |
+| `useBlockSettings(key)` | `useLiquid("block.settings." + key)` |
+| `useThemeSettings(key)` | `useLiquid("settings." + key)` |
+| `useLiquidValue(path)` | `useLiquid(path)` |
+| `useRawLiquid(code)` | `useLiquidCode(code)` |
+| `useImageUrl(image, w)` | 直接用 `<ShopifyImage>` 组件 |
+| `useAsset(path, mode)` | `useLiquidCode("{{ 'path' | asset_url }}")` |
+| `useFontFace(font)` | `useLiquidCode("{{ font | font_face }}")` |
+| `usePlaceholderSvg(name)` | `useLiquidCode("{{ 'name' | placeholder_svg_tag }}")` |
+| `useShopifyAttributes` | 插件自动注入,无需手动 |
+| `useBlockLoop` | `<BlockSlot>` 组件 |
+| `useBlockContext` / `useBlockRouter` | 每 block 独立 entry,无需 context |
 
 > 来源:API 设计经过 4 轮评审,经实证测试与驳回验证逐步收敛。
 >
@@ -303,539 +255,238 @@ export function useUniqueId(prefix: string = 'u'): string {
 
 ---
 
-## 2. A 类 — 简单值 Hook(🟢 HIGH 可行性)
+## 2. 核心原语与媒体组件 (🟢 DONE)
 
-> 这些 hook 在 SSR 时返回 `{{ expr }}` 字符串并跟踪,在客户端从 context 读值。**与现有 `useLiquidValue` 行为一致,只需新增参数或命名。**
->
-> ⚠️ **重要约束**:返回字符串的 hook 只能用于以下场景:
-> - 作为元素 attribute 值(字符串本身)
-> - 作为文本子节点,且文本本身就是 Liquid 表达式(SSR 后被 Liquid 替换)
-> - **不**能用于产生 HTML 元素碎片的场景(那会破坏水合)
+> v3.0 起,所有 Liquid 值读取统一走 `useLiquid`,所有 Liquid 代码注入统一走 `useLiquidCode`。
+> 不再需要 10+ 个专用 hook。本节描述插件提供的核心 API,纯 JS 工具函数(`useImageBehavior`、`useColorScheme` 等)
+> 应在用户项目 `frontend/utils/` 中实现,不进插件(见 §2.5)。
 
-### 2.1 `<ShopifyImage>` 组件(A' 类,**v9 终态,已实施**)
-
-> ✅ **已实施**(`packages/vite-plugin-react-shopify/src/runtime/ShopifyImage.tsx`)。
-> 经历 v1-v8 从 `useImageTag` → `<ImageTag>` 多轮设计迭代,最终在 v9 定型为
-> **`dangerouslySetInnerHTML` + `image_url | image_tag` 完整管道**的方案。
-
-**核心设计**:
-
-SSR 时通过 `dangerouslySetInnerHTML` 输出完整的 Liquid `image_url | image_tag` 管道,
-避免 React 水合与 Liquid 生成 HTML 的矛盾:
-
-```liquid
-{{ section.settings.image | image_url: width: 800, crop: 'center' | image_tag: loading: 'lazy', alt: 'Photo' }}
-```
-
-Shopify 在请求时将其解析为完整 `<img>` 标签(含 `srcset`、`sizes` 等属性)。
+### 2.1 `useLiquid<T>(path, opts?)` — 统一 Liquid 值读取 ★ 核心
 
 **签名**:
-
 ```ts
-interface ShopifyImageProps {
-  image: string;              // Liquid 表达式,如 "section.settings.image"
-
-  // ── image_url filter params ──
-  width?: number;             // CDN 裁剪宽度
-  height?: number;            // CDN 裁剪高度
-  crop?: 'top' | 'center' | 'bottom' | 'left' | 'right';
-
-  // ── image_tag filter params ──
-  alt?: string;
-  loading?: 'lazy' | 'eager'; // 未传时由 section.index 自动推断(§2.1.2)
-  fetchPriority?: 'high' | 'low' | 'medium' | 'auto';
-  decoding?: 'async' | 'sync' | 'auto';
-  preload?: boolean;          // image_tag preload(Shopify Link HTTP header)
-  tagWidth?: number;          // <img> HTML width 属性
-  tagHeight?: number;         // <img> HTML height 属性
-  sizes?: string;             // HTML sizes 属性
-  widths?: string;            // 自定义 srcset widths(如 "200, 300, 400")
+function useLiquid<T>(path: string, opts?: UseLiquidOptions): [T, (val: T) => void];
+interface UseLiquidOptions {
+  type?: 'string' | 'number' | 'boolean' | 'json' | 'html';
+  bridge?: boolean;
+  defaultValue?: T;
 }
 ```
 
 **SSR 行为**:
-- `dangerouslySetInnerHTML` 输出 `{{ image | image_url: ... | image_tag: ... }}`
-- 表达式被跟踪到 JSON bridge
-- 不渲染 JSX `<img>`,避免 React 19 自动 preload 问题
+- 返回 `["{{ path }}", setter]`(占位符字符串)
+- `ctx.track(path, opts)` 将表达式注册到 `globalThis.__shopify_ssg_liquid_track` Map
+- `buildLiquidBridge()` 将所有跟踪项输出到 `<script data-ssg-liquid>`
 
 **CSR 行为**:
-- 从 JSON bridge 读解析后的 URL
-- `dangerouslySetInnerHTML` 输出 `<img>` 标签
-- 两边都用 innerHTML → React 不比较子树 → 无水合 mismatch
+- 从 `LiquidDataProvider` context 中 `ctx.read(path)` 获取值
+- `coerce()` 根据 `opts.type` 进行类型转换(number/boolean/json/html)
+- 返回 `[coercedValue, setter]`(setter 仅本地临时覆盖,不同步回 Shopify)
 
-**参数严格拆分**:
+**替代所有旧 hook**:
+```tsx
+// 旧: useSectionSettings("image")
+const [image] = useLiquid<string>("section.settings.image");
 
-| Filter | 参数 | 说明 |
-|--------|------|------|
-| `image_url` | `width`, `height`, `crop` | CDN 裁剪,`image_tag` 的前置依赖 |
-| `image_tag` | `alt`, `loading`, `fetchPriority`, `decoding`, `preload`, `tagWidth`, `tagHeight`, `sizes`, `widths` | HTML 属性,均对应 Shopify 文档 |
+// 旧: useBlockSettings("heading")
+const [heading] = useLiquid<string>("block.settings.heading");
 
-**风险评估**:🟢 **LOW** — 已在 example 项目验证,146 单测全过。
+// 旧: useThemeSettings("animations_reveal_on_scroll")
+const [anim] = useLiquid<boolean>("settings.animations_reveal_on_scroll", { type: "boolean" });
 
-### 2.1.1 与 v1-v8 `<ImageTag>` 历史方案对比
+// 旧: useLiquidValue("section.id")
+const [id] = useLiquid<string>("section.id");
+```
 
-| 维度 | v1-v7 `<ImageTag>` | v8 `<ImageTag>` | **v9 `<ShopifyImage>`** |
-|------|--------------------|-----------------|------------------------|
-| 水合策略 | HTML 注释/span 占位(均失败) | JSX `<img>` + `loading="lazy"` | `dangerouslySetInnerHTML` 双端 |
-| `image_tag` filter | ❌ 不用 | ❌ 不用 | ✅ **完整管道** |
-| `srcset`/`sizes` | React 手写 | 不支持 | ✅ Liquid 自动生成 |
-| React 19 preload | 不受控 | 靠 `loading="lazy"` 规避 | ✅ 无影响(不渲染 JSX `<img>`) |
-| `fetchPriority` | 支持 | ❌ 移除(与 lazy 互斥) | ✅ 支持 `high`/`low`/`medium`/`auto` |
+**实现**:`packages/vite-plugin-react-shopify/src/runtime/useLiquid.ts`
 
-### 2.1.2 `section.index` 自动推断
+**风险**:🟢 NONE(已实现,被 example 项目验证)
 
-当 `loading` / `fetchPriority` / `preload` **未显式传入**时,组件根据 `section.index` 自动推断:
+### 2.2 `useLiquidCode(code, trackedExprs?)` — 注入原始 Liquid
 
+**签名**:
+```ts
+function useLiquidCode(code: string, trackedExprs?: string[]): void;
+```
+
+**SSR 行为**:
+- `ctx.inject(code)` 将代码推入 `globalThis.__shopify_ssg_liquid_blocks` 数组
+- 可选 `track(expr)` 跟踪引用的表达式
+- 渲染器(`liquid-assembler.ts`)将其注入到 `data-ssg-hydrate` div **之前**
+
+**CSR 行为**:no-op
+
+**替代所有旧 hook**:
+```tsx
+// 旧: useRawLiquid('{% style %}.section-padding ...{% endstyle %}')
+useLiquidCode('{% style %}.section-padding { padding-top: 36px; }{% endstyle %}');
+
+// 旧: useAsset('icon-arrow.svg', 'inline')
+useLiquidCode("{{ 'icon-arrow.svg' | inline_asset_content }}");
+
+// 旧: usePlaceholderSvg('hero-apparel-1')
+useLiquidCode("{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}");
+
+// 旧: useFontFace(settings.type_body_font)  — 但 Dawn 中不在此调用(在 theme.liquid 层)
+useLiquidCode("{{ settings.type_body_font | font_face: font_display: 'swap' }}");
+```
+
+**定位**:注入在 React 树之外,不产生 DOM 节点。适合 `{% style %}`、`{% schema %}` 等独立 Liquid 片段。
+**不适用于**包裹 React children 的场景(`{% form %}...{% endform %}`),见 §3.2。
+
+**实现**:`packages/vite-plugin-react-shopify/src/runtime/useLiquid.ts`
+
+**风险**:🟢 NONE(已实现)
+
+---
+
+### 2.3 `<Island expression={...}>` — 通用 hydration 边界 ★ 核心
+
+**签名**:
+```ts
+interface IslandProps {
+  expression: string;          // Liquid 表达式,如 "{{ image | image_tag }}"
+  as?: string;                 // 自定义元素标签,默认 "ssg-island"
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;  // 仅 CSR 使用,SSR 忽略
+}
+const Island: React.MemoExoticComponent<(props: IslandProps) => JSX.Element>;
+```
+
+**SSR 行为**:
+- 渲染 `<ssg-island data-ssg-i="i3" suppressHydrationWarning />`
+- 通过 `dangerouslySetInnerHTML` 输出 expression(Liquid 表达式)
+- 分配稳定的递增 key(`data-ssg-i`),用于客户端预捕获定位
+
+**CSR 行为**(两阶段):
+1. **预捕获**:entry-template 将每个 Island 的 actual innerHTML 替换为 `"__SSG_ISLAND__"` 哨兵,真实 HTML 保存到 `el._ssgHtml`
+2. **恢复**:Island 的 `useLayoutEffect` 从 `el._ssgHtml` 恢复真实 HTML
+3. `React.memo(() => true)` 永久阻止重新渲染,Liquid 内容冻结
+
+**为什么需要 Island**:
+- `renderToStaticMarkup` 无法输出 HTML 注释(转义为 `&lt;!--`)
+- 自定义元素 + `dangerouslySetInnerHTML` 保留 Liquid 表达式原样
+- 客户端 sentinel 替换确保水合 DOM 与 React 树完全匹配
+
+**典型用例**:
+```tsx
+// 在 React 树中间插入 Shopify 生成的 HTML 片段
+<Island expression="{{ section.settings.image | image_url: width: 800 | image_tag }}" />
+
+// 封装为高层组件
+function ShopifyImage(props) {
+  const expr = buildImageExpression(props);
+  return <Island as="span" style={{ display: "contents" }} expression={expr} />;
+}
+```
+
+**实现**:`packages/vite-plugin-react-shopify/src/runtime/Island.tsx`
+
+**风险**:🟢 LOW(已实现,通过 entry-template capture/restore 机制验证)
+
+---
+
+### 2.4 `<ShopifyImage>` 组件 (🟢 DONE)
+
+> ✅ **已实施**(`packages/vite-plugin-react-shopify/src/runtime/ShopifyImage.tsx`)。
+> 使用 `<Island>` 包裹,SSR 输出 `image_url | image_tag` 完整管道。
+
+**签名**:
+```ts
+interface ShopifyImageProps {
+  image: string;              // Liquid 表达式,如 "section.settings.image"
+  width?: number;
+  height?: number;
+  crop?: 'top' | 'center' | 'bottom' | 'left' | 'right';
+  alt?: string;
+  loading?: 'lazy' | 'eager'; // 未传时由 section.index 自动推断
+  fetchPriority?: 'high' | 'low' | 'medium' | 'auto';
+  decoding?: 'async' | 'sync' | 'auto';
+  preload?: boolean;
+  tagWidth?: number;
+  tagHeight?: number;
+  sizes?: string;
+  widths?: string;
+  className?: string;
+}
+```
+
+**`section.index` 自动推断**:当 `loading` / `fetchPriority` / `preload` 未显式传入时:
 | `section.index` | `loading` | `fetchPriority` | `preload` |
 |-----------------|-----------|-----------------|-----------|
 | `< 4` | `eager` | `high` | `true` |
 | `4 ≤ idx < 8` | `lazy` | `medium` | `false` |
 | `≥ 8` | `lazy` | `low` | `false` |
 
-同一 section 内所有 `ShopifyImage` 共享一组 Liquid 变量(通过 `__shopify_ssg_liquid_track` Set 引用探测 section 边界)。
+**风险**:🟢 LOW(已实现,146 单测全过)
 
-### 2.1.3 `<ShopifyVideo>` 组件(A' 类,**v9 新增,已实施**)
+---
+
+### 2.5 `<ShopifyVideo>` 组件 (🟢 DONE)
 
 > ✅ **已实施**(`packages/vite-plugin-react-shopify/src/runtime/ShopifyVideo.tsx`)。
-> 与 `<ShopifyImage>` 架构一致:SSR 用 `dangerouslySetInnerHTML` 输出完整 Liquid `video_tag` 表达式。
-
-**核心设计**:
-
-```liquid
-{{ media | video_tag: image_size: '400x', autoplay: true, loop: true, muted: true, controls: true }}
-```
-
-Shopify 解析为完整 `<video>` 标签(含 `<source>` 元素和 poster 回退图)。
+> 与 `<ShopifyImage>` 架构一致,输出 `video_tag` 完整表达式。
 
 **签名**:
-
 ```ts
 interface ShopifyVideoProps {
-  media: string;              // Liquid 表达式,如 "section.settings.video"
-
-  // ── video_tag filter params ──
-  imageSize?: string;         // poster 尺寸,如 "400x" / "800x600"
+  media: string;
+  imageSize?: string;
   autoplay?: boolean;
   loop?: boolean;
   muted?: boolean;
   controls?: boolean;
+  className?: string;
 }
 ```
 
-**SSR 行为**:
-- `dangerouslySetInnerHTML` 输出 `{{ media | video_tag: ... }}`
-- 表达式被跟踪到 JSON bridge
-
-**CSR 行为**:
-- 从 JSON bridge 读解析后的 URL
-- `dangerouslySetInnerHTML` 输出 `<video>` 标签
-
-**video_tag 默认行为**:
-- `playsinline` 和 `preload="metadata"` 由 Liquid 自动添加
-- 自动生成 `<source>` 元素(mp4 + HLS m3u8)
-- 自动添加 fallback poster `<img>`
-
-**风险评估**:🟢 **LOW** — 架构与 `<ShopifyImage>` 一致,无水合问题。
-
-### 2.1.1 `useUniqueId(prefix?)` 内部 hook
-
-**签名**:
-```ts
-function useUniqueId(prefix?: string): string;
-```
-
-**实现**:
-```ts
-// frontend/utils/use-unique-id.ts
-let counter = 0;
-
-export function useUniqueId(prefix: string = 'u'): string {
-  const ref = useRef<string | null>(null);
-  if (ref.current === null) {
-    counter = (counter + 1) & 0xffffffff;
-    ref.current = `${prefix}-${counter.toString(36)}`;
-  }
-  return ref.current;
-}
-```
-
-**为什么选自增计数器**(完整论证见 §0.4):
-- 占位符 id 不进入最终产物(SSR 后处理替换),不需要 server/client 稳定 / 跨进程唯一 / HTML 安全的特性
-- 自增计数器 5 行代码,无外部依赖
-- `useRef` 缓存保证组件重渲染不重复生成
-- 单次 SSR 进程内单调递增,无冲突可能
-
-**风险**:
-- 🟢 LOW:实现简单,无外部依赖
-- 🟡 **MEDIUM**:Dawn 中 `image_tag` 的可选参数较多(width, height, sizes, widths, fetchPriority, loading, alt, class),组件 API 需完整覆盖
-
-**可行性结论**:🟡 MEDIUM,实现可控,但需要细致测试水合一致性。
-
-**与 Dawn 行为的兼容性**:
-- Dawn 输出的 `<img>` 标签结构(包含 fetchPriority, sizes, widths)与本组件的 props 一一对应
-- **JSX 属性拼写**:React JSX 中是 `fetchPriority` (camelCase),映射到 HTML 的 `fetchpriority` (lowercase)。组件 API 保持 camelCase
-- 占位符模式与现有 `useLiquidBlock` 思路一致,但作用位置是"替换为完整 HTML 片段"而非"插入在 wrapper 之前"
-
-**类似组件(同样需要标记替换)**:
-- `<Video>` 组件 — 输出 `{{ video | video_tag }}` 或 YouTube/Vimeo 嵌入
-- `<Source>` 组件 — 输出 `image_url` 不带 `image_tag` 包装(用于 srcset)
-- `<Icon>` 组件 — 输出 `{{ 'icon-X.svg' | inline_asset_content }}`
+**风险**:🟢 LOW(已实现)
 
 ---
 
-### 2.2 `useImageUrl(image, width)`
+### 2.6 用户空间 Utility(不进插件)
 
-**签名**:
-```ts
-function useImageUrl(
-  image: string | undefined,
-  width: number
-): string;
-```
+以下函数是**纯 JS 逻辑**,不依赖 SSG/SSR。应在用户项目 `frontend/utils/` 中实现,不进 `vite-plugin-react-shopify`:
 
-**SSR 行为**:
-- 返回:`{{ image | image_url: width: W }}`
-- 跟踪:`image`
+| 函数 | 用途 | 建议路径 |
+|------|------|---------|
+| `useImageBehavior(behavior)` | 根据 `image_behavior` 返回 widths/sizes 等 | `frontend/utils/images.ts` |
+| `useColorScheme(id)` | 返回 `color-${id} gradient` className | `frontend/utils/colors.ts` |
+| `useBlockType<T>(blocks, type)` | 过滤特定 type 的 block | `frontend/utils/blocks.ts` |
+| `clsx(...args)` | 条件 className 拼接 | `frontend/utils/classes.ts` |
+| `parseLiquidBoolean(val)` | Liquid 布尔值 → JS boolean | `frontend/utils/parsers.ts` |
 
-**CSR 行为**:不使用(直接用 `<Image>` 组件)
-
-**实现路径**:在 `useLiquidValue` 上层包装,自动加 `| image_url: width: W` 过滤器
-
-**风险**:🟢 无
-
----
-
-### 2.3 `useAsset(path, mode?)`(v8 修正:不调用 useLiquidRaw)
-
-> **v2 评审问题**:v6 文档说"跟踪 `'foo.css'`(字符串字面量)",但 `useLiquidRaw` 会把字面量也加入 bridge:
-> ```json
-> { "'foo.css'": {{ 'foo.css' | json }} }
-> ```
-> 这是恒等映射,完全冗余。
-
-**v8 修正**:`useAsset` **不调用** `useLiquidRaw`,直接返回完整 Liquid 字符串,实现为独立模板函数。
-
-**签名**:
-```ts
-type AssetMode = 'url' | 'inline' | 'stylesheet';
-function useAsset(path: string, mode?: AssetMode): string;
-```
-
-**SSR 行为**:
-- `mode='url'` → 返回 `"{{ 'foo.css' | asset_url }}"`
-- `mode='inline'` → 返回 `"{{ 'foo.svg' | inline_asset_content }}"`
-- `mode='stylesheet'` → 返回 `"{{ 'foo.css' | stylesheet_tag }}"`
-- **不调用** useLiquidRaw,不进入 bridge
-
-**CSR 行为**:不使用
-
-**实现**:
-```ts
-// packages/vite-plugin-react-shopify/src/runtime/hooks.ts
-const ASSET_FILTERS: Record<AssetMode, string> = {
-  url: ' | asset_url',
-  inline: ' | inline_asset_content',
-  stylesheet: ' | stylesheet_tag',
-};
-
-export function useAsset(path: string, mode: AssetMode = 'url'): string {
-  return `{{ ${JSON.stringify(path)}${ASSET_FILTERS[mode]} }}`;
-}
-```
-
-**约束**:
-- `path` 必须是**字符串字面量**(如 `'foo.css'`),不支持变量
-- 如需变量,用 `useLiquidValue` 读取 + 字符串拼接
-
-**`mode='stylesheet'` 警告**:
-- 返回的是 `<link rel="stylesheet" href="...">` HTML 元素
-- 在 JSX 中作为文本子节点会被 React 转义
-- 应只放在 `<head>` 或非水合区域(原 Dawn 行为)
-- **不能**作为 `<div>{useAsset(path, 'stylesheet')}</div>` 的子节点
-
-**风险**:🟢 无
-
----
-
-### 2.4 `useFontFace(font)`(v8 补充用法约束)
-
-**签名**:
-```ts
-function useFontFace(font: string): string;
-```
-
-**SSR 行为**:
-- 返回 `{{ font | font_face: font_display: 'swap' }}`
-- 跟踪:`font`
-
-**CSR 行为**:不使用
-
-**实现**:字符串模板(不用 useLiquidValue,因 expression 形式固定)
-
-**⚠️ 关键使用约束**(v2 评审补充):
-
-返回的是 `@font-face { ... }` **CSS 文本**,不是 React 元素。React 在 JSX 中作为文本子节点会**转义** `<`、`{`、`@` 等字符。
-
+**`useSectionPadding` 替代方案**:
 ```tsx
-// ❌ 错误 - React 会转义 CSS 文本
-<style>{useFontFace(settings.type_body_font)}</style>
-// 输出: <style>{{ settings.type_body_font | font_face: ... }}</style> (转义后)
-// Shopify 处理后: <style>{{ ... }}</style> (Liquid 语法还是字面量,无法生效)
+// 方案 1: CSS 变量(推荐)
+// .elem { padding-top: var(--section-padding-top, 36px); }
 
-// ✅ 正确 - 用 dangerouslySetInnerHTML
-<style dangerouslySetInnerHTML={{ __html: useFontFace(settings.type_body_font) }} />
-// 输出: <style>{{ settings.type_body_font | font_face: ... }}</style> (原样)
-// Shopify 处理后: 真实 @font-face 规则
-
-// ✅ 替代方案 - 放在 theme.liquid 中(theme.liquid 级别)
-// 不在 React 端处理,直接用 Liquid 输出
+// 方案 2: React <style> 元素 + useLiquid
+const [paddingTop] = useLiquid<string>("section.settings.padding_top");
+const [paddingBottom] = useLiquid<string>("section.settings.padding_bottom");
+<style>{`.section-${id}-padding { padding-top: ${paddingTop}px; padding-bottom: ${paddingBottom}px; }`}</style>
 ```
 
-**Dawn 中的实际位置**:`theme.liquid` 的 `<head>` 中,用 `{% style %}` 块(已迁移到 `theme.liquid` 终态,§4.4)。**React 端不调用 useFontFace**。
-
-**风险**:🟢 无(因为 Dawn 用法是 theme.liquid 层)
+**风险**:🟢 NONE(不进插件,用户完全可控)
 
 ---
+## 3. 注入类 API (🟢 DONE / 🟡 TODO)
 
-### 2.5 `usePlaceholderSvg(name)`(v8 修正 + 用法约束)
-
-**签名**:
-```ts
-function usePlaceholderSvg(name: string): string;
-```
-
-**SSR 行为**:
-- 返回 `{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}`
-- **v8 修正**:不走 `DEFAULT_LIQUID_FILTERS`,直接返回完整字符串
-
-**CSR 行为**:不使用
-
-**实现**:
-```ts
-export function usePlaceholderSvg(name: string): string {
-  return `{{ ${JSON.stringify(name)} | placeholder_svg_tag: 'placeholder-svg' }}`;
-}
-```
-
-**⚠️ 关键使用约束**:
-
-返回的是 `<svg>...</svg>` **HTML 元素**。React 在 JSX 中作为文本子节点会**转义** `<svg>` 标签。
-
-```tsx
-// ❌ 错误 - React 转义 SVG
-<div>{usePlaceholderSvg('hero-apparel-1')}</div>
-// 输出: <div>{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}</div> (转义)
-
-// ✅ 正确 - 用 dangerouslySetInnerHTML
-<div dangerouslySetInnerHTML={{ __html: usePlaceholderSvg('hero-apparel-1') }} />
-// 输出: <div><svg>...</svg></div> (Shopify 处理后)
-
-// ✅ 替代方案 - Dawn 中通常用 {%- render 'placeholder', name: ... %}
-// 或 <img> 作为背景(不通过 SVG 元素)
-```
-
-**Dawn 中的实际用法**:`<img src="{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}">`,与 `useImageTag` 行为一致。建议改用 `<ImageTag image="section.settings.image" asPlaceholder="hero-apparel-1">` 统一处理。
-
-**风险**:🟡 MED(需要正确的 dangerouslySetInnerHTML 用法)
-
----
-
-### 2.6 `useThemeSettings(key)`(v8 补充类型重载)
-
-**签名**(v8,与 `useLiquidValue` 对齐):
-```ts
-function useThemeSettings(key: string): string | undefined;
-function useThemeSettings(key: string, type: "number"): number;
-function useThemeSettings(key: string, type: "boolean"): boolean;
-```
-
-**SSR 行为**:
-- 返回 `{{ settings.X }}`(注意:无 `section.settings.` 前缀)
-- 跟踪:`settings.X`
-
-**CSR 行为**:同 `useSectionSettings`
-
-**实现路径**:`useLiquidRaw` 上层包装,接受不同的表达式前缀(无前缀 vs `section.settings.`)
-
-**风险**:🟢 无
-
----
-
-### 2.7 `useColorScheme(id)`
-
-**签名**:
-```ts
-function useColorScheme(id: string | undefined): string;
-```
-
-**SSR 行为**:
-- 返回字面量字符串:`color-${id} gradient`(纯 JS 拼接,无 Liquid)
-- 不参与表达式跟踪
-
-**CSR 行为**:完全相同的字符串拼接
-
-**实现路径**:纯 JS utility hook,不依赖 SSG
-
-**风险**:🟢 无
-
----
-
-### 2.8 ~~`useShopifyAttributes`~~ — **移除**
-
-**v1 错误**:v1 设计 `useShopifyAttributes()` 返回 `{{ block.shopify_attributes }}` 字符串,期望用户在 JSX 中用 `{...string}` 展开。
-- **`{...string}` 在 JSX 中不是合法的 spread** —— JSX spread 只接受对象(POJO)
-- 即使能用,string 会被当作对象属性展开,语义错误
-
-**v2 结论**:
-- **当前插件(`liquid-assembler.ts:236-237`)已自动在 block wrapper 上注入 `{{ block.shopify_attributes }}`**:
-  ```html
-  <{{tag}} id="{{ block.id }}" data-section-id="{{ section.id }}" 
-        data-ssg-component="{{kebabName}}" {{ block.shopify_attributes }}>
-    <!-- React SSR HTML -->
-  </{{tag}}>
-  ```
-- 用户的 React block 组件**不需要关心** `shopify_attributes`,它已经被插件注入到 block 根元素上
-- **Dawn 行为差异**:Dawn 把 `{{ block.shopify_attributes }}` 放在**内层元素**上(如 `<h2 {{ block.shopify_attributes }}>`),而当前插件放在**外层 wrapper** 上
-- **对 Dawn 迁移的影响**:Dawn 的 rich-text 等 block 把 attrs 放在 heading 上,如果迁移到 React,heading 元素本身不会有 attrs(会被插件放到外层 wrapper),但**这不影响功能**(`shopify_attributes` 主要用于 theme editor 高亮整块,放在外层 wrapper 同样有效)
-
-**实现路径**:**无需实现**。
-
-**风险**:🟢 无
-
-**设计更新**:
-- §3.1 `useRawLiquid` 文档中,移除"配合 useShopifyAttributes"的相关引用
-- §3.1 B 类示例代码中,移除 `<h2 {...attrs}>` 写法
-- §3.2 `useForm` 文档中,移除相关引用
-- §4 C 类(useBlockLoop)整体重构(见 §4),移除 BlockContext / useBlockRouter
-
----
-
-### 2.9 `useBlockType(blocks, type)`
-
-**签名**:
-```ts
-function useBlockType<T>(blocks: T[], type: string): T[];
-```
-
-**SSR/CSR 行为**:
-- 纯 JS filter
-- 不参与表达式跟踪
-
-**实现路径**:纯 JS utility
-
-**风险**:🟢 无
-
----
-
-### 2.10 `useImageBehavior(behavior)`
-
-**签名**:
-```ts
-interface ImageBehavior {
-  widths: string;
-  sizes: string;
-  stackedSizes: string;
-  halfWidth: string;
-  fullWidth: string;
-}
-function useImageBehavior(behavior: string | undefined): ImageBehavior;
-```
-
-**SSR 行为**:
-- 纯 JS 逻辑(Dawn 原始 `{%- liquid -%}` 块的 JS 版本)
-- 不参与表达式跟踪
-
-**CSR 行为**:同 SSR
-
-**实现路径**:
-```ts
-function useImageBehavior(behavior) {
-  return useMemo(() => {
-    const fullWidth = '100vw';
-    const widths = '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840';
-    if (behavior === 'ambient') {
-      return { fullWidth: '120vw', halfWidth: '60vw',
-               stackedSizes: '(min-width: 750px) 60vw, 120vw',
-               widths: '450, 660, 900, 1320, 1800, 2136, 2400, 3600, 7680', sizes: stackedSizes };
-    }
-    if (behavior === 'fixed' || behavior === 'zoom-in') {
-      return { fullWidth: '100vw', halfWidth: '100vw', stackedSizes: '100vw', widths, sizes: '100vw' };
-    }
-    return { fullWidth: '100vw', halfWidth: '50vw',
-             stackedSizes: '(min-width: 750px) 50vw, 100vw', widths, sizes: fullWidth };
-  }, [behavior]);
-}
-```
-
-**风险**:🟢 无(纯 JS 逻辑)
-
----
-
-### 2.11 `useSectionPadding(settingsKey?)`(v8 补充用法约束)
-
-**签名**:
-```ts
-function useSectionPadding(settingsKey?: string): string;
-```
-
-**SSR 行为**:
-- 返回 `<style>` HTML 字符串,内含 `.section-{{id}}-padding` 媒体查询
-- 跟踪:`section.id`,`section.settings.padding_top`,`section.settings.padding_bottom`
-
-**CSR 行为**:不使用(SSG 已生成 `<style>`)
-
-**实现**:字符串模板函数 + tracking
-
-**⚠️ 关键使用约束**(v2 评审补充):
-
-返回的是 `<style>...</style>` **HTML 字符串**。React 在 JSX 中作为子节点会**转义** `<style>` 标签。
-
-```tsx
-// ❌ 错误 - React 转义 <style> 标签
-<div>{useSectionPadding()}</div>
-// 输出: <div>&lt;style&gt;...</style></div> (转义)
-
-// ✅ 正确 - 用 dangerouslySetInnerHTML
-<div dangerouslySetInnerHTML={{ __html: useSectionPadding() }} />
-
-// ✅ 替代方案 1 - 直接放 React 树顶层(React 允许 <style> 元素)
-// useSectionPadding() 不需要,React <style> 元素直接写 CSS
-<style>{`
-  .section-${section.id}-padding {
-    padding-top: ${paddingTop}px;
-    padding-bottom: ${paddingBottom}px;
-  }
-`}</style>
-
-// ✅ 替代方案 2 - 在 CSS 文件中(最推荐)
-.elem {
-  padding-top: var(--section-padding-top, 36px);
-  padding-bottom: var(--section-padding-bottom, 36px);
-}
-```
-
-**Dawn 中的实际用法**:Dawn 在每个 section 顶部用 `{%- style -%}` 内联块(已迁移到 React 端可用 `useSectionPadding` + `dangerouslySetInnerHTML`,或改为 CSS 变量)。
-
-**风险**:🟡 MED(需要正确的 dangerouslySetInnerHTML 用法)
-
----
-
-## 3. B 类 — 标记替换 Hook/组件(🟡 MEDIUM 可行性)
+> v3.0: v1-v9 的"标记替换"模式已被 Island 机制替代。`useRawLiquid` 改为 `useLiquidCode`(已实现)。
+> `useForm` 和 `usePaginate` 正确推迟到阶段 4+,`<StaticBlock>` 待实现。
 
 > 这些 hook 在 React 树中渲染一个占位符节点,SSR 阶段被替换为真实 Liquid 代码。客户端水合时占位符节点为空,与 DOM 结构对齐(无 mismatch)。
 >
 > **B 类总量从 v1 的 4 个减为 3 个**:`useShopifyAttributes` 移除(v1 错误设计)
 
-### 3.1 `useRawLiquid(code)` — **v7 降级为 `useLiquidBlock` 别名**(🟢 LOW)
+### 3.1 `useLiquidCode` — 原始 Liquid 注入 (🟢 DONE)
 
-> **v8 清理**:本节之前混叠了 v1-v4 的旧实现描述(RawLiquid 组件、HTML 注释、Fragment 包裹等),**全部废弃**。v7 起 useRawLiquid 改为 useLiquidBlock 别名,v8 删除历史描述,只保留生效设计。
+> ✅ **已实施**为 `useLiquidCode(code, trackedExprs?)`,是 `useLiquidBlock` 的语义重命名。见 §2.2。
 
-**v1-v6 失败原因**(简要):
-- v1-v4:HTML 注释被 `renderToStaticMarkup` 转义(评审发现 1)
-- v5-v6:span 占位 + null return hydration mismatch(评审发现 2)
-- v7 起:**完全放弃占位符模式**
+**API 参见**: §2.2 `useLiquidCode`。
 
-**签名**(v7+,与现有 `useLiquidBlock` 等价):
+**签名**:
 ```ts
 // useRawLiquid 是 useLiquidBlock 的语义别名(不增加新概念)
 function useRawLiquid(code: string): void;
@@ -847,32 +498,30 @@ function useRawLiquid(code: string): void;
 - 跟踪 `code` 中的 `{{ ... }}` 表达式
 - **不返回任何内容**(`void`),不产生 DOM 节点
 
-**CSR 行为**:
-- no-op
+**SSR 行为**(v7+,与现有 `useLiquidBlock` 等价):
+- 调用 `useLiquidBlock(code)`(已存在机制)
+- 收集到全局 `__shopify_ssg_liquid_blocks` 数组
+- 跟踪 `code` 中的 `{{ ... }}` 表达式
+
+**CSR 行为**:no-op
 
 **渲染器侧**(已存在,无需新实现):
 - `liquid-assembler.ts` 中 `liquidPrepend` 逻辑
 - 收集的代码注入到 `data-ssg-hydrate` div **之前**
 
-**v7+ 的限制**:
-- ❌ **不能在 React 树中"包裹" children**(已确认,见 §3.2 useForm)
+**限制**:
+- ❌ 不能在 React 树中包裹 children(已确认,见 §3.2 useForm)
 - ❌ 注入位置固定在 `data-ssg-hydrate` div 之前,不能在中间插入
-- ✅ 适合"独立插入 Liquid 代码片段"场景
+- ✅ 适合独立插入 Liquid 代码片段
 
 **典型用例**:
 ```tsx
 function MySection() {
-  useRawLiquid('{% style %}.section-padding { ... }{% endstyle %}');
-  useRawLiquid("{{ 'icon-arrow.svg' | inline_asset_content }}");
+  useLiquidCode('{% style %}.section-padding { ... }{% endstyle %}');
+  useLiquidCode("{{ 'icon-arrow.svg' | inline_asset_content }}");
   return <section>...</section>;
 }
 ```
-
-**与 useLiquidBlock 的关系**:
-- `useRawLiquid(code)` ≡ `useLiquidBlock(code)`(只是命名更直观)
-- 保留两个名称,**无需新增概念**
-
----
 
 ### 3.2 ~~`useForm`~~ — **v7 降级为不实现**(🟠 MEDIUM-HIGH)
 
@@ -1062,8 +711,10 @@ function useStaticBlock(spec: StaticBlockSpec): React.FC;
 
 > 这些 hook 引入 React Context,让 block 子组件能访问当前 block 的 settings。**核心挑战:每个 block 需要独立的 JSON bridge。**
 
-## 4. ~~C 类 — 上下文驱动 Hook~~ → C' 类 — 组件化 Slot(🟢 HIGH)
+## 4. 组件化 Slot (🟢 DONE)
 
+> ✅ **v3.0 已实施**:`<BlockSlot>` 已实现为 Island 模式的封装,使用 `<shopify-block-slot>` 自定义元素,
+> SSR 输出 `{% content_for \'blocks\' %}` 的 `dangerouslySetInnerHTML`,客户端通过 `ssg:blocks:ready` 事件触发 block hydration。
 > v1 设计的 `useBlockLoop` 系列 hook 不可行,已替换为 `<BlockSlot>` 组件 + 每个 Theme Block 独立 entry 的方案。
 
 ### 4.0 v1 不可行的原因
@@ -1081,11 +732,11 @@ function useStaticBlock(spec: StaticBlockSpec): React.FC;
    - 块顺序、限制(`limit`)、嵌套等 Shopify 处理逻辑被绕过
 
 3. **block 独立 React entry 是更优解**
-   - 当前的 `useBlockSettings("X")` 已经是基于"当前 block 上下文"工作
+   - 当前的 `useLiquid("block.settings.X")` 已经是基于"当前 block 上下文"工作
    - 每个 block 单独 hydrate,JSON bridge 简单清晰
    - 不需要新加任何 hook,只需要让 React 知道"block 由 Shopify 渲染,React 负责水合"
 
-### 4.1 `<BlockSlot>` 组件(替代 useBlockLoop)★ 关键
+### 4.1 `<BlockSlot>` 组件(替代 useBlockLoop)★ 关键 (🟢 DONE)
 
 **签名**:
 ```ts
@@ -1120,7 +771,7 @@ function BlockSlot(props?: BlockSlotProps): JSX.Element;
    }
    ```
 2. 渲染器在 post-process 阶段把 `<!--BLOCK-SLOT-->` 替换为 `{% content_for 'blocks' %}`
-3. **无需新加表达式跟踪机制** — block 的设置由各自 entry 的 `useBlockSettings` 处理(已有)
+3. **无需新加表达式跟踪机制** — block 的设置由各自 entry 的 `useLiquid("block.settings.X")` 处理(已有)
 
 **对比 v1 设计**:
 
@@ -1158,8 +809,8 @@ export const blockMeta = {
 } satisfies BlockMeta;
 
 export default function Heading() {
-  const heading = useBlockSettings("heading");  // {{ block.settings.heading }}
-  const size = useBlockSettings("heading_size");
+  const [heading] = useLiquid<string>("block.settings.heading");
+  const [size] = useLiquid<string>("block.settings.heading_size");
   return <h2 className={clsx("banner__heading", "inline-richtext", `banner__heading--${size}`)}>{heading}</h2>;
 }
 ```
@@ -1208,7 +859,7 @@ function StaticBlock(props: StaticBlockProps): JSX.Element;
 ### 4.2 ~~`useBlockContext`~~ / ~~`useBlockRouter`~~ — **移除**
 
 **v1 设计的问题**:
-- `useBlockContext` 用于从 React context 读 block 数据 — **新设计不需要 block context**,因为 block 是独立 React entry,直接在 entry 内 `useBlockSettings` 即可
+- `useBlockContext` 用于从 React context 读 block 数据 — **新设计不需要 block context**,因为 block 是独立 React entry,直接在 entry 内 `useLiquid("block.settings.X")` 即可
 - `useBlockRouter` 用于根据 block.type 查表 — **新设计不需要**,因为每个 block 是独立 .tsx 文件,Shopify 的 `content_for 'blocks'` 直接渲染对应 block 文件
 
 **实现路径**:**无需实现**。
@@ -1293,7 +944,10 @@ t('cart.items_added.one', { count: 1 })   // → "1 item added"
 
 ## 6. SSG / Vite 插件改造
 
-### 6.1 标记替换机制(支撑 B 类 hook)
+### 6.1 标记替换机制 — **v3.0 已废弃,被 Island 替代**
+
+> ⚠️ 本节描述的是 v1-v9 的占位符方案,已被 Island 模式(§0.2)完全替代。
+> 不再需要 "SSR 后处理字符串替换"。保留作历史参考。
 
 **改动位置**:
 - `packages/vite-plugin-react-shopify/src/ssg/renderer.ts`
@@ -1388,7 +1042,7 @@ const DEFAULT_LIQUID_FILTERS: Record<string, string> = {
 ```
 
 **useAsset / usePlaceholderSvg 的实现方式**:
-- **不调用** `useLiquidValue`(避免进入 type-based filter 机制)
+- **不调用** `useLiquid` 的 bridge 跟踪(避免进入 type-based filter 机制)
 - 直接返回完整 Liquid 字符串,如 `{{ 'foo.svg' | asset_url }}`
 - 由渲染器识别这是字面量表达式(没有变量),不进入 bridge
 - 见 §3.4 useAsset 字面量跟踪冗余问题
@@ -1810,16 +1464,16 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 
 ---
 
-## 7. 风险汇总(v8 修订,基于驳回验证测试)
+## 7. 风险汇总(v3.0 修订)
 
 | 风险 | 等级 | 影响 hook/组件 | 缓解 |
 |---|---|---|---|
-| **水合时 DOM 与 React 树结构不匹配** | 🔴 **HIGH** | `<ImageTag>`, useForm, usePaginate | **v8 修正**:`<ImageTag>` 渲染真实 `<img>` + `loading="lazy"` 默认;useForm/usePaginate 阶段 1 不实现 |
-| ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **已解决**:v2 改用 `<BlockSlot>` |
+| **水合时 DOM 与 React 树结构不匹配** | 🟢 **SOLVED** | `<Island>`, `<ShopifyImage>` | **v3.0 已解决**:Island 模式 + sentinel 替换;useForm/usePaginate 阶段 1 不实现 |
+| ~~Block JSON bridge 嵌套与命名冲突~~ | ~~🟠 MED-HIGH~~ | ~~useBlockLoop~~ | **✅ DONE**:v2 改用 `<BlockSlot>`,v3.0 已实施 |
 | CSS Modules 类名 SSR/CSR 不同步 | 🟡 MED | (任何用 .module.css 的组件) | 阶段 1 禁止 CSS Modules |
 | `{% form %}` 包裹 children 的根本困难 | 🔴 HIGH | useForm | **v8 决策**:阶段 1 不实现;阶段 2-3 useLiquidBlock;阶段 4+ 重写 |
 | `{% paginate %}` SSR 数据不可用 | 🔴 HIGH | usePaginate | **v8 决策**:阶段 1 不实现;分页完全由 Liquid 处理 |
-| **React 19 自动插入 `<link rel="preload">`** | 🔴 **HIGH** | **任何 `<img>` 元素** | **v8 修正**:`<ImageTag>` **默认 `loading="lazy"`**;LCP 关键图用 `<picture>` 包裹或 `useLiquidBlock` 模式;**新增 H13 规则检测** |
+| **React 19 自动插入 `<link rel="preload">`** | 🟢 **SOLVED** | `<ShopifyImage>` | **v3.0 已解决**:Island 不渲染 JSX `<img>`,React 19 无 preload 触发点 |
 | Pluralization 翻译 | 🟡 MED | useT (i18n) | 字典查找时支持 `key.other` / `key.one` 后缀 |
 | i18n 文件体积 | 🟢 LOW | useT | 初始 locale 内联,其他按需加载 |
 | 唯一性 id 冲突 | 🟢 LOW | `<ImageTag>`, `<BlockSlot>` 等 | v5 新增 `useUniqueId` hook(已被 v8 ImageTag 重设计取代) |
@@ -1827,31 +1481,35 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 | `bridge` 数据错位 | 🟢 LOW | (无 useBlockLoop) | bridge 不分层 |
 | **水合 mismatch 风险(H1-H13)** | 🟠 MED-HIGH | **所有 React 组件** | hydration-rules 模块,H13 检测 `<img>` 是否缺 `loading="lazy"` |
 | **HTML 属性中引号被转义** | 🟡 MED | useAsset, useFontFace 等 | **v8 加强**:避免在属性中放任何含 `'` 或 `"` 的字符串字面量(驳回 1 反证:单引号也会被转 `&#x27;`) |
-| v1-v7 `<ImageTag>` 设计的根本错误 | 🔴 HIGH | (v5-v7 文档) | **v8 彻底重设计**:不再占位替换,渲染真实 `<img>`,默认 `loading="lazy"` |
-| v1-v4 `<!--` HTML 注释占位 | 🟡 MED | useRawLiquid | v7 修正:useRawLiquid 改回 useLiquidBlock 别名 |
+| v1-v7 `<ImageTag>` 设计的根本错误 | 🟢 **SOLVED** | (历史文档) | **v3.0 已解决**:`<ShopifyImage>` + Island 替代所有占位方案 |
+| v1-v4 `<!--` HTML 注释占位 | 🟢 **SOLVED** | useLiquidCode | **v3.0 已解决**:**不再使用占位符**,useLiquidCode 注入到 wrapper 外部 |
 
 ---
 
-## 8. 实施优先级建议(v2 修订)
+## 8. 实施状态 (v3.0)
 
-| 阶段 | Hook/组件 | 工作量 | 阻塞的下游 |
-|---|---|---|---|
-| **1.1** | useImageUrl, useAsset, useFontFace, usePlaceholderSvg | 1 天 | 全部图片密集 section |
-| **1.2** | useThemeSettings, useColorScheme, useBlockType | 0.5 天 | 全部 section |
-| **1.3** | useSectionPadding, useImageBehavior, useSectionAspect, useIconUrl | 1 天 | image-banner 类 |
-| **1.4** | useRawLiquid + 标记替换机制 | 2-3 天 | main-product, slideshow, 所有 block-iterating |
-| **1.5** | `<ImageTag>` 组件 + 标记替换 | 1-2 天 | 全部图片密集 section |
-| **1.6** | `<BlockSlot>` 组件 + 标记替换 | 0.5-1 天 | 几乎所有 section(用 block) |
-| **1.7** | `<StaticBlock>` 组件 | 0.5 天 | slideshow controls |
-| **1.8** | ❌ **不实现** useForm (v8 决策:阶段 4+ 重写) | 0 | (推迟) |
-| **1.9** | ❌ **不实现** usePaginate (v8 决策:分页由 Liquid 处理) | 0 | (推迟) |
-| **1.11** | i18n locale 生成 + useT / useLocale | 2-3 天 | 全部 section |
-| **1.12** | CSS Modules 支持 | 2-3 天 | (可选,先禁用) |
-| **1.13** | App Block | 0.5 天 | (utility) |
-| **移除** | ~~useShopifyAttributes, useBlockLoop, useBlockContext, useBlockRouter~~ | — | v1 错误设计,无需实现 |
+| API | 状态 | 路径 |
+|-----|------|------|
+| `useLiquid` | ✅ DONE | `runtime/useLiquid.ts` |
+| `useLiquidCode` | ✅ DONE | `runtime/useLiquid.ts` |
+| `<Island>` | ✅ DONE | `runtime/Island.tsx` |
+| `<BlockSlot>` | ✅ DONE | `runtime/BlockSlot.tsx` |
+| `<ShopifyImage>` | ✅ DONE | `runtime/ShopifyImage.tsx` |
+| `<ShopifyVideo>` | ✅ DONE | `runtime/ShopifyVideo.tsx` |
+| `LiquidDataProvider` | ✅ DONE | `runtime/provider.ts` |
+| `buildLiquidBridge` | ✅ DONE | `runtime/bridge.ts` |
+| **i18n 系统** | 🟡 TODO | `useT` / `useLocale` / `LocaleProvider` + locale 生成 |
+| **`<StaticBlock>`** | 🟡 TODO | 静态 block 注入组件 |
+| **hydration-rules H2-H13** | 🟡 TODO | 检测器扩展 |
 
-**总工作量估算**:阶段 1 全部完成需 **~22-28 工作日**(v2 减少了 4 个 hook 的实现工作量)。
-
+**已移除(不进插件)**:
+| API | 替代方案 |
+|-----|---------|
+| `useSectionSettings` / `useBlockSettings` / `useThemeSettings` / `useLiquidValue` | `useLiquid(path)` |
+| `useRawLiquid` | `useLiquidCode(code)` |
+| `useImageUrl` / `useAsset` / `useFontFace` / `usePlaceholderSvg` | `useLiquidCode` + 完整表达式 |
+| `useImageBehavior` / `useColorScheme` / `useBlockType` | 纯 JS,用户空间 `frontend/utils/` |
+| `useShopifyAttributes` / `useBlockLoop` / `useBlockContext` / `useBlockRouter` / `useUniqueId` | 无需/已内部化
 ---
 
 ## 9. 评审检查清单(v2 修订)
@@ -1876,19 +1534,11 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 
 ---
 
-## 10. 等待评审(v2 修订)
+## 10. 待实施项
 
-按以下顺序逐个评审(或批量评审同类):
-
-1. **A 类(10 个,v1:11)** — 可批量评审,改动小
-   - ~~useImageTag~~ → 已改造为 `<ImageTag>` 组件,见 A' 类
-2. **A' 类 `<ImageTag>` 组件** — 重要评审项
-3. **B 类 3.1 useRawLiquid** — 关键基础设施
-4. **B 类 3.2 useForm** — 决定 newsletter/contact 迁移路径
-5. **B 类 3.3 usePaginate** — 决定 collection grid 迁移路径
-6. **C' 类 `<BlockSlot>` 组件** — 替代 v1 的 useBlockLoop,核心架构变更
-7. **C' 类 `<StaticBlock>` 组件** — 简单
-8. **D 类 5.1 useT** — i18n 关键
-9. **SSG 6.1-6.6** — 与 hook 评审并行
-
-**评审方式**:对每个 hook/组件,回答"通过 / 打回需返工 / 需要更多信息"。我会根据评审结果调整实现方案。
+| 优先级 | 项目 | 说明 |
+|--------|------|------|
+| **P0** | `<StaticBlock>` 组件 | 静态 block 注入,语义类似 `<BlockSlot>` 但指定 type/id/data |
+| **P1** | i18n 系统 | `LocaleProvider` + `useT` + `useLocale` + 插件 locale 生成(见 §5) |
+| **P2** | hydration-rules H2-H13 | 扩展现有 H1 自动修复,新增条件渲染/内联颜色/Date本地化等检测 |
+| **已实施** | 核心原语 + 媒体组件 + BlockSlot | 见 §8 状态表 |
