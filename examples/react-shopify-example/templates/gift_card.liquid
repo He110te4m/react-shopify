@@ -7,7 +7,7 @@
     {% render 'global-css-variables' %}
 
     {% # Load and preload the critical CSS %}
-    {{ 'critical.css' | asset_url | stylesheet_tag: preload: true }}
+    {% render 'critical-css' %}
 
     {% # Social, title, etc. %}
     {% render 'meta-tags' %}

@@ -17,8 +17,8 @@
       {{ settings.type_primary_font | font_url | preload_tag: as: 'font', crossorigin: 'anonymous' }}
     {% endunless %}
 
-    {% # Load and preload the critical CSS %}
-    {{ 'critical.css' | asset_url | stylesheet_tag: preload: true }}
+    {% # Theme critical CSS %}
+    {% render 'critical-css' %}
 
     {% # Social, title, etc. %}
     {% render 'meta-tags' %}

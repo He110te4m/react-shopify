@@ -7,7 +7,7 @@ export default {
     vitePluginShopify({
       themeRoot: ".",
       sourceCodeDir: "frontend",
-      buildDir: "assets/build",
+      buildDir: "assets",
       debug: isDebug,
       ssg: {
         directories: ["sections", "blocks", "templates", "snippets"],

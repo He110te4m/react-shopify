@@ -1,0 +1,16 @@
+{% doc %}
+  Renders an inline theme icon by type.
+
+  @param {string} type  Icon type: account, cart, or shoppy-x-ray
+{% enddoc %}
+
+{% liquid
+  case type
+    when 'account'
+      render 'icon-account'
+    when 'cart'
+      render 'icon-cart'
+    when 'shoppy-x-ray'
+      render 'icon-shoppy-x-ray'
+  endcase
+%}
