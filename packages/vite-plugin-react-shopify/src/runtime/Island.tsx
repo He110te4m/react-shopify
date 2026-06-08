@@ -11,31 +11,31 @@
  * generated on the production server) **before** React mounts.
  *
  * **Client phase** (browser): The pre-capture step (run by
- * `entry-template.ts`) swaps each island element's innerHTML to a known
- * sentinel string (`__SSG_ISLAND__`) and saves the original Liquid output
- * on a hidden expando.  Island renders
- * `dangerouslySetInnerHTML={{ __html: '__SSG_ISLAND__' }}` so React
- * hydration sees an exact match and leaves the DOM alone.  A
- * `useLayoutEffect` then restores the real innerHTML from the expando.
+ * `entry-template.ts`) records each island element's real innerHTML without
+ * mutating the DOM. Island renders that captured HTML back through
+ * `dangerouslySetInnerHTML`, so React hydration sees an exact match and
+ * leaves the Liquid-owned DOM in place.
  *
  * Finally, `React.memo(() => true)` prevents any future re-render, freezing
  * the Liquid content for the lifetime of the component.
  */
 import {
+  useContext,
   useRef,
-  useLayoutEffect,
   createElement,
   memo,
 } from "react";
 import { useShopifyContext } from "./ShopifyContext";
 import {
+  LiquidDataContext,
+  LIQUID_ISLAND_COUNTER_KEY,
+  LIQUID_ISLAND_DATA_KEY,
+} from "./provider";
+import {
   GW_ISLAND_COUNTER,
   ATTR_ISLAND,
   TAG_ISLAND,
 } from "../constants/attributes";
-
-/** Sentinel string that replaces real innerHTML before hydration. */
-const ISLAND_PLACEHOLDER = "__SSG_ISLAND__";
 
 export type IslandProps = {
   expression: string;
@@ -53,7 +53,8 @@ function IslandImpl({
   ...rest
 }: IslandProps) {
   const ctx = useShopifyContext();
-  const ref = useRef<any>(null);
+  const liquidData = useContext(LiquidDataContext);
+  const keyRef = useRef<string | null>(null);
 
   // ── SSR ───────────────────────────────────────────────────────────────
   if (ctx.phase === "ssg") {
@@ -74,28 +75,24 @@ function IslandImpl({
   }
 
   // ── Client (hydrating / mounted) ────────────────────────────────────
-  // The pre-capture step in entry-template replaced the real innerHTML with
-  // ISLAND_PLACEHOLDER and stored the original in `_ssgHtml`.  We render
-  // the same placeholder so React hydration sees a match.
-  // After commit, useLayoutEffect restores the real content.
-
-  useLayoutEffect(() => {
-    if (ref.current && (ref.current as any)._ssgHtml !== undefined) {
-      const html: string = (ref.current as any)._ssgHtml;
-      if (html && html !== ISLAND_PLACEHOLDER) {
-        ref.current.innerHTML = html;
-      }
-      delete (ref.current as any)._ssgHtml;
-    }
-  });
+  // The entry module captures the Liquid-rendered HTML before hydration.
+  // We render that same HTML on the first client pass so React hydrates the
+  // existing DOM without clearing it to a placeholder first.
+  if (keyRef.current === null) {
+    const counter = liquidData[LIQUID_ISLAND_COUNTER_KEY] ?? { count: 0 };
+    liquidData[LIQUID_ISLAND_COUNTER_KEY] = counter;
+    keyRef.current = `i${counter.count++}`;
+  }
+  const key = keyRef.current;
+  const html = liquidData[LIQUID_ISLAND_DATA_KEY]?.[key] ?? "";
 
   return createElement(Tag, {
     ...rest,
-    ref,
     className,
     style,
+    [ATTR_ISLAND]: key,
     suppressHydrationWarning: true,
-    dangerouslySetInnerHTML: { __html: ISLAND_PLACEHOLDER },
+    dangerouslySetInnerHTML: { __html: html },
   });
 }
 

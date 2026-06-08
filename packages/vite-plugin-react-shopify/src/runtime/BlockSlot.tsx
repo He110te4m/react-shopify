@@ -23,19 +23,18 @@
  * traditional `<ssg-slot>{% content_for 'blocks' %}</ssg-slot>` sibling,
  * because the React tree already declares the slot location.
  *
- * The pre-capture step in the client `entry-template` swaps the real
- * Liquid-rendered child blocks out before hydration so React doesn't
- * try to reconcile them, then restores them after commit.
+ * The pre-capture step in the client `entry-template` records the real
+ * Liquid-rendered child blocks before hydration so React can render the
+ * same static HTML and avoid reconciling the child block subtree.
  */
-import { memo, createElement, useRef, useLayoutEffect } from "react";
+import { memo, createElement, useContext, useRef, useLayoutEffect } from "react";
 import {
   TAG_BLOCK_SLOT,
   BLOCKS_CAPTURE_KEY,
   ATTR_ISLAND,
 } from "../constants/attributes";
 import { useShopifyContext } from "./ShopifyContext";
-
-const ISLAND_PLACEHOLDER = "__SSG_ISLAND__";
+import { LiquidDataContext, LIQUID_ISLAND_DATA_KEY } from "./provider";
 
 export type BlockSlotProps = {
   className?: string;
@@ -44,6 +43,7 @@ export type BlockSlotProps = {
 
 function BlockSlotImpl({ className, style }: BlockSlotProps) {
   const ctx = useShopifyContext();
+  const liquidData = useContext(LiquidDataContext);
   const ref = useRef<any>(null);
 
   if (ctx.phase === "ssg") {
@@ -56,17 +56,14 @@ function BlockSlotImpl({ className, style }: BlockSlotProps) {
     });
   }
 
-  // Client: render placeholder, then restore real DOM after commit.
-  useLayoutEffect(() => {
-    if (ref.current && (ref.current as any)._ssgHtml !== undefined) {
-      const html: string = (ref.current as any)._ssgHtml;
-      if (html && html !== ISLAND_PLACEHOLDER) {
-        ref.current.innerHTML = html;
-      }
-      delete (ref.current as any)._ssgHtml;
+  // Client: render the captured Liquid DOM directly, then notify child block
+  // entries after React commits so they hydrate in the restored subtree.
+  const html = liquidData[LIQUID_ISLAND_DATA_KEY]?.[BLOCKS_CAPTURE_KEY] ?? "";
 
+  useLayoutEffect(() => {
+    if (ref.current) {
       // Notify section-managed block entry modules that the block
-      // DOM has been restored.  Block entries listen for this event
+      // DOM has committed.  Block entries listen for this event
       // (instead of auto-scanning at module-load time) so they only
       // hydrate *after* React's commit has finished.
       ref.current.dispatchEvent(
@@ -79,8 +76,9 @@ function BlockSlotImpl({ className, style }: BlockSlotProps) {
     ref,
     className,
     style,
+    [ATTR_ISLAND]: BLOCKS_CAPTURE_KEY,
     suppressHydrationWarning: true,
-    dangerouslySetInnerHTML: { __html: ISLAND_PLACEHOLDER },
+    dangerouslySetInnerHTML: { __html: html },
   });
 }
 

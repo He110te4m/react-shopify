@@ -7,6 +7,8 @@ import { hydrateRoot } from 'react-dom/client';
 import { LiquidDataProvider } from 'vite-plugin-react-shopify/runtime';
 
 const SELECTOR = '[data-ssg-component="parent-section"]';
+const ISLAND_DATA_KEY = '__ssg_islands';
+const ISLAND_COUNTER_KEY = '__ssg_island_counter';
 const roots = new Map();
 
 function readLiquidData(el) {
@@ -19,18 +21,22 @@ function captureIslands(el) {
   const nodes = el.querySelectorAll('[data-ssg-i]');
   const alsoSelf = el.matches && el.matches('[data-ssg-i]');
   const all = alsoSelf ? [el, ...nodes] : Array.from(nodes);
+  const html = {};
   for (const node of all) {
-    if (node._ssgHtml !== undefined) continue;
-    node._ssgHtml = node.innerHTML;
-    node.innerHTML = '__SSG_ISLAND__';
+    if (node.closest('[data-ssg-h]') !== el) continue;
+    const key = node.getAttribute('data-ssg-i');
+    if (!key || html[key] !== undefined) continue;
+    html[key] = node.innerHTML;
   }
+  return html;
 }
 
 function hydrate(el) {
   const h = el.querySelector(':scope > [data-ssg-h]') || (el.matches('[data-ssg-h]') ? el : null);
   if (!h || roots.has(h)) return;
   const liquidData = readLiquidData(el);
-  captureIslands(h);
+  liquidData[ISLAND_DATA_KEY] = captureIslands(h);
+  liquidData[ISLAND_COUNTER_KEY] = { count: 0 };
   roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))));
 }
 
@@ -64,11 +70,8 @@ describe("hydration entry — isolation analysis", () => {
   });
 
   it("hydrate function reads liquid data before creating root", () => {
-    const fnMatch = entriesModule.match(/function hydrate\([^)]*\)\s*\{([^}]+)\}/s);
-    expect(fnMatch).not.toBeNull();
-    const fnBody = fnMatch![1];
-    const dataCall = fnBody.indexOf("readLiquidData(el)");
-    const rootCall = fnBody.indexOf("hydrateRoot");
+    const dataCall = entriesModule.indexOf("readLiquidData(el)");
+    const rootCall = entriesModule.indexOf("hydrateRoot(h");
     expect(dataCall).toBeGreaterThan(0);
     expect(rootCall).toBeGreaterThan(dataCall);
   });
@@ -91,6 +94,15 @@ describe("nested section+block isolation", () => {
   it("captureIslands runs before hydrateRoot", () => {
     const fnMatch = entriesModule.match(/function captureIslands\([^)]*\)\s*\{([^}]+)\}/s);
     expect(fnMatch).not.toBeNull();
+  });
+
+  it("captureIslands does not replace visible island DOM", () => {
+    expect(entriesModule).not.toContain("node.innerHTML = '__SSG_ISLAND__'");
+    expect(entriesModule).toContain("html[key] = node.innerHTML");
+  });
+
+  it("captureIslands ignores nested hydration roots", () => {
+    expect(entriesModule).toContain("node.closest('[data-ssg-h]') !== el");
   });
 
   it("does not interfere with sibling hydration containers", () => {

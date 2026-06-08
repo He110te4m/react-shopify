@@ -3,12 +3,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 const g = globalThis as any;
 
 const capturedElements: any[] = [];
+const liquidData: Record<string, any> = {};
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
   capturedElements.length = 0;
   return {
     ...react,
-    useContext: vi.fn(() => ({})),
+    useContext: vi.fn(() => liquidData),
     useMemo: vi.fn((fn: () => any) => fn()),
     useRef: vi.fn(() => ({ current: null })),
     useLayoutEffect: vi.fn(),
@@ -33,6 +34,7 @@ describe("BlockSlot — SSR path", () => {
   beforeEach(() => {
     g.document = undefined;
     capturedElements.length = 0;
+    for (const key of Object.keys(liquidData)) delete liquidData[key];
   });
 
   afterEach(() => {
@@ -71,18 +73,22 @@ describe("BlockSlot — client path", () => {
   beforeEach(() => {
     g.document = {};
     capturedElements.length = 0;
+    for (const key of Object.keys(liquidData)) delete liquidData[key];
   });
 
   afterEach(() => {
     delete g.document;
   });
 
-  it("renders placeholder sentinel on client", async () => {
+  it("renders captured block DOM on client", async () => {
+    liquidData.__ssg_islands = { __blocks__: "<div data-ssg-component=\"child\"></div>" };
+
     const { BlockSlot } = await importBlockSlot();
     BlockSlot({});
 
     const el = lastElement();
-    expect(el.props.dangerouslySetInnerHTML.__html).toBe("__SSG_ISLAND__");
+    expect(el.props["data-ssg-i"]).toBe("__blocks__");
+    expect(el.props.dangerouslySetInnerHTML.__html).toBe("<div data-ssg-component=\"child\"></div>");
   });
 
   it("passes ref for useLayoutEffect restoration", async () => {

@@ -10,7 +10,15 @@
  */
 import { createContext } from "react";
 
-export const LiquidDataContext = createContext<Record<string, any>>({});
+export const LIQUID_ISLAND_DATA_KEY = "__ssg_islands" as const;
+export const LIQUID_ISLAND_COUNTER_KEY = "__ssg_island_counter" as const;
+
+export type LiquidBridgeData = Record<string, any> & {
+  [LIQUID_ISLAND_DATA_KEY]?: Record<string, string>;
+  [LIQUID_ISLAND_COUNTER_KEY]?: { count: number };
+};
+
+export const LiquidDataContext = createContext<LiquidBridgeData>({});
 
 /**
  * Provider component. Used internally by the generated entry-module to wrap

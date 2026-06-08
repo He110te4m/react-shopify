@@ -3,15 +3,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 const g = globalThis as any;
 
 const capturedElements: any[] = [];
+const liquidData: Record<string, any> = {};
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
   capturedElements.length = 0;
   return {
     ...react,
-    useContext: vi.fn(() => ({})),
+    useContext: vi.fn(() => liquidData),
     useMemo: vi.fn((fn: () => any) => fn()),
     useRef: vi.fn(() => ({ current: null })),
-    useLayoutEffect: vi.fn(),
     createElement: vi.fn((type: any, props: any, ...children: any[]) => {
       const el = { type, props: { ...props, children: children.length ? children : undefined } };
       capturedElements.push(el);
@@ -34,6 +34,7 @@ describe("Island — SSR path", () => {
     g.document = undefined;
     g.__shopify_ssg_island_counter = { count: 0 };
     capturedElements.length = 0;
+    for (const key of Object.keys(liquidData)) delete liquidData[key];
   });
 
   afterEach(() => {
@@ -83,27 +84,38 @@ describe("Island — client path", () => {
   beforeEach(() => {
     g.document = {};
     capturedElements.length = 0;
+    for (const key of Object.keys(liquidData)) delete liquidData[key];
   });
 
   afterEach(() => {
     delete g.document;
   });
 
-  it("renders placeholder sentinel as innerHTML", async () => {
+  it("renders captured Liquid HTML as innerHTML", async () => {
+    liquidData.__ssg_islands = { i0: "<img src=\"hero.jpg\">" };
+    liquidData.__ssg_island_counter = { count: 0 };
+
     const { Island } = await importIsland();
     Island({ expression: "{{ image | image_tag: loading: 'eager' }}" });
 
     const el = lastElement();
     expect(el.type).toBe("shopify-island");
-    expect(el.props.dangerouslySetInnerHTML.__html).toBe("__SSG_ISLAND__");
+    expect(el.props["data-ssg-i"]).toBe("i0");
+    expect(el.props.dangerouslySetInnerHTML.__html).toBe("<img src=\"hero.jpg\">");
     expect(el.props.suppressHydrationWarning).toBe(true);
   });
 
-  it("passes ref for useLayoutEffect restoration", async () => {
-    const { Island } = await importIsland();
-    Island({ expression: "{{ expr }}" });
+  it("increments client island keys from provider counter", async () => {
+    liquidData.__ssg_islands = { i0: "<span>a</span>", i1: "<span>b</span>" };
+    liquidData.__ssg_island_counter = { count: 0 };
 
-    const el = lastElement();
-    expect(el.props.ref).toBeDefined();
+    const { Island } = await importIsland();
+    Island({ expression: "{{ a }}" });
+    Island({ expression: "{{ b }}" });
+
+    expect(capturedElements[0].props["data-ssg-i"]).toBe("i0");
+    expect(capturedElements[0].props.dangerouslySetInnerHTML.__html).toBe("<span>a</span>");
+    expect(lastElement().props["data-ssg-i"]).toBe("i1");
+    expect(lastElement().props.dangerouslySetInnerHTML.__html).toBe("<span>b</span>");
   });
 });
