@@ -7,7 +7,7 @@
 import type { SSGEntry } from "../types/ssg";
 import { generateSchema } from "./schema";
 import { getAssetRelativePath } from "./liquid-paths";
-import { ATTR_HYDRATE, ATTR_COMPONENT, TAG_SLOT } from "../constants/attributes";
+import { ATTR_HYDRATE, ATTR_COMPONENT } from "../constants/attributes";
 import { buildLiquidBridge, type TrackOptions } from "../runtime/bridge";
 
 const DISCLAIMER =
@@ -104,9 +104,6 @@ function resolveLiquidBridge(
   return "";
 }
 
-const hasBlocks = (entry: SSGEntry): boolean =>
-  !!entry.meta.blocks && entry.meta.blocks.length > 0;
-
 function buildSection(
   html: string,
   entry: SSGEntry,
@@ -134,7 +131,9 @@ function buildSection(
     `  <div ${ATTR_HYDRATE}>${html}</div>`,
   );
 
-  if (hasBlocks(entry)) lines.push(`  <${TAG_SLOT}>{% content_for 'blocks' %}</${TAG_SLOT}>`);
+  // BlockSlot is now a React component rendered inside the SSR HTML.
+  // No need to auto-inject a `<shopify-block-slot>` sibling — the React
+  // tree declares the slot location explicitly.
   lines.push(`</${tag}>`);
   return lines;
 }
@@ -175,7 +174,6 @@ function buildBlock(
     `  <div ${ATTR_HYDRATE}>${html}</div>`,
   );
 
-  if (hasBlocks(entry)) lines.push(`  <${TAG_SLOT}>{% content_for 'blocks' %}</${TAG_SLOT}>`);
   lines.push(`</${tag}>`);
   return lines;
 }

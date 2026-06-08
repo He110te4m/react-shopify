@@ -1,5 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue, useLiquidBlock } from "vite-plugin-react-shopify/runtime";
+import { useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   name: "Product Price (React + Liquid Block)",
@@ -22,7 +22,7 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function ProductPrice() {
-  useLiquidBlock(`{%- liquid
+  useLiquidCode(`{%- liquid
     assign price_cents = section.settings.price_input | plus: 0
     assign compare_cents = section.settings.compare_price_input | plus: 0
     assign discount = compare_cents | minus: price_cents
@@ -36,11 +36,11 @@ export default function ProductPrice() {
   {{ formatted_compare }}
   {{ formatted_discount }}`);
 
-  const [priceCents] = useLiquidValue("price_cents", "number");
-  const [compareCents] = useLiquidValue("compare_cents", "number");
-  const [formattedPrice] = useLiquidValue("formatted_price");
-  const [formattedCompare] = useLiquidValue("formatted_compare");
-  const [formattedDiscount] = useLiquidValue("formatted_discount");
+  const [priceCents] = useLiquid<number>("price_cents", { type: "number" });
+  const [compareCents] = useLiquid<number>("compare_cents", { type: "number" });
+  const [formattedPrice] = useLiquid<string>("formatted_price");
+  const [formattedCompare] = useLiquid<string>("formatted_compare");
+  const [formattedDiscount] = useLiquid<string>("formatted_discount");
 
   const hasDiscount = compareCents > priceCents && priceCents > 0;
 

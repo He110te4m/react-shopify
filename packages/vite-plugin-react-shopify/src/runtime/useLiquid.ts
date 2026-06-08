@@ -1,3 +1,18 @@
+/**
+ * @file `useLiquid` — read a Liquid value as React state.
+ *
+ * **SSG**: returns the Liquid placeholder `{{ path }}` and registers the
+ * expression for inclusion in the JSON bridge. The placeholder is emitted
+ * verbatim into the SSR HTML and resolved by Shopify at runtime.
+ *
+ * **Client** (both hydrating and mounted phases): reads the resolved value
+ * from the bridge. Crucially the *initial* value seen by `useState` is the
+ * bridge value — NOT a placeholder — so the first client render matches
+ * what Liquid produced and hydration succeeds.
+ *
+ * The setter exists for parity with `useState` and lets components temp-
+ * override the Liquid value locally. It does NOT sync back to Shopify.
+ */
 import { useState, useCallback, useMemo } from "react";
 import { useShopifyContext } from "./ShopifyContext";
 import type { TrackOptions } from "./bridge";
@@ -10,87 +25,79 @@ export interface UseLiquidOptions {
 
 type Setter<T> = (value: T) => void;
 
+function coerce(raw: unknown, type: TrackOptions["type"], fallback: unknown): unknown {
+  if (type === "number") {
+    if (raw == null) return fallback ?? 0;
+    if (typeof raw === "number") return raw;
+    const n = Number(raw);
+    return Number.isNaN(n) ? (fallback ?? 0) : n;
+  }
+  if (type === "boolean") {
+    if (raw == null) return Boolean(fallback ?? false);
+    if (typeof raw === "boolean") return raw;
+    // Shopify Liquid truthiness: '', '0', 'false' all falsy.
+    if (raw === "" || raw === "0" || raw === "false") return false;
+    return Boolean(raw);
+  }
+  return raw ?? fallback;
+}
+
 /**
- * Unified hook for reading a Liquid value.
- *
- * Replaces: useLiquidValue, useSectionSettings, useBlockSettings,
- * useThemeSettings, useLiquid (v2.5).
- *
- * SSR: returns Liquid placeholder (`{{ expr }}`) and tracks the expression.
- * CSR: reads the resolved value from the JSON bridge.
+ * Read a Liquid value as React state.
  *
  * @example
- * const [title] = useLiquid('section.settings.title')
- * const [count] = useLiquid('block.settings.count', { type: 'number' })
- * const [image] = useLiquid('section.settings.image', {
+ * const [title] = useLiquid<string>('section.settings.title')
+ * const [count] = useLiquid<number>('block.settings.count', { type: 'number' })
+ * const [image] = useLiquid<string>('section.settings.image', {
  *   type: 'string',
- *   bridge: '{{ expr | image_url: width: 800 | json }}',
+ *   bridge: "{{ section.settings.image | image_url: width: 800 | json }}",
  * })
  */
 export function useLiquid<T = string>(
   path: string,
   opts?: UseLiquidOptions,
 ): [T, Setter<T>] {
-  const { isSSR, read, track } = useShopifyContext();
+  const ctx = useShopifyContext();
   const type = opts?.type ?? "string";
 
   const initial = useMemo(() => {
-    if (isSSR) {
-      track(path, opts ? { bridge: opts.bridge, type: opts.type } : undefined);
-
-      if (type === "boolean") return false;
-      if (type === "number") {
-        return `{{ ${path} }}`; // number SSR: placeholder, not 0
-      }
-      return `{{ ${path} }}`;
+    if (ctx.phase === "ssg") {
+      ctx.track(path, opts ? { bridge: opts.bridge, type: opts.type } : undefined);
+      // Number/boolean placeholders need to be the *string form* because
+      // they're embedded into HTML text. Liquid will replace them with
+      // real numbers/booleans which the bridge then sends to the client.
+      return `{{ ${path} }}` as unknown as T;
     }
+    // Client (hydrating + mounted): read bridge value with type coercion.
+    const raw = ctx.read(path);
+    return coerce(raw, type, opts?.defaultValue) as T;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.phase, path, type, opts?.bridge, opts?.defaultValue]);
 
-    // CSR: read from bridge
-    const raw = read(path);
-    if (type === "number") {
-      if (raw == null) return (opts?.defaultValue ?? 0) as T;
-      if (typeof raw === "number") return raw as T;
-      const n = Number(raw);
-      return (Number.isNaN(n) ? (opts?.defaultValue ?? 0) : n) as T;
-    }
-    if (type === "boolean") {
-      // First render false for hydration safety
-      return false as T;
-    }
-    return (raw ?? opts?.defaultValue) as T;
-  }, [isSSR, path, type, opts?.bridge, opts?.defaultValue]);
+  const [value, setValue] = useState<T>(initial);
 
-  const [value, setValue] = useState<T>(initial as T);
-
-  const setter = useCallback(
-    (v: T) => {
-      setValue(v);
-    },
-    [],
-  );
+  const setter = useCallback((v: T) => setValue(v), []);
 
   return [value, setter];
 }
 
 /**
- * Hook for injecting raw Liquid code blocks.
+ * Inject raw Liquid code into the assembled `.liquid` file.
  *
- * Replaces: useLiquidBlock, useRawLiquid.
+ * SSG: pushes `code` into the globalThis blocks registry; auto-tracks any
+ * supplied `trackedExprs` for inclusion in the JSON bridge.
  *
- * SSR: pushes code to globalThis blocks registry + auto-tracks
- *   any `{{ expr }}` patterns found in the code.
- * CSR: no-op.
+ * Client: no-op.
  */
 export function useLiquidCode(code: string, trackedExprs?: string[]): void {
-  const { isSSR, inject, track } = useShopifyContext();
+  const ctx = useShopifyContext();
 
   useMemo(() => {
-    if (!isSSR) return;
-    inject(code);
+    if (ctx.phase !== "ssg") return;
+    ctx.inject(code);
     if (trackedExprs) {
-      for (const expr of trackedExprs) {
-        track(expr);
-      }
+      for (const expr of trackedExprs) ctx.track(expr);
     }
-  }, [isSSR, code, trackedExprs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.phase, code, trackedExprs]);
 }

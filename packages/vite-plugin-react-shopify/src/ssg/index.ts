@@ -64,9 +64,12 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
     load(id) {
       if (id === "\0vite-plugin-shopify:runtime") {
         const exports = [
-          `export { LiquidDataProvider, LiquidDataContext } from 'vite-plugin-shopify/runtime'`,
-          `export { useLiquidValue, useLiquidValues, useLiquidBlock, useRawLiquid, useSectionSettings, useBlockSettings, useThemeSettings, useSnippetParams, useBlockParams } from 'vite-plugin-shopify/runtime'`,
-          `export { ShopifyImage, ShopifyVideo } from 'vite-plugin-shopify/runtime'`,
+          `export { useLiquid, useLiquidCode } from 'vite-plugin-react-shopify/runtime'`,
+          `export { Island } from 'vite-plugin-react-shopify/runtime'`,
+          `export { BlockSlot } from 'vite-plugin-react-shopify/runtime'`,
+          `export { ShopifyImage, ShopifyVideo } from 'vite-plugin-react-shopify/runtime'`,
+          `export { LiquidDataProvider, LiquidDataContext } from 'vite-plugin-react-shopify/runtime'`,
+          `export { buildLiquidBridge } from 'vite-plugin-react-shopify/runtime'`,
         ];
         return exports.join("\n");
       }

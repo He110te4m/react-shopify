@@ -1,3 +1,11 @@
+/**
+ * @file `<ShopifyVideo>` — specialized Island for Shopify-hosted videos.
+ *
+ * Computes a Liquid `{{ media | video_tag: ... }}` expression on the SSG
+ * render pass and delegates to `<Island>` for the hydration boundary.
+ * On the client, Island's pre-capture mechanism preserves the real
+ * `<video>` that Shopify rendered (sources, poster, tracks intact).
+ */
 import { useMemo } from "react";
 import { Island } from "./Island";
 import { useShopifyContext } from "./ShopifyContext";
@@ -13,7 +21,7 @@ export interface ShopifyVideoProps
   controls?: boolean;
 }
 
-function buildVideoTagParams(opts: {
+function buildVideoTagParams(o: {
   imageSize?: string;
   autoplay?: boolean;
   loop?: boolean;
@@ -21,22 +29,14 @@ function buildVideoTagParams(opts: {
   controls?: boolean;
 }): string {
   const parts: string[] = [];
-  if (opts.imageSize) parts.push(`image_size: '${opts.imageSize}'`);
-  if (opts.autoplay) parts.push("autoplay: true");
-  if (opts.loop) parts.push("loop: true");
-  if (opts.muted) parts.push("muted: true");
-  if (opts.controls) parts.push("controls: true");
+  if (o.imageSize) parts.push(`image_size: '${o.imageSize}'`);
+  if (o.autoplay) parts.push("autoplay: true");
+  if (o.loop) parts.push("loop: true");
+  if (o.muted) parts.push("muted: true");
+  if (o.controls) parts.push("controls: true");
   return parts.join(", ");
 }
 
-/**
- * Renders a Shopify-hosted video using the Liquid
- * {@code video_tag} filter.
- *
- * Uses the unified <Island> primitive — on SSR the Liquid expression is
- * rendered inside a custom element. On CSR the element is empty,
- * preserving the Liquid-rendered <video> DOM intact.
- */
 export function ShopifyVideo({
   media,
   imageSize,
@@ -48,23 +48,15 @@ export function ShopifyVideo({
   style,
   ...rest
 }: ShopifyVideoProps) {
-  const { isSSR, track } = useShopifyContext();
-
-  const videoTagParams = useMemo(
-    () => buildVideoTagParams({ imageSize, autoplay, loop, muted, controls }),
-    [imageSize, autoplay, loop, muted, controls],
-  );
+  const ctx = useShopifyContext();
 
   const expression = useMemo(() => {
-    if (!isSSR) return "";
-    track(media);
-    const tagPart = videoTagParams
-      ? ` | video_tag: ${videoTagParams}`
-      : " | video_tag";
+    if (ctx.phase !== "ssg") return "";
+    ctx.track(media);
+    const params = buildVideoTagParams({ imageSize, autoplay, loop, muted, controls });
+    const tagPart = params ? ` | video_tag: ${params}` : " | video_tag";
     return `{{ ${media}${tagPart} }}`;
-  }, [isSSR, media, videoTagParams, track]);
-
-  if (!expression && !isSSR) return null;
+  }, [ctx.phase, media, imageSize, autoplay, loop, muted, controls]);
 
   return (
     <Island

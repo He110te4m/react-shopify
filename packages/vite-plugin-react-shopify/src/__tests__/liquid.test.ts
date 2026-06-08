@@ -138,20 +138,21 @@ describe("assembleLiquidFile", () => {
     expect(result).toContain("product_title");
   });
 
-  it("includes content_for 'blocks' when entry has blocks", () => {
+  it("does not auto-inject content_for blocks (BlockSlot handles it via SSR)", () => {
     const entry = makeEntry({
       meta: {
         ...makeEntry().meta,
         blocks: [
           { type: "child-block", name: "Child Block" },
-          { type: "other-block", name: "Other Block" },
         ],
         max_blocks: 4,
       },
     });
     const result = assembleLiquidFile("<div></div>", entry, null, { inline: [], snippets: [] }, defaultOptions, []);
 
-    expect(result).toContain("{% content_for 'blocks' %}");
+    // BlockSlot is now a React component rendered inside the SSR HTML.
+    // The assembler no longer auto-injects a sibling <ssg-slot>.
+    expect(result).not.toContain("{% content_for 'blocks' %}");
   });
 
   it("includes CSS inline", () => {

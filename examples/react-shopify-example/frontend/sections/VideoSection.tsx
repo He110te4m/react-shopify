@@ -1,5 +1,5 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquidValue, ShopifyVideo } from "vite-plugin-react-shopify/runtime";
+import { useLiquid, ShopifyVideo } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
   name: "Video Section (React)",
@@ -11,7 +11,7 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function VideoSection() {
-  const [title] = useLiquidValue("section.settings.title");
+  const [title] = useLiquid<string>("section.settings.title");
 
   return (
     <section style={{ padding: "2rem 0" }}>

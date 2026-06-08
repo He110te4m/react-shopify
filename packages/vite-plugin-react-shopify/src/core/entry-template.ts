@@ -1,5 +1,5 @@
 import type { SSGEntry } from "../types/ssg";
-import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, TAG_SLOT } from "../constants/attributes";
+import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, ATTR_ISLAND } from "../constants/attributes";
 
 export function generateEntryModule(entry: SSGEntry, componentRel: string): string {
   const { kebabName } = entry;
@@ -12,20 +12,32 @@ export function generateEntryModule(entry: SSGEntry, componentRel: string): stri
     `const SELECTOR = '[${ATTR_COMPONENT}="${kebabName}"]'`,
     `const roots = new Map()`,
     ``,
-    `if (typeof customElements !== 'undefined' && !customElements.get('${TAG_SLOT}')) {`,
-    `  customElements.define('${TAG_SLOT}', class extends HTMLElement {})`,
-    `}`,
-    ``,
     `function readLiquidData(el) {`,
     `  const script = el.querySelector(':scope > script[${ATTR_LIQUID_BRIDGE}]')`,
     `  if (!script) return {}`,
     `  try { return JSON.parse(script.textContent || '{}') } catch { return {} }`,
     `}`,
     ``,
+    `// Pre-capture: before hydrateRoot, swap every <shopify-island> and`,
+    `// <shopify-block-slot> innerHTML to a sentinel so React hydration`,
+    `// sees an exact match. Save the real Liquid-rendered HTML on an expando`,
+    `// so Island's useLayoutEffect can restore it after commit.`,
+    `function captureIslands(el) {`,
+    `  const nodes = el.querySelectorAll('[${ATTR_ISLAND}]')`,
+    `  const alsoSelf = el.matches && el.matches('[${ATTR_ISLAND}]')`,
+    `  const all = alsoSelf ? [el, ...nodes] : Array.from(nodes)`,
+    `  for (const node of all) {`,
+    `    if (node._ssgHtml !== undefined) continue`,
+    `    node._ssgHtml = node.innerHTML`,
+    `    node.innerHTML = '__SSG_ISLAND__'`,
+    `  }`,
+    `}`,
+    ``,
     `function hydrate(el) {`,
     `  const h = el.querySelector(':scope > [${ATTR_HYDRATE}]') || (el.matches('[${ATTR_HYDRATE}]') ? el : null)`,
     `  if (!h || roots.has(h)) return`,
     `  const liquidData = readLiquidData(el)`,
+    `  captureIslands(h)`,
     `  roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))))`,
     `}`,
     ``,

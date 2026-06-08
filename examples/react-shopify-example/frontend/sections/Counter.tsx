@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useLiquidValue } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
 import SharedCard from "../components/SharedCard/SharedCard";
 
 const settings = [
@@ -30,9 +30,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function Counter() {
-  const [title] = useLiquidValue("section.settings.title");
-  const [initialCount] = useLiquidValue("section.settings.initial_count", "number");
-  const [step] = useLiquidValue("section.settings.step", "number");
+  const [title] = useLiquid<string>("section.settings.title");
+  const [initialCount] = useLiquid<number>("section.settings.initial_count", { type: "number" });
+  const [step] = useLiquid<number>("section.settings.step", { type: "number" });
 
   const [count, setCount] = useState(initialCount);
 
