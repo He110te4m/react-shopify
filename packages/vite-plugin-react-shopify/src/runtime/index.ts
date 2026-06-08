@@ -24,6 +24,13 @@ export type { IslandProps } from "./Island";
 export { BlockSlot } from "./BlockSlot";
 export type { BlockSlotProps } from "./BlockSlot";
 
+export { StaticBlock } from "./StaticBlock";
+export type {
+  StaticBlockProps,
+  StaticBlockDataValue,
+  StaticBlockLiquidValue,
+} from "./StaticBlock";
+
 // ── Specialized Components ─────────────────────────────────────────────────
 export { ShopifyImage } from "./ShopifyImage";
 export type {

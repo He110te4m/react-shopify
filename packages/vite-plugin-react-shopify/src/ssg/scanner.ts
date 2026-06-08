@@ -59,15 +59,24 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
 function extractBlockTypes(filePath: string): string[] {
   try {
     const source = fs.readFileSync(filePath, "utf-8");
+    const types = new Set<string>();
+
     const m = source.match(/blocks\s*:\s*\[([\s\S]*?)\]/);
-    if (!m) return [];
-    const types: string[] = [];
-    const re = /type\s*:\s*['"]([^'"]+)['"]/g;
-    let item: RegExpExecArray | null;
-    while ((item = re.exec(m[1])) !== null) {
-      if (!item[1].startsWith("@")) types.push(item[1]);
+    if (m) {
+      const re = /type\s*:\s*['"]([^'"]+)['"]/g;
+      let item: RegExpExecArray | null;
+      while ((item = re.exec(m[1])) !== null) {
+        if (!item[1].startsWith("@")) types.add(item[1]);
+      }
     }
-    return types;
+
+    const staticBlockRe = /<StaticBlock\b[\s\S]*?\btype\s*=\s*['"]([^'"]+)['"][\s\S]*?>/g;
+    let staticItem: RegExpExecArray | null;
+    while ((staticItem = staticBlockRe.exec(source)) !== null) {
+      types.add(staticItem[1]);
+    }
+
+    return [...types];
   } catch {
     return [];
   }

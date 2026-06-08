@@ -132,6 +132,39 @@
         "hero_video": "shopify://files/videos/precise-nav-video.mp4",
         "title": "ShopifyVideo — video_tag Demo"
       }
+    },
+    "react_static_block_test_H7mQp2": {
+      "type": "react-static-block-test",
+      "name": "Static Block Test",
+      "blocks": {
+        "hero-1": {
+          "type": "react-hero-banner",
+          "static": true,
+          "settings": {
+            "heading": "Static Hero Banner",
+            "bg_color": "#f4f1ff",
+            "text_color": "#2d2350"
+          },
+          "blocks": {}
+        },
+        "react_static_dynamic_block_1": {
+          "type": "react-color-block",
+          "settings": {
+            "label": "Dynamic Block",
+            "color": "#00b894",
+            "height": 80
+          },
+          "blocks": {}
+        }
+      },
+      "block_order": [
+        "react_static_dynamic_block_1"
+      ],
+      "settings": {
+        "title": "Static Block Demo",
+        "accent_color": "#6c63ff",
+        "secondary_color": "#00b894"
+      }
     }
   },
   "order": [
@@ -144,6 +177,7 @@
     "react_product_price_xWPMQk",
     "react_image_section_J7tPmw",
     "react_multi_component_section_9Uyfbm",
-    "react_video_section_kfr94C"
+    "react_video_section_kfr94C",
+    "react_static_block_test_H7mQp2"
   ]
 }

@@ -2,7 +2,7 @@
 
 > ✅ **v3.1 更新(2026-06-08)** — 匹配当前代码实现。v1-v9 的 14+ hook 设计已简化为 2 个核心原语 + 4 个组件。
 > 历史:经历 v1-v9.1 多轮设计迭代(4 轮评审),v3.0 起大幅简化 API 表面。
-> **状态**: 核心 API 已实施(useLiquid/useLiquidCode/Island/BlockSlot/ShopifyImage/ShopifyVideo)。i18n 和 StaticBlock 待实施。
+> **状态**: 核心 API 已实施(useLiquid/useLiquidCode/Island/BlockSlot/StaticBlock/ShopifyImage/ShopifyVideo)。i18n 待实施。
 >
 > **v3.1 关键变化**:14+ 专用 hook → 2 个核心原语(`useLiquid`/ `useLiquidCode`) + Island 水合边界 + 4 个组件。纯 JS 工具函数移到用户空间。本文已清理旧 `ImageTag` / `useLiquidBlock` / `useRawLiquid` 的实现前提,仅保留为历史风险说明。
 >
@@ -123,12 +123,12 @@ Shopify Liquid 引擎处理:
 | | 🟢 DONE | `useLiquidCode(code, trackedExprs?)` | 注入原始 Liquid 片段到 hydrate 容器之前 |
 | **水合边界** | 🟢 DONE | `<Island expression={...}>` | 通用 hydration 边界,包裹需要 Liquid 生成 HTML 的区域 |
 | | 🟢 DONE | `<BlockSlot />` | block 注入点,渲染 `{% content_for 'blocks' %}` |
+| | 🟢 DONE | `<StaticBlock />` | 静态 block 注入点,渲染 `{% content_for "block" %}` |
 | **媒体组件** | 🟢 DONE | `<ShopifyImage>` | CDN 图片,`image_url \| image_tag` 管道 |
 | | 🟢 DONE | `<ShopifyVideo>` | `video_tag` 管道 |
 | **上下文** | 🟢 DONE | `LiquidDataProvider` | bridge 数据注入到 React context |
 | **用户空间** | 🟢 不进插件 | `useImageBehavior` / `useColorScheme` / `useBlockType` / `clsx` 等 | 纯 JS utility,在 `frontend/utils/` 中实现 |
 | **待实现** | 🟡 TODO | i18n 系统 | `useT` / `useLocale` / `LocaleProvider` |
-| | 🟡 TODO | `<StaticBlock>` | 静态 block 注入 |
 
 **v1-v9 中已移除的 hook 对照**:
 
@@ -250,7 +250,7 @@ Shopify Liquid 引擎处理:
 - **§3.1 原始 Liquid 注入**:v1-v4 的 HTML 注释方案已废弃,v5/v6 的 span + null 也有问题,当前以 `useLiquidCode` 注入到 hydrate 容器之前
 - **§3.2 useForm**:需分两阶段降级
 - **§3.3 usePaginate**:需移除或大幅降级
-- **§3.4 StaticBlock**:runtime 组件仍未实现;短期只能用 `useLiquidCode` 注入完整 `{% content_for "block" %}` 片段,且位置固定在 hydrate 容器之前
+- **§3.4 StaticBlock**:已实现为 `<StaticBlock>`,在 React 树内固定位置输出 `{% content_for "block" %}` 并通过 Island capture 机制保持水合一致
 - **§6.5 hydration 规则**:H3(自动改 CSS 变量)的方案需重新设计;新增规则 H13(检测 React 19 自动 link preload,触发条件是"无 loading=lazy")
 
 ---
@@ -476,7 +476,7 @@ const [paddingBottom] = useLiquid<string>("section.settings.padding_bottom");
 ## 3. 注入类 API (🟢 DONE / 🟡 TODO)
 
 > v3.1: v1-v9 的"标记替换"模式已被 Island 机制替代。原始 Liquid 注入统一为 `useLiquidCode`(已实现)。
-> `useForm` 和 `usePaginate` 正确推迟到阶段 4+,`<StaticBlock>` 待实现。
+> `useForm` 和 `usePaginate` 正确推迟到阶段 4+,`<StaticBlock>` 已实现。
 
 > 历史 B 类 hook 曾依赖"React 树中占位符 + SSR 后处理替换"。v3.1 已废弃该模式:树内 Liquid HTML 用 `<Island>`,树外独立片段用 `useLiquidCode`。
 >
@@ -664,38 +664,52 @@ function MainCollectionProductGrid() {
 
 ---
 
-### 3.4 `useStaticBlock(spec)`
+### 3.4 `<StaticBlock>` 组件 (🟢 DONE)
 
 **签名**:
 ```ts
-interface StaticBlockSpec {
-  type: string;       // block 文件名,如 "slide"
-  id: string;         // block 唯一 ID(在 presets 中声明)
-  data?: Record<string, string | number>;  // 传给子 block 的数据
+interface StaticBlockLiquidValue {
+  liquid: string;
 }
-function useStaticBlock(spec: StaticBlockSpec): React.FC;
+
+type StaticBlockDataValue = string | number | boolean | null | StaticBlockLiquidValue;
+
+interface StaticBlockProps {
+  type: string;       // block 文件名,如 "react-hero-banner"
+  id: string;         // static block 唯一 ID(需与 section preset/template 中声明一致)
+  data?: Record<string, StaticBlockDataValue>;
+  as?: string;        // 默认 "shopify-static-block"
+  className?: string;
+  style?: React.CSSProperties;
+}
+function StaticBlock(props: StaticBlockProps): JSX.Element;
 ```
 
 **SSR 行为**:
-- 渲染 `{% content_for "block", type: spec.type, id: spec.id, data_key: data.value %}`
-- 注意:static block 的 `data` 参数需要转 Liquid 表达式
+- 渲染 `<shopify-static-block data-ssg-i="i0">{% content_for "block", ... %}</shopify-static-block>`
+- `data` 中普通 JS 字面量会被序列化为 Liquid 字面量
+- `data` 中 `{ liquid: "section.settings.X" }` 会原样输出为 Liquid 表达式,并进入 JSON bridge track map
 
-**CSR 行为**:渲染为 null(实际渲染由 Shopify 在 `content_for` 解析时完成)
+**CSR 行为**:
+- 从 `LiquidDataProvider.__ssg_islands[key]` 读取 Shopify 已渲染的 static block DOM
+- 通过 `dangerouslySetInnerHTML` 输出同一份 HTML,避免 hydration mismatch
+- commit 后派发 `ssg:blocks:ready`,让 static block 对应的 block entry 可以 hydrate
 
 **边缘情况**:
-- `data` 中的 value 是字面量时:`{% content_for "block", type: "slide", id: "s1", accent: "#fff" %}`
-- `data` 中的 value 是变量时:`{% content_for "block", type: "slide", id: "s1", accent: settings.X %}`
+- `data` 中的 value 是字面量时:`{% content_for "block", type: "react-hero-banner", id: "hero-1", label: "Hero" %}`
+- `data` 中的 value 是 Liquid 表达式时:`{% content_for "block", type: "react-hero-banner", id: "hero-1", accent: section.settings.accent_color %}`
 - 子 block 中通过 `{{ accent | default: '#000' }}` 接收
 
 **实现路径**:
-- 字符串模板生成 `{% content_for "block", ... %}` 表达式
-- 跟踪 data 引用到的所有表达式
+- `packages/vite-plugin-react-shopify/src/runtime/StaticBlock.tsx`
+- `scanner.ts` 识别 JSX `<StaticBlock type="..." />`,让 section 能预加载对应 block entry script
+- `entry-template.ts` 已有的 `[data-ssg-i]` capture 机制复用到 static block wrapper
 
 **风险**:
 - 🟢 LOW(static block 语义明确,语法简单)
-- 🟡 **MEDIUM**:static block 的 data 传递需要类型检查(避免传 React 引用)
+- 🟡 MEDIUM:static block 的配置仍需在 section preset/template JSON 中用同一 `id` 声明,否则 Shopify 只会使用默认配置
 
-**可行性结论**:🟢 LOW 风险,🟡 MEDIUM 工作量
+**可行性结论**:🟢 已实现,并在 `examples/react-shopify-example/frontend/sections/StaticBlockTest.tsx` 中验证。
 
 ---
 
@@ -814,38 +828,39 @@ export default function Heading() {
 
 ---
 
-### 4.2 `<StaticBlock>` 组件(替代 useStaticBlock)
+### 4.2 `<StaticBlock>` 组件(替代 useStaticBlock) (🟢 DONE)
 
 **签名**:
 ```ts
 interface StaticBlockProps {
-  type: string;       // block 文件名,如 "slide"
-  id: string;         // 块唯一 ID(在 presets 中声明)
-  data?: Record<string, string | number>;  // 传给子 block 的数据
+  type: string;       // block 文件名,如 "react-hero-banner"
+  id: string;         // 块唯一 ID(在 presets/template 中声明)
+  data?: Record<string, string | number | boolean | null | { liquid: string }>;
 }
 function StaticBlock(props: StaticBlockProps): JSX.Element;
 ```
 
 **SSR 行为**:
-- 渲染为 `{% content_for "block", type: spec.type, id: spec.id, data_key: data.value %}`
-- 注意:`data` 参数中的 value 若是 Liquid 表达式,需要跟踪
-- 若是字面量,直接拼接到表达式
+- 渲染为 `<shopify-static-block data-ssg-i="i0">{% content_for "block", type: ..., id: ..., ...data %}</shopify-static-block>`
+- `data` 中 `{ liquid: "section.settings.X" }` 会原样输出并被 track
+- 字面量会序列化为 Liquid 字面量
 
-**CSR 行为**:渲染为 null
+**CSR 行为**:渲染预捕获的 static block DOM,并派发 `ssg:blocks:ready` 触发子 block hydration
 
 **边缘情况**:
-- `data` 中的 value 是字面量 vs 变量:`{% content_for "block", ..., accent: "#fff" %}` vs `accent: settings.X`
+- `data` 中的 value 是字面量 vs Liquid 表达式:`{% content_for "block", ..., accent: "#fff" %}` vs `accent: section.settings.X`
 - 子 block 接收:`{{ accent | default: '#000' }}`
 
 **实现路径**:
-- 字符串模板生成 `{% content_for "block", ... %}` 表达式
-- 跟踪 data 引用到的所有表达式
+- runtime 组件生成 `{% content_for "block", ... %}` 表达式
+- scanner 识别 `<StaticBlock type="..." />` 并为对应 block 预加载脚本
+- 复用 Island capture/provider 机制保证 hydration 对齐
 
 **风险**:
 - 🟢 LOW
 - 🟡 **MEDIUM**:data 传值需要类型检查,避免传 React 引用
 
-**可行性结论**:🟢 **HIGH**
+**可行性结论**:🟢 **DONE**
 
 ---
 
@@ -1491,8 +1506,8 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 | `<ShopifyVideo>` | ✅ DONE | `runtime/ShopifyVideo.tsx` |
 | `LiquidDataProvider` | ✅ DONE | `runtime/provider.ts` |
 | `buildLiquidBridge` | ✅ DONE | `runtime/bridge.ts` |
+| `<StaticBlock>` | ✅ DONE | `runtime/StaticBlock.tsx` |
 | **i18n 系统** | 🟡 TODO | `useT` / `useLocale` / `LocaleProvider` + locale 生成 |
-| **`<StaticBlock>`** | 🟡 TODO | 静态 block 注入组件 |
 | **hydration-rules H2-H13** | 🟡 TODO | 检测器扩展 |
 
 **已移除(不进插件)**:
@@ -1531,7 +1546,7 @@ React 19 自动插入 `<link rel="preload">` 元素,即使 srcSet 包含 Liquid 
 
 | 优先级 | 项目 | 说明 |
 |--------|------|------|
-| **P0** | `<StaticBlock>` 组件 | 静态 block 注入,语义类似 `<BlockSlot>` 但指定 type/id/data |
-| **P1** | i18n 系统 | `LocaleProvider` + `useT` + `useLocale` + 插件 locale 生成(见 §5) |
-| **P2** | hydration-rules H2-H13 | 扩展现有 H1 自动修复,新增条件渲染/内联颜色/Date本地化等检测 |
+| **P0** | i18n 系统 | `LocaleProvider` + `useT` + `useLocale` + 插件 locale 生成(见 §5) |
+| **P1** | hydration-rules H2-H13 | 扩展现有 H1 自动修复,新增条件渲染/内联颜色/Date本地化等检测 |
 | **已实施** | 核心原语 + 媒体组件 + BlockSlot | 见 §8 状态表 |
+| **已实施** | `<StaticBlock>` 组件 | 静态 block 注入,语义类似 `<BlockSlot>` 但指定 type/id/data |

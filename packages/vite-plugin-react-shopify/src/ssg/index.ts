@@ -67,6 +67,7 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
           `export { useLiquid, useLiquidCode } from 'vite-plugin-react-shopify/runtime'`,
           `export { Island } from 'vite-plugin-react-shopify/runtime'`,
           `export { BlockSlot } from 'vite-plugin-react-shopify/runtime'`,
+          `export { StaticBlock } from 'vite-plugin-react-shopify/runtime'`,
           `export { ShopifyImage, ShopifyVideo } from 'vite-plugin-react-shopify/runtime'`,
           `export { LiquidDataProvider, LiquidDataContext } from 'vite-plugin-react-shopify/runtime'`,
           `export { buildLiquidBridge } from 'vite-plugin-react-shopify/runtime'`,
