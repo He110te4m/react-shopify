@@ -6,6 +6,7 @@ import type { SSGEntry } from "../types/ssg";
 import { logger } from "./logger";
 import { scanEntries } from "../ssg/scanner";
 import { generateEntryModule } from "./entry-template";
+import { getSectionManagedBlocks } from "./block-graph";
 
 const log = logger("entries");
 
@@ -13,30 +14,12 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
   let entries: SSGEntry[] = [];
   let sectionManagedBlocks: Set<string> = new Set();
 
-  function buildSectionManagedBlocks(): Set<string> {
-    const blockPrefix = options.ssg.prefix.block;
-    const result = new Set<string>();
-    for (const entry of entries) {
-      if (entry.targetType !== "section") continue;
-      const blockTypes: string[] = (entry.meta as any)._blockTypes;
-      if (!blockTypes || blockTypes.length === 0) continue;
-      for (const blockType of blockTypes) {
-        const kebab = blockType.startsWith(blockPrefix)
-          ? blockType.slice(blockPrefix.length)
-          : blockType;
-        const be = entries.find((e) => e.targetType === "block" && e.kebabName === kebab);
-        if (be) result.add(be.kebabName);
-      }
-    }
-    return result;
-  }
-
   return {
     name: "vite-plugin-shopify:entries",
 
     config(config) {
       entries = scanEntries(options);
-      sectionManagedBlocks = buildSectionManagedBlocks();
+      sectionManagedBlocks = getSectionManagedBlocks(entries, options);
 
       const byType: Record<string, number> = {};
       for (const e of entries) {

@@ -6,7 +6,7 @@
  *   - 'ssg'       : Node-side SSG render. Hooks emit Liquid placeholders and
  *                   register tracked expressions in globalThis registries.
  *   - 'hydrating' : First client render. Hooks read resolved values from the
- *                   bridge; Island components render a placeholder sentinel
+ *                   bridge; Island components reuse pre-captured Liquid DOM
  *                   so React vdom matches DOM exactly during hydration.
  *   - 'mounted'   : All subsequent client renders. Same data sources as
  *                   `hydrating` — Island content stays frozen via React.memo.

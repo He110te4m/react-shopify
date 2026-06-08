@@ -125,43 +125,44 @@ export function renderEntry(
       return null;
     }
 
-    // Global state: tells hooks what type of Liquid entity we're rendering.
-    (globalThis as any)[GW_TARGET] = entry.targetType;
-
-    // Build and register the Liquid filter map so hooks output correct filters.
-    const prefix = entry.targetType === "block" ? "block.settings." : "section.settings.";
-    const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
-    (globalThis as any)[GW_FILTERS] = filterMap;
-
     const trackMap = new Map<string, any>();
-    (globalThis as any)[GW_TRACK_MAP] = trackMap;
-
     const trackedExpressions = new Set<string>();
-    (globalThis as any)[GW_TRACK] = trackedExpressions;
-
     const liquidBlocks: string[] = [];
-    (globalThis as any)[GW_BLOCKS] = liquidBlocks;
 
-    // Island key counter — auto-incremented by <Island> during SSR so each
-    // island gets a unique `data-ssg-i` attribute for client pre-capture.
-    (globalThis as any)[GW_ISLAND_COUNTER] = { count: 0 };
+    try {
+      // Global state: tells hooks what type of Liquid entity we're rendering.
+      (globalThis as any)[GW_TARGET] = entry.targetType;
 
-    const element = createElement(Component);
-    let html = renderToStaticMarkup(element);
+      // Build and register the Liquid filter map so hooks output correct filters.
+      const prefix = entry.targetType === "block" ? "block.settings." : "section.settings.";
+      const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
+      (globalThis as any)[GW_FILTERS] = filterMap;
 
-    // Clean up global registries immediately after rendering to prevent
-    // bleeding state between successive entries.
-    delete (globalThis as any)[GW_TRACK_MAP];
-    delete (globalThis as any)[GW_TRACK];
-    delete (globalThis as any)[GW_BLOCKS];
-    delete (globalThis as any)[GW_FILTERS];
-    delete (globalThis as any)[GW_ISLAND_COUNTER];
+      (globalThis as any)[GW_TRACK_MAP] = trackMap;
+      (globalThis as any)[GW_TRACK] = trackedExpressions;
+      (globalThis as any)[GW_BLOCKS] = liquidBlocks;
 
-    html = normalizeVoidElements(html);
-    html = normalizeStyleAttributes(html);
-    html = unwrapHtmlEntities(html);
+      // Island key counter — auto-incremented by <Island> during SSR so each
+      // island gets a unique `data-ssg-i` attribute for client pre-capture.
+      (globalThis as any)[GW_ISLAND_COUNTER] = { count: 0 };
 
-    return { html, trackedExpressions, liquidBlocks, trackMap, entryMeta: entry.meta };
+      const element = createElement(Component);
+      let html = renderToStaticMarkup(element);
+
+      html = normalizeVoidElements(html);
+      html = normalizeStyleAttributes(html);
+      html = unwrapHtmlEntities(html);
+
+      return { html, trackedExpressions, liquidBlocks, trackMap, entryMeta: entry.meta };
+    } finally {
+      // Prevent failed renders from leaking registry state into the next entry.
+      delete (globalThis as any)[GW_TARGET];
+      delete (globalThis as any)[GW_TRACK_MAP];
+      delete (globalThis as any)[GW_TRACK];
+      delete (globalThis as any)[GW_BLOCKS];
+      delete (globalThis as any)[GW_FILTERS];
+      delete (globalThis as any)[GW_ISLAND_COUNTER];
+    }
   });
 }
 

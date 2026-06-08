@@ -25,6 +25,7 @@ import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
 import { validateShopifyMeta, validateBlockSlot } from "../validate";
 import { isStaticComponent } from "./static-analyzer";
+import { findBlockEntry, getDeclaredBlockTypes, getSectionManagedBlocks } from "../core/block-graph";
 
 const log = logger("ssg:compiler");
 
@@ -53,22 +54,17 @@ export async function compileAllEntries(
   // instead the section liquid emits those scripts BEFORE its own
   // script so block entry modules register event listeners first.
   const sectionBlockScripts = new Map<string, string[]>();
-  const sectionManagedKebabNames = new Set<string>();
-  const blockPrefix = options.ssg.prefix.block;
+  const sectionManagedKebabNames = getSectionManagedBlocks(entries, options);
 
   for (const entry of entries) {
     if (entry.targetType !== "section") continue;
-    const blockTypes: string[] = (entry.meta as any)._blockTypes;
+    const blockTypes = getDeclaredBlockTypes(entry);
     if (!blockTypes || blockTypes.length === 0) continue;
 
     const scripts: string[] = [];
     for (const blockType of blockTypes) {
-      const kebab = blockType.startsWith(blockPrefix)
-        ? blockType.slice(blockPrefix.length)
-        : blockType;
-      const be = entries.find((e) => e.targetType === "block" && e.kebabName === kebab);
+      const be = findBlockEntry(entries, blockType, options);
       if (be) {
-        sectionManagedKebabNames.add(be.kebabName);
         // Only add non-static block scripts
         const source = fs.readFileSync(be.filePath, "utf-8");
         if (!isStaticComponent(source, be.filePath)) {

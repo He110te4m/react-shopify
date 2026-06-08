@@ -57,14 +57,21 @@ Shopify request
 
 ## Vite 插件组成
 
-`src/index.ts` 返回三个子插件：
+`src/index.ts` 返回四个子插件：
 
 ```text
 vitePluginShopify(options)
-  ├─ shopifyConfig   vite-plugin-shopify:config
-  ├─ shopifyEntries  vite-plugin-shopify:entries
-  └─ shopifySSG      vite-plugin-shopify:ssg
+  ├─ hydrationFix   vite-plugin-shopify:hydration-fix
+  ├─ shopifyConfig  vite-plugin-shopify:config
+  ├─ shopifyEntries vite-plugin-shopify:entries
+  └─ shopifySSG     vite-plugin-shopify:ssg
 ```
+
+### `hydrationFix`
+
+文件：`src/hydration-fix/vite-plugin.ts`
+
+职责：在构建和 SSG bundle 阶段修复 JSX 中相邻文本与 Liquid 表达式造成的 hydration 风险。
 
 ### `shopifyConfig`
 
