@@ -15,6 +15,9 @@ import path from "node:path";
 import { Manifest } from "vite";
 import type { ResolvedOptions } from "../core/options";
 import type { SSGEntry } from "../types/ssg";
+import { logger } from "../core/logger";
+
+const log = logger("ssg:css");
 
 /**
  * For each SSG entry, collect the set of CSS chunk file paths from the
@@ -41,6 +44,8 @@ export function analyzeCssDistribution(
     }
   }
 
+  const sharedCount = [...cssRefCount.values()].filter((c) => c >= 2).length;
+  log.debug("css: %d entries, %d shared files", entries.length, sharedCount);
   return { entryCssFiles, cssRefCount };
 }
 

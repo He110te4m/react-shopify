@@ -1,9 +1,25 @@
 import type { SSGEntry } from "../types/ssg";
 import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, ATTR_ISLAND } from "../constants/attributes";
+import { debugLines } from "./runtime-debug";
 
-export function generateEntryModule(entry: SSGEntry, componentRel: string): string {
+export type EntryMode = "scan" | "listen";
+
+export interface EntryOptions {
+  mode?: EntryMode;
+  debug?: boolean;
+}
+
+export function generateEntryModule(
+  entry: SSGEntry,
+  componentRel: string,
+  opts: EntryOptions = {},
+): string {
   const { kebabName } = entry;
-  return [
+  const { mode = "scan", debug = false } = opts;
+
+  const dbg = debugLines(debug);
+
+  const lines: string[] = [
     `import { createElement } from 'react'`,
     `import Component from '~/${componentRel}'`,
     `import { hydrateRoot } from 'react-dom/client'`,
@@ -18,10 +34,6 @@ export function generateEntryModule(entry: SSGEntry, componentRel: string): stri
     `  try { return JSON.parse(script.textContent || '{}') } catch { return {} }`,
     `}`,
     ``,
-    `// Pre-capture: before hydrateRoot, swap every <shopify-island> and`,
-    `// <shopify-block-slot> innerHTML to a sentinel so React hydration`,
-    `// sees an exact match. Save the real Liquid-rendered HTML on an expando`,
-    `// so Island's useLayoutEffect can restore it after commit.`,
     `function captureIslands(el) {`,
     `  const nodes = el.querySelectorAll('[${ATTR_ISLAND}]')`,
     `  const alsoSelf = el.matches && el.matches('[${ATTR_ISLAND}]')`,
@@ -36,9 +48,12 @@ export function generateEntryModule(entry: SSGEntry, componentRel: string): stri
     `function hydrate(el) {`,
     `  const h = el.querySelector(':scope > [${ATTR_HYDRATE}]') || (el.matches('[${ATTR_HYDRATE}]') ? el : null)`,
     `  if (!h || roots.has(h)) return`,
+    ...dbg(`  console.debug('[SSG:${kebabName}] hydrate start')`),
     `  const liquidData = readLiquidData(el)`,
+    ...dbg(`  console.debug('[SSG:${kebabName}] liquidData', liquidData)`),
     `  captureIslands(h)`,
     `  roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))))`,
+    ...dbg(`  console.debug('[SSG:${kebabName}] hydrate done')`),
     `}`,
     ``,
     `function unmount(el) {`,
@@ -47,23 +62,47 @@ export function generateEntryModule(entry: SSGEntry, componentRel: string): stri
     `}`,
     ``,
     `function scan(target) {`,
-    `  if (target.matches?.(SELECTOR)) hydrate(target)`,
-    `  target.querySelectorAll(SELECTOR).forEach(hydrate)`,
+    `  const found = target.matches?.(SELECTOR) ? [target] : target.querySelectorAll(SELECTOR)`,
+    ...dbg(`  console.debug('[SSG:${kebabName}] scan found', found.length, 'elements')`),
+    `  found.forEach(hydrate)`,
     `}`,
     ``,
     `function sweep(target) {`,
     `  if (target.matches?.(SELECTOR)) unmount(target)`,
     `  target.querySelectorAll(SELECTOR).forEach(unmount)`,
     `}`,
-    ``,
-    `scan(document)`,
-    ``,
-    `document.addEventListener('shopify:section:load', (e) => {`,
-    `  scan(e.target)`,
-    `})`,
-    ``,
-    `document.addEventListener('shopify:section:unload', (e) => {`,
-    `  sweep(e.target)`,
-    `})`,
-  ].join("\n");
+  ];
+
+  if (mode === "listen") {
+    lines.push(
+      ``,
+      `document.addEventListener('ssg:blocks:ready', (e) => {`,
+      ...dbg(`  console.debug('[SSG:${kebabName}] blocks-ready event', e.target)`),
+      `  scan(e.target)`,
+      `})`,
+      ``,
+      `document.addEventListener('shopify:section:load', (e) => {`,
+      `  scan(e.target)`,
+      `})`,
+      ``,
+      `document.addEventListener('shopify:section:unload', (e) => {`,
+      `  sweep(e.target)`,
+      `})`,
+    );
+  } else {
+    lines.push(
+      ``,
+      `scan(document)`,
+      ``,
+      `document.addEventListener('shopify:section:load', (e) => {`,
+      `  scan(e.target)`,
+      `})`,
+      ``,
+      `document.addEventListener('shopify:section:unload', (e) => {`,
+      `  sweep(e.target)`,
+      `})`,
+    );
+  }
+
+  return lines.join("\n");
 }

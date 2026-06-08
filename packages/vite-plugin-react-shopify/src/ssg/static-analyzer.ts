@@ -2,6 +2,9 @@ import { parseSync } from "oxc-parser";
 import { walk } from "oxc-walker";
 import fs from "node:fs";
 import path from "node:path";
+import { logger } from "../core/logger";
+
+const log = logger("ssg:static");
 
 const INTERACTIVE_HOOKS = new Set([
   "useState",
@@ -30,7 +33,6 @@ function checkSource(source: string, filePath: string): boolean {
     walk(parseResult.program, {
       enter(node: any) {
         if (found) return;
-        // Detect React hooks (useState, useEffect, etc.)
         if (
           node.type === "CallExpression" &&
           node.callee?.type === "Identifier" &&
@@ -39,7 +41,6 @@ function checkSource(source: string, filePath: string): boolean {
           found = true;
           return;
         }
-        // Detect JSX event handlers (onClick, onChange, etc.)
         if (
           node.type === "JSXAttribute" &&
           node.name?.type === "JSXIdentifier" &&
@@ -50,7 +51,6 @@ function checkSource(source: string, filePath: string): boolean {
       },
     });
   } catch {
-    // Parse error — assume interactive to be safe
     found = true;
   }
 
@@ -74,7 +74,6 @@ function checkSource(source: string, filePath: string): boolean {
                 found = true;
               }
             } catch {
-              // Can't read — assume interactive to be safe
               found = true;
             }
           }
@@ -116,5 +115,9 @@ export function isStaticComponent(
   source: string,
   filePath: string,
 ): boolean {
-  return !checkSource(source, filePath);
+  const interactive = checkSource(source, filePath);
+  if (!interactive) {
+    log.debug("static: %s", filePath);
+  }
+  return !interactive;
 }

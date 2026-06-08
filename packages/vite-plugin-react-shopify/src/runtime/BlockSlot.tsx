@@ -64,6 +64,14 @@ function BlockSlotImpl({ className, style }: BlockSlotProps) {
         ref.current.innerHTML = html;
       }
       delete (ref.current as any)._ssgHtml;
+
+      // Notify section-managed block entry modules that the block
+      // DOM has been restored.  Block entries listen for this event
+      // (instead of auto-scanning at module-load time) so they only
+      // hydrate *after* React's commit has finished.
+      ref.current.dispatchEvent(
+        new CustomEvent("ssg:blocks:ready", { bubbles: true }),
+      );
     }
   });
 

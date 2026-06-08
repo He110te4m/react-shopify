@@ -1,12 +1,3 @@
-/**
- * @file Vite plugin that discovers React component entries and generates
- * virtual entry modules for Vite's build.
- *
- * Scans `frontend/` directories for `.tsx`/`.jsx` files, creates a virtual
- * module per entry (containing hydration bootstrapping code), and adds them
- * to Rolldown's `input` so each component gets a separate JS output chunk.
- */
-
 import path from "node:path";
 import { Plugin } from "vite";
 import { normalizePath } from "vite";
@@ -18,23 +9,43 @@ import { generateEntryModule } from "./entry-template";
 
 const log = logger("entries");
 
-/**
- * Vite plugin for entry scanning and virtual module generation.
- */
 export default function shopifyEntries(options: ResolvedOptions): Plugin {
   let entries: SSGEntry[] = [];
+  let sectionManagedBlocks: Set<string> = new Set();
+
+  function buildSectionManagedBlocks(): Set<string> {
+    const blockPrefix = options.ssg.prefix.block;
+    const result = new Set<string>();
+    for (const entry of entries) {
+      if (entry.targetType !== "section") continue;
+      const blockTypes: string[] = (entry.meta as any)._blockTypes;
+      if (!blockTypes || blockTypes.length === 0) continue;
+      for (const blockType of blockTypes) {
+        const kebab = blockType.startsWith(blockPrefix)
+          ? blockType.slice(blockPrefix.length)
+          : blockType;
+        const be = entries.find((e) => e.targetType === "block" && e.kebabName === kebab);
+        if (be) result.add(be.kebabName);
+      }
+    }
+    return result;
+  }
 
   return {
     name: "vite-plugin-shopify:entries",
 
     config(config) {
       entries = scanEntries(options);
+      sectionManagedBlocks = buildSectionManagedBlocks();
 
       const byType: Record<string, number> = {};
       for (const e of entries) {
         byType[e.targetType] = (byType[e.targetType] || 0) + 1;
       }
       log.debug("scanned %d entries: %s", entries.length, JSON.stringify(byType));
+      if (sectionManagedBlocks.size > 0) {
+        log.debug("section-managed blocks: %s", [...sectionManagedBlocks].join(", "));
+      }
 
       if (entries.length === 0) return {};
 
@@ -68,7 +79,15 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
       const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
       const componentRel = normalizePath(path.relative(sourceDir, entry.filePath));
 
-      return generateEntryModule(entry, componentRel);
+      // Section-managed blocks: listen for ssg:blocks:ready event
+      // instead of auto-scanning at module load.
+      const isListen =
+        entry.targetType === "block" && sectionManagedBlocks.has(kebabName);
+
+      return generateEntryModule(entry, componentRel, {
+        mode: isListen ? "listen" : "scan",
+        debug: options.debug,
+      });
     },
   };
 }

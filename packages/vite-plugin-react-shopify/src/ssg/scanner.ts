@@ -6,6 +6,7 @@
  * pipeline.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import glob from "fast-glob";
 import { normalizePath } from "vite";
@@ -13,6 +14,9 @@ import type { ResolvedOptions } from "../core/options";
 import type { SSGEntry } from "../types/ssg";
 import type { ShopifyBlockType } from "../types/shopify";
 import { MAX_NAME_LENGTH } from "../validate/rules";
+import { logger } from "../core/logger";
+
+const log = logger("ssg:scanner");
 
 const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   templates: "template",
@@ -21,10 +25,6 @@ const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
   snippets: "snippet",
 };
 
-/**
- * Discover all `.tsx` / `.jsx` component files in the configured source
- * directories and return structured entry records.
- */
 export function scanEntries(options: ResolvedOptions): SSGEntry[] {
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
   const entries: SSGEntry[] = [];
@@ -39,18 +39,38 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
       const componentName = fileName;
       const kebabName = toKebabCase(fileName);
       const targetType: ShopifyBlockType = TYPE_BY_DIR[dir] ?? "section";
+      const meta: SSGEntry["meta"] = { name: deriveName(fileName) };
 
-      entries.push({
-        filePath: absPath,
-        componentName,
-        kebabName,
-        targetType,
-        meta: { name: deriveName(fileName) },
-      });
+      if (targetType === "section") {
+        const blockTypes = extractBlockTypes(absPath);
+        if (blockTypes.length > 0) {
+          (meta as any)._blockTypes = blockTypes;
+          log.debug("%s declares blocks: %s", kebabName, blockTypes.join(", "));
+        }
+      }
+
+      entries.push({ filePath: absPath, componentName, kebabName, targetType, meta });
     }
   }
 
   return entries;
+}
+
+function extractBlockTypes(filePath: string): string[] {
+  try {
+    const source = fs.readFileSync(filePath, "utf-8");
+    const m = source.match(/blocks\s*:\s*\[([\s\S]*?)\]/);
+    if (!m) return [];
+    const types: string[] = [];
+    const re = /type\s*:\s*['"]([^'"]+)['"]/g;
+    let item: RegExpExecArray | null;
+    while ((item = re.exec(m[1])) !== null) {
+      if (!item[1].startsWith("@")) types.push(item[1]);
+    }
+    return types;
+  } catch {
+    return [];
+  }
 }
 
 /** Convert PascalCase / camelCase to kebab-case. */

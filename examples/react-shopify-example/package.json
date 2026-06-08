@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
+    "build:dev": "BUILD_DEBUG=1 vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -48,6 +48,38 @@ export async function compileAllEntries(
   const projectRoot = path.resolve(options.themeRoot);
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
 
+  // Build section → block script mapping.
+  // Blocks referenced by sections skip their own <script> tags;
+  // instead the section liquid emits those scripts BEFORE its own
+  // script so block entry modules register event listeners first.
+  const sectionBlockScripts = new Map<string, string[]>();
+  const sectionManagedKebabNames = new Set<string>();
+  const blockPrefix = options.ssg.prefix.block;
+
+  for (const entry of entries) {
+    if (entry.targetType !== "section") continue;
+    const blockTypes: string[] = (entry.meta as any)._blockTypes;
+    if (!blockTypes || blockTypes.length === 0) continue;
+
+    const scripts: string[] = [];
+    for (const blockType of blockTypes) {
+      const kebab = blockType.startsWith(blockPrefix)
+        ? blockType.slice(blockPrefix.length)
+        : blockType;
+      const be = entries.find((e) => e.targetType === "block" && e.kebabName === kebab);
+      if (be) {
+        sectionManagedKebabNames.add(be.kebabName);
+        // Only add non-static block scripts
+        const source = fs.readFileSync(be.filePath, "utf-8");
+        if (!isStaticComponent(source, be.filePath)) {
+          const script = resolveScriptAsset(be.kebabName, manifest);
+          if (script) scripts.push(script);
+        }
+      }
+    }
+    if (scripts.length > 0) sectionBlockScripts.set(entry.kebabName, scripts);
+  }
+
   // Analyze CSS distribution and generate shared snippets
   const { entryCssFiles, cssRefCount } = analyzeCssDistribution(entries, manifest);
   const cssSnippetMap = generateSharedCssSnippets(cssRefCount, options);
@@ -55,7 +87,8 @@ export async function compileAllEntries(
   // Compile each entry
   for (const entry of entries) {
     try {
-      await compileEntry(entry, options, manifest, projectRoot, sourceDir, entryCssFiles, cssSnippetMap);
+      await compileEntry(entry, options, manifest, projectRoot, sourceDir,
+        entryCssFiles, cssSnippetMap, sectionBlockScripts, sectionManagedKebabNames);
     } catch (err) {
       log.error("Failed to compile %s:", entry.filePath, err);
     }
@@ -87,6 +120,8 @@ async function compileEntry(
   sourceDir: string,
   entryCssFiles: Map<string, string[]>,
   cssSnippetMap: Map<string, string>,
+  sectionBlockScripts: Map<string, string[]>,
+  sectionManagedKebabNames: Set<string>,
 ): Promise<void> {
   // Bundle via esbuild
   const bundleResult = await bundleEntry(entry, projectRoot, sourceDir);
@@ -112,9 +147,21 @@ async function compileEntry(
     log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
       entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
 
-    // Skip hydration JS for static components (recursively checks imports)
-    const source = fs.readFileSync(entry.filePath, "utf-8");
-    const scriptAsset = isStaticComponent(source, entry.filePath) ? null : resolveScriptAsset(entry.kebabName, manifest);
+    // Script asset: blocks managed by sections skip their own <script>
+    // tags — the parent section liquid emits them at the correct position.
+    const isManagedBlock = entry.targetType === "block" && sectionManagedKebabNames.has(entry.kebabName);
+    let scriptAsset: string | null = null;
+    if (!isManagedBlock) {
+      const source = fs.readFileSync(entry.filePath, "utf-8");
+      scriptAsset = isStaticComponent(source, entry.filePath) ? null : resolveScriptAsset(entry.kebabName, manifest);
+    }
+
+    // Sections: pass block script assets so they are emitted BEFORE the
+    // section's own <script> tag (block entry modules register event
+    // listeners before the section script runs).
+    const blockScripts = entry.targetType === "section"
+      ? sectionBlockScripts.get(entry.kebabName)
+      : undefined;
 
     // Assemble Liquid
     const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
@@ -124,6 +171,7 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
+      blockScripts,
     }, [...trackedExpressions], liquidBlocks, trackMap);
 
     // Write output
