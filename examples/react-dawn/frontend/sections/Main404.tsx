@@ -1,5 +1,6 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
+import { useLiquid } from "vite-plugin-react-shopify/runtime";
+import "./Main404.css";
 import "../styles/shared.css";
 
 export const shopifyMeta = {
@@ -9,17 +10,6 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function Main404() {
-  useLiquidCode(`{%- style -%}
-  .template-404 .title + * {
-    margin-top: 1rem;
-  }
-
-  @media screen and (min-width: 750px) {
-    .template-404 .title + * {
-      margin-top: 2rem;
-    }
-  }
-{%- endstyle -%}`);
   const [subtext] = useLiquid<string>("'templates.404.subtext' | t");
   const [title] = useLiquid<string>("'templates.404.title' | t");
   const [continueShopping] = useLiquid<string>("'general.continue_shopping' | t");
