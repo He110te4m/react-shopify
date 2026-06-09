@@ -8,6 +8,8 @@
 
 执行原则：这份计划是迁移路线图，不是一次性批量改造清单。每一类 Shopify 语义（Theme Block、form、paginate、product card、多实例 snippet hydration）都必须先做最小验证，再扩大迁移范围。
 
+长期目标：迁移后的代码应该像 React 主题项目，而不是 Liquid 主题外面包一层 React。React 迁移单元必须拥有自己的组件、样式和交互边界；Liquid 和 Dawn 原文件只作为 Shopify runtime 边界、对照实现和迁移来源，不作为偷懒复用层。
+
 ---
 
 ## 0. 现状
@@ -53,9 +55,35 @@
 
 **目标：** 建立 `frontend/` 共享层，支撑后续 section/block 迁移。
 
-### 2.1 `frontend/styles/`
+### 2.1 样式归属策略
 
-保留 Dawn 原 `assets/base.css` 由 `layout/theme.liquid` 全局加载，不整体复制或拆分，避免与原主题样式分叉。
+React 迁移单元必须拥有自己的同名 CSS 文件。迁移时允许从 Dawn 原 `assets/*.css` 复制相关规则作为初始版本，但 React entry 不应长期直接 import 原 `assets/section-*.css` 或其他 Dawn 独立 CSS 文件。
+
+示例：
+
+```text
+assets/section-image-banner.css          # 原 Dawn CSS，保留给 Liquid 对照使用
+frontend/sections/ImageBanner.tsx        # React section
+frontend/sections/ImageBanner.css        # 复制并整理后的 React section CSS
+
+assets/component-card.css                # 原 Dawn CSS，保留给 Liquid 对照使用
+frontend/snippets/ProductCard.tsx        # React snippet
+frontend/snippets/ProductCard.css        # React snippet CSS
+```
+
+规则：
+
+- 保留 Dawn 原 `assets/base.css` 由 `layout/theme.liquid` 全局加载，直到所有 Liquid 对照路径不再依赖它。
+- React section/block/snippet import 自己旁边的同名 CSS 文件。
+- 迁移初期可以复制 Dawn CSS 相关规则，但复制后归 React 组件维护。
+- 保留 Dawn BEM className 以降低视觉回归，但不要把原 Dawn CSS 文件当 React 组件样式依赖。
+- 每个迁移单元完成时，应裁剪明显无用的选择器，避免整份 CSS 原样搬运。
+- 共享样式必须有明确复用场景，不能因为“原来在 base.css 里”就进入共享层。
+- Liquid 动态样式值只能进入 CSS custom properties；普通样式必须写在 CSS 文件中。
+
+### 2.2 `frontend/styles/`
+
+`frontend/styles/` 只放真正跨组件复用的 React 共享样式，不承接整份 Dawn `base.css`。
 
 `frontend/styles/` 只放 React 迁移需要的最小共享样式：
 
@@ -65,9 +93,19 @@ frontend/styles/
 └── shared.css         # 多个 React section 共享且 Dawn 没有覆盖的 class
 ```
 
-迁移 section 时优先 import 原对应 CSS，例如 `assets/section-image-banner.css` 中的规则应尽量保持 className 不变，只在 React entry 中按需 import 或提取同名 CSS。
+禁止事项：
 
-### 2.2 `frontend/utils/classes.ts`
+- 不要在 React entry 中直接 `import "../../assets/section-image-banner.css"`。
+- 不要把整份 Dawn section CSS 无筛选复制到 `frontend/styles/shared.css`。
+- 不要用 `useLiquidCode` 注入整块普通组件 CSS。
+
+允许事项：
+
+- 从 Dawn CSS 复制相关选择器到组件同名 CSS。
+- 保留原 className 和 BEM 命名。
+- 将 padding、颜色、宽度等 Liquid setting 映射为 CSS variables。
+
+### 2.3 `frontend/utils/classes.ts`
 
 BEM class 拼接工具：
 
@@ -77,7 +115,7 @@ b("banner", { heading: true })     // → "banner banner--heading"
 b("banner", { mix: "grid__item" }) // → "banner grid__item"
 ```
 
-### 2.3 `frontend/utils/parsers.ts`
+### 2.4 `frontend/utils/parsers.ts`
 
 公共解析函数：
 
@@ -87,7 +125,7 @@ parseMediaSize(val: string): { width: number; height: number }
 parseColorScheme(val: string): string
 ```
 
-### 2.4 `frontend/i18n/`
+### 2.5 `frontend/i18n/`
 
 最小可行 React i18n。不要在阶段 1 强制完成 22 种语言字典生成；前几个 section 优先复用 Shopify `t` filter，降低 hydration 和文案差异风险。
 
@@ -115,7 +153,7 @@ export function t(locale: string, key: string, vars?: Record<string, string | nu
 }
 ```
 
-### 2.5 `frontend/icons/`
+### 2.6 `frontend/icons/`
 
 Icon registry，封装常用 SVG icon：
 
@@ -136,7 +174,7 @@ frontend/icons/
 // ... 按需从 assets/*.svg 封装
 ```
 
-### 2.6 `frontend/lib/`
+### 2.7 `frontend/lib/`
 
 从 `assets/global.js` 提取基础工具函数（TypeScript 重写）：
 
@@ -149,7 +187,7 @@ frontend/lib/
 └── index.ts
 ```
 
-### 2.7 `.gitignore` 补充确认
+### 2.8 `.gitignore` 补充确认
 
 确认已包含以下 ignore 规则：
 
@@ -171,6 +209,7 @@ snippets/shopify-importmap.liquid
 
 - `pnpm typecheck` + `pnpm build` 通过
 - `frontend/` 目录结构就绪
+- 样式归属规则明确：React entry 不直接 import Dawn 原 `assets/section-*.css`
 - i18n 最小 API 可用；字典生成脚本不作为阶段 1 阻塞
 
 ## 3. 阶段 1.5：关键能力 Spike
@@ -198,14 +237,15 @@ snippets/shopify-importmap.liquid
 
 - 每 section 单独 PR
 - 保留 Dawn BEM className
-- CSS import 对应 `section-*.css`
+- 每个 React section 拥有同名 CSS 文件，例如 `ImageBanner.css`
+- 可从 Dawn 原 CSS 复制相关规则作为初始版本，但 React entry 不直接 import 原 `assets/section-*.css`
 - 原 `sections/*.liquid` 不删除（并存对照）
 
 **迁移产出模式：**
 
 ```
 frontend/sections/ImageBanner.tsx      ← React 组件
-frontend/sections/ImageBanner.css      ← 从 assets/section-image-banner.css 提取相关 class
+frontend/sections/ImageBanner.css      ← 从 assets/section-image-banner.css 复制并整理后的组件样式
 sections/react-image-banner.liquid     ← 插件自动生成
 assets/react-shopify-image-banner-*.js ← 插件自动生成
 ```
@@ -221,7 +261,7 @@ assets/react-shopify-image-banner-*.js ← 插件自动生成
 | 5 | `image-banner` | 507 | ★★★ | `picture` + `image_tag` → `ShopifyImage`，3 个 block types |
 | 6 | `collection-list` | 308 | ★★★ | blocks（collection），`image_tag`，collection object bridge |
 
-执行顺序建议先做 `main-404` 和 `main-page`，验证 Shopify 对象、routes、translation filter、`useLiquidCode` 样式注入。`rich-text` 必须在阶段 1.5 的 Theme Blocks 验证通过后开始。
+执行顺序建议先做 `main-404` 和 `main-page`，验证 Shopify 对象、routes、translation filter、CSS variables，以及必要时最小 scoped `{% style %}`。`rich-text` 必须在阶段 1.5 的 Theme Blocks 验证通过后开始。
 
 ### rich-text 迁移示例
 
@@ -272,6 +312,8 @@ export default function RichText() {
 - [ ] Theme Editor 可添加 section，schema setting 数量/默认值一致
 - [ ] 浏览器 console 无 hydration error
 - [ ] 视觉与 Dawn 原版接近
+- [ ] React section import 自己的同名 CSS，不直接 import Dawn 原 `assets/section-*.css`
+- [ ] CSS 中普通样式在 CSS 文件内，Liquid setting 只通过 CSS variables 注入
 - [ ] 原 `sections/*.liquid` 未被修改或删除
 
 ---
@@ -486,7 +528,7 @@ export default function Heading() {
 | # | 风险 | 缓解措施 |
 |---|------|----------|
 | 1 | **form/paginate 迁与不迁边界** | form 默认保留 Liquid-owned DOM 或暂缓；React `<form>` 只作为单独 spike |
-| 2 | **CSS 拆分策略** | 保留 Dawn `base.css` 全局加载；React 只补最小 shared CSS，避免复制整份 base.css |
+| 2 | **CSS 归属不清** | 每个 React 迁移单元必须有同名 CSS；Dawn CSS 只作为复制来源和 Liquid 对照依赖，不能被 React entry 直接 import |
 | 3 | **nested block 端到端** | 多层 `BlockSlot`（如 `slideshow > slide`）需在阶段 2/3 前期验证 |
 | 4 | **原 Dawn JS 逐步移除** | 每步后需回归测试，确保 Liquid 对照版本仍正常 |
 | 5 | **22 种语言字典生成** | 不作为早期阻塞；先复用 Shopify `t` filter，后续再做脚本 |
@@ -508,4 +550,6 @@ export default function Heading() {
 - [ ] 新增 Vite chunk 都带 `chunkPrefix`（`react-shopify-`）
 - [ ] `assets/` 中原 Dawn 资源未被清空或覆盖
 - [ ] React 版本视觉接近 Dawn 原版
+- [ ] React section/block/snippet 拥有同名 CSS 文件，不直接依赖 Dawn 原独立 CSS 文件
+- [ ] 样式符合 React-first 原则：普通 CSS 在 CSS 文件，Liquid 只提供 CSS variables 或 Shopify runtime 边界
 - [ ] 原 `sections/*.liquid` 未被修改或删除
