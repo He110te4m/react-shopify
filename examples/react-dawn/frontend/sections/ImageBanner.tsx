@@ -1,6 +1,7 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
 import { BlockSlot, ShopifyImage, useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
+import { useAnimation } from "../hooks/useAnimation";
 import "./ImageBanner.css";
 
 const settings = [
@@ -80,6 +81,8 @@ export const shopifyMeta = {
 
 export default function ImageBanner() {
   const [sectionId] = useLiquid<string>("section.id");
+  const fadeClass = useAnimation("fade-in");
+  const slideClass = useAnimation("slide-in");
   const [image] = useLiquid<object>("section.settings.image");
   const [image2] = useLiquid<object>("section.settings.image_2");
   const [overlayOpacity] = useLiquid<number>("section.settings.image_overlay_opacity", { type: "number" });
@@ -92,7 +95,6 @@ export default function ImageBanner() {
   const [stackOnMobile] = useLiquid<boolean>("section.settings.stack_images_on_mobile", { type: "boolean" });
   const [mobileContentAlign] = useLiquid<string>("section.settings.mobile_content_alignment");
   const [showTextBelow] = useLiquid<boolean>("section.settings.show_text_below", { type: "boolean" });
-  const [animEnabled] = useLiquid<boolean>("settings.animations_reveal_on_scroll", { type: "boolean" });
   const [sectionIndex] = useLiquid<number>("section.index", { type: "number" });
 
   const hasImage = image != null;
@@ -112,29 +114,28 @@ export default function ImageBanner() {
     ["section.settings.image_overlay_opacity"],
   );
 
-  const bannerClasses = clsx(
-    "banner",
-    `banner--content-align-${contentAlignment}`,
-    `banner--content-align-mobile-${mobileContentAlign}`,
-    `banner--${imageHeight}`,
-    {
-      "banner--stacked": stackImages,
-      "banner--adapt": isAdapt,
-      "banner--mobile-bottom": showTextBelow,
-      "banner--desktop-transparent": !showBox,
-      "scroll-trigger animate--fade-in": animEnabled,
-    },
-  );
+    const bannerClasses = clsx(
+      "banner",
+      `banner--content-align-${contentAlignment}`,
+      `banner--content-align-mobile-${mobileContentAlign}`,
+      `banner--${imageHeight}`,
+      {
+        "banner--stacked": stackImages,
+        "banner--adapt": isAdapt,
+        "banner--mobile-bottom": showTextBelow,
+        "banner--desktop-transparent": !showBox,
+      },
+      fadeClass,
+    );
 
   return (
     <div id={`Banner-${sectionId}`} className={bannerClasses}>
       {hasImage && (
         <div
-          className={clsx("banner__media media", {
-            "banner__media-half": hasImage2,
-            [`animate--${behavior}`]: behavior,
-            "scroll-trigger animate--fade-in": animEnabled,
-          })}
+            className={clsx("banner__media media", {
+              "banner__media-half": hasImage2,
+              [`animate--${behavior}`]: behavior,
+            }, fadeClass)}
         >
           <ShopifyImage
             image="section.settings.image"
@@ -154,11 +155,10 @@ export default function ImageBanner() {
 
       {hasImage2 && (
         <div
-          className={clsx("banner__media media", {
-            "banner__media-half": hasImage,
-            [`animate--${behavior}`]: behavior,
-            "scroll-trigger animate--fade-in": animEnabled,
-          })}
+            className={clsx("banner__media media", {
+              "banner__media-half": hasImage,
+              [`animate--${behavior}`]: behavior,
+            }, fadeClass)}
         >
           <ShopifyImage
             image="section.settings.image_2"
@@ -174,9 +174,9 @@ export default function ImageBanner() {
         className={clsx(
           "banner__content",
           `banner__content--${contentPosition}`,
-          "page-width",
-          { "scroll-trigger animate--slide-in": animEnabled },
-        )}
+            "page-width",
+            slideClass,
+          )}
       >
         {showBox ? (
           <div className={`banner__box content-container content-container--full-width-mobile color-${colorScheme} gradient`}>

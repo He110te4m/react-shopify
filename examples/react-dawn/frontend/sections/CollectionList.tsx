@@ -1,6 +1,8 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
 import { useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
+import { useAnimation } from "../hooks/useAnimation";
+import { useSectionPadding } from "../hooks/useSectionPadding";
 import "./CollectionList.css";
 import "./SectionPadding.css";
 import "../styles/shared.css";
@@ -62,6 +64,9 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function CollectionList() {
+  const { style: paddingStyle } = useSectionPadding();
+  const animClass = useAnimation("slide-in");
+
   const [title] = useLiquid<string>("section.settings.title");
   const [headingSize] = useLiquid<string>("section.settings.heading_size");
   const [colorScheme] = useLiquid<string>("section.settings.color_scheme");
@@ -70,9 +75,6 @@ export default function CollectionList() {
   const [columnsMobile] = useLiquid<string>("section.settings.columns_mobile");
   const [swipeOnMobile] = useLiquid<boolean>("section.settings.swipe_on_mobile", { type: "boolean" });
   const [showViewAll] = useLiquid<boolean>("section.settings.show_view_all", { type: "boolean" });
-  const [animEnabled] = useLiquid<boolean>("settings.animations_reveal_on_scroll", { type: "boolean" });
-  const [pt] = useLiquid<number>("section.settings.padding_top", { type: "number" });
-  const [pb] = useLiquid<number>("section.settings.padding_bottom", { type: "number" });
   const [sectionId] = useLiquid<string>("section.id");
 
   const columnsMobileInt = parseInt(columnsMobile) || 1;
@@ -93,10 +95,7 @@ export default function CollectionList() {
           "no-heading": !title,
           "no-mobile-link": !showViewAll,
         })}
-        style={{
-          "--pt-desktop": `${pt}px`, "--pt-mobile": `${Math.round(pt * 0.75)}px`,
-          "--pb-desktop": `${pb}px`, "--pb-mobile": `${Math.round(pb * 0.75)}px`,
-        } as React.CSSProperties}
+        style={paddingStyle}
       >
         <div className="section-padding">
           {title && (
@@ -104,7 +103,7 @@ export default function CollectionList() {
               "title-wrapper--self-padded-tablet-down": swipeOnMobile,
               "title-wrapper--self-padded-mobile": !swipeOnMobile,
             }, "title-wrapper--no-top-margin")}>
-              <h2 className={clsx("collection-list-title inline-richtext", headingSize, { "scroll-trigger animate--slide-in": animEnabled })}>
+              <h2 className={clsx("collection-list-title inline-richtext", headingSize, animClass)}>
                 {title}
               </h2>
               {showViewAll && swipeOnMobile && (
@@ -115,7 +114,7 @@ export default function CollectionList() {
             </div>
           )}
 
-          <slider-component className={clsx("slider-mobile-gutter", { "scroll-trigger animate--slide-in": animEnabled })}>
+          <slider-component className={clsx("slider-mobile-gutter", animClass)}>
             <ul
               className={clsx(
                 "collection-list contains-card contains-card--collection",
