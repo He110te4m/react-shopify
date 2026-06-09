@@ -17,6 +17,27 @@ Build Shopify themes with React while keeping Shopify-native behavior:
 - Merchants can configure sections and blocks through schema.
 - SEO, forms, pagination, locale, and Shopify-owned DOM remain correct.
 
+## Core Principle: React Owns UI
+
+Use React as the default authoring model. Liquid is a runtime data and Shopify-platform boundary, not the primary UI authoring language.
+
+React should own:
+
+- Markup structure that can be expressed as JSX.
+- Component composition and conditional UI.
+- Client interactions and state.
+- Normal component CSS through CSS files.
+- CSS custom properties derived from Liquid settings.
+
+Liquid should only own:
+
+- Shopify runtime values unavailable at build time.
+- Shopify filters that must run server-side.
+- Shopify platform tags such as `{% form %}` and `{% paginate %}`.
+- Shopify/app-owned DOM that React should not hydrate.
+
+Avoid “Liquid porting inside React”. If most of a component is a string passed to `useLiquidCode`, the migration has likely failed its goal.
+
 ## Recommended Structure
 
 ```text
@@ -137,6 +158,42 @@ Poor candidates:
 - Do not duplicate an entire existing global stylesheet into React.
 - Keep global theme CSS loaded if existing Liquid sections still depend on it.
 - Add only minimal React-specific shared CSS.
+- Use CSS custom properties for Liquid-driven values such as spacing, colors, widths, and alignment.
+- Do not inject whole style tags through Liquid for normal component styling.
+- Use a tiny scoped `{% style %}` only when media queries or Shopify section scoping cannot be represented cleanly through React inline CSS variables.
+
+Preferred dynamic style pattern:
+
+```tsx
+const [paddingTop] = useLiquid<number>("section.settings.padding_top", { type: "number" });
+
+return (
+  <section
+    className="section hero"
+    style={{ "--hero-padding-top": `${paddingTop}px` } as React.CSSProperties}
+  >
+    ...
+  </section>
+);
+```
+
+```css
+.hero {
+  padding-top: var(--hero-padding-top, 36px);
+}
+```
+
+Bad pattern:
+
+```tsx
+useLiquidCode(`{%- style -%}
+  .hero { padding-top: {{ section.settings.padding_top }}px; }
+  .hero__content { display: grid; }
+  .hero__button { ... }
+{%- endstyle -%}`);
+```
+
+Only the dynamic value should come from Liquid. The component styling should stay in CSS.
 
 ## i18n Strategy
 
@@ -165,3 +222,4 @@ Only migrate these if a dedicated spike proves the React version preserves behav
 - Schema settings and presets match intended merchant behavior.
 - No React code assumes Shopify objects exist at build time.
 - No browser-only library is statically imported into SSG code.
+- No large React-owned markup or component CSS is hidden inside `useLiquidCode`.

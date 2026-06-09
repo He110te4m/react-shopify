@@ -27,6 +27,23 @@ If React reads a different value on first client render, or if Shopify owns a DO
 
 ## Common Causes
 
+### Liquid Overuse Inside React
+
+Hydration becomes harder to reason about when React components render large Liquid strings instead of JSX.
+
+Bad signs:
+
+- Whole markup regions are injected through `useLiquidCode`.
+- Normal component CSS is inside Liquid `{% style %}` instead of CSS files.
+- React only acts as a wrapper around Liquid HTML.
+
+Fix:
+
+- Move structure back to JSX.
+- Move normal styling back to CSS files.
+- Keep only runtime values in `useLiquid`.
+- Use CSS custom properties for Liquid-driven style values.
+
 ### Liquid Value Not Bridged
 
 Wrong:

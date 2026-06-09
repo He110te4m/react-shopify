@@ -10,6 +10,25 @@ Use this skill when writing or reviewing React code that targets Shopify theme o
 
 This plugin is not a normal Vite SPA setup. React components are SSG-rendered into Shopify Liquid files, Shopify resolves Liquid at request time, and React hydrates on top of the server HTML.
 
+## Design Principle: React First, Liquid Minimal
+
+The purpose of this plugin is to let developers write Shopify themes like React applications while still outputting Shopify-native Liquid files.
+
+Use Liquid only for Shopify runtime boundaries that React cannot know at build time:
+
+- Theme, section, block, product, collection, cart, route, request, and locale values.
+- Shopify filters that must run on the server, such as `t`, `money`, `image_url`, or `video_tag`.
+- Shopify-owned structures such as `{% form %}`, `{% paginate %}`, app blocks, and complex media DOM.
+
+Do not use Liquid as a shortcut to avoid React work:
+
+- Do not render whole HTML regions through `useLiquid` or `useLiquidCode` when React can own the markup.
+- Do not inject complete CSS/style systems through Liquid just because it is faster to port.
+- Do not keep Liquid loops/conditionals inside React-owned UI unless the loop context must remain Liquid-owned.
+- Do not treat `useLiquidCode` as a general escape hatch.
+
+Preferred pattern: React owns structure and behavior, CSS files own styling, Liquid only supplies dynamic values or Shopify-owned DOM boundaries.
+
 ## Core Model
 
 - Source entries live under `frontend/sections`, `frontend/blocks`, `frontend/snippets`, and `frontend/templates`.
@@ -79,14 +98,69 @@ useLiquidCode(`{%- style -%}
 Good uses:
 
 - Standalone `{% liquid %}` calculations.
-- Standalone `{% style %}` blocks.
+- Minimal scoped `{% style %}` blocks only when CSS custom properties cannot be expressed through React inline CSS variables.
 - Liquid snippets that do not need to wrap React-owned children.
 
 Bad uses:
 
 - `{% form %}...{% endform %}` around React children.
 - `{% paginate %}...{% endpaginate %}` around React-rendered lists.
+- Whole `<style>` tags containing normal component CSS.
+- Large Liquid-rendered HTML strings that React should render as JSX.
 - Large Liquid control flow that should remain Liquid-owned.
+
+### Dynamic Styles
+
+Prefer CSS files plus CSS custom properties.
+
+Good:
+
+```tsx
+const [gap] = useLiquid<number>("section.settings.gap", { type: "number" });
+
+return (
+  <section className="hero" style={{ "--hero-gap": `${gap}px` } as React.CSSProperties}>
+    ...
+  </section>
+);
+```
+
+```css
+.hero {
+  gap: var(--hero-gap, 24px);
+}
+```
+
+Acceptable only when media queries or Shopify scoping require it:
+
+```tsx
+useLiquidCode(`{%- style -%}
+  .section-{{ section.id }} {
+    --hero-padding-top: {{ section.settings.padding_top }}px;
+  }
+
+  @media screen and (min-width: 750px) {
+    .section-{{ section.id }} {
+      --hero-padding-top: {{ section.settings.padding_top_desktop }}px;
+    }
+  }
+{%- endstyle -%}`, [
+  "section.settings.padding_top",
+  "section.settings.padding_top_desktop",
+]);
+```
+
+Wrong:
+
+```tsx
+useLiquidCode(`{%- style -%}
+  .hero { display: grid; gap: 24px; }
+  .hero__title { font-size: 48px; }
+  .hero__button { ... }
+{%- endstyle -%}`);
+```
+
+Normal component CSS belongs in CSS files, not Liquid.
 
 ### `ShopifyImage` and `ShopifyVideo`
 
@@ -177,6 +251,7 @@ Rules:
 
 - Do not build a separate SPA shell for a Shopify theme page.
 - Do not fetch Shopify storefront data just to replace Liquid context already available on the page.
+- Do not port Liquid by wrapping large chunks of Liquid HTML/CSS inside React.
 - Do not replace Shopify forms or pagination with React unless a dedicated spike proves the behavior equivalent.
 - Do not use CSS Modules unless the project has explicitly validated SSR/CSR class stability.
 - Do not delete merchant-facing Liquid output without preserving Theme Editor compatibility.
