@@ -53,6 +53,15 @@ function buildImageUrlParams(o: { width?: number; height?: number; crop?: string
   return parts.join(", ");
 }
 
+function getLargestWidth(widths?: string): number | undefined {
+  if (!widths) return undefined;
+  const parsed = widths
+    .split(",")
+    .map((w) => Number.parseInt(w.trim(), 10))
+    .filter((w) => Number.isFinite(w) && w > 0);
+  return parsed.length ? Math.max(...parsed) : undefined;
+}
+
 function buildImageTagParams(o: {
   alt?: string;
   loading?: string;
@@ -150,7 +159,7 @@ export function ShopifyImage({
     const effPre =
       preload !== undefined ? (preload ? "true" : undefined) : autoVars?.preVar;
 
-    const urlParams = buildImageUrlParams({ width, height, crop });
+    const urlParams = buildImageUrlParams({ width: width ?? getLargestWidth(widths), height, crop });
     const tagParams = buildImageTagParams({
       alt,
       loading: effLoad,
