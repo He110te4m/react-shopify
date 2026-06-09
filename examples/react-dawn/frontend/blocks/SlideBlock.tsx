@@ -94,7 +94,7 @@ export default function SlideBlock() {
   return (
     <div
       id={`Slide-${blockId}`}
-      className={clsx("slideshow__slide", "grid__item", "grid--1-item", {
+      className={clsx("slideshow__slide", "grid__item", "grid--1-col", "slider__slide", {
         "slideshow__slide--no-image": !hasImage,
       })}
     >
@@ -111,36 +111,35 @@ export default function SlideBlock() {
       <div
         className={clsx(
           "slideshow__text-wrapper",
+          "banner__content",
           `banner__content--${boxAlign}`,
           "page-width",
+          { "banner--desktop-transparent": !showTextBox },
         )}
       >
         <div
-          className={clsx("slideshow__text", `banner__box content-container--full-width-mobile color-${colorScheme} gradient`, {
-            [`slideshow__text--${textAlignment}`]: true,
-            [`slideshow__text-mobile--${textAlignmentMobile}`]: true,
-          })}
+          className={clsx(
+            "slideshow__text",
+            "banner__box",
+            "content-container",
+            "content-container--full-width-mobile",
+            `color-${colorScheme}`,
+            "gradient",
+            `slideshow__text--${textAlignment}`,
+            `slideshow__text-mobile--${textAlignmentMobile}`,
+          )}
         >
-          {showTextBox ? (
-            <>
-              {heading && <h2 className={clsx("banner__heading", headingSize)}>{heading}</h2>}
-              {subheading && <div className="banner__text">{subheading}</div>}
-              {buttonLabel && (
-                <div className="banner__buttons">
-                  <a href={link || "#"} className={clsx("button", buttonStyle)}>{buttonLabel}</a>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {heading && <h2 className={clsx("banner__heading", headingSize)}>{heading}</h2>}
-              {subheading && <div className="banner__text">{subheading}</div>}
-              {buttonLabel && (
-                <div className="banner__buttons">
-                  <a href={link || "#"} className={clsx("button", buttonStyle)}>{buttonLabel}</a>
-                </div>
-              )}
-            </>
+          {heading && <h2 className={clsx("banner__heading", "inline-richtext", headingSize)}>{heading}</h2>}
+          {subheading && <div className="banner__text rte"><p>{subheading}</p></div>}
+          {buttonLabel && (
+            <div className="banner__buttons">
+              <a
+                href={link || "#"}
+                className={clsx("button", buttonStyle)}
+              >
+                {buttonLabel}
+              </a>
+            </div>
           )}
         </div>
       </div>
