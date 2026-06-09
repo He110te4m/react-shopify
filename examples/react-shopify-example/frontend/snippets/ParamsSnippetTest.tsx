@@ -3,9 +3,7 @@ import type { ShopifyMeta } from "vite-plugin-react-shopify";
 import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
-  type: "snippet" as const,
   name: "Params Snippet Test",
-  params: ["product_title", "product_price", "product_image", "product_badge"],
 } satisfies ShopifyMeta;
 
 export default function ParamsSnippetTest() {

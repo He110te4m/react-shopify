@@ -8,8 +8,11 @@
 
 import type { SettingSchema, InputSettings } from "./settings";
 
-/** The four Shopify theme component categories. */
-export type ShopifyBlockType = "template" | "section" | "block" | "snippet";
+/** The four generated Shopify entry categories inferred from source directories. */
+export type ShopifyEntryType = "template" | "section" | "block" | "snippet";
+
+/** @deprecated Use {@link ShopifyEntryType}. This is not a Shopify block schema `type`. */
+export type ShopifyBlockType = ShopifyEntryType;
 
 interface ThemeBlockOrAppBlockDefinition {
   type: "@theme" | "@app" | string;
@@ -73,7 +76,13 @@ export type SectionLocales = Record<string, Record<string, string>>;
  * generated {% schema %} block and influences Liquid wrapper output.
  */
 export interface ShopifyMeta {
-  type?: ShopifyBlockType;
+  /**
+   * @deprecated Entry kind is inferred from the source directory
+   * (`frontend/sections`, `frontend/blocks`, etc.). Do not use this to define
+   * a Theme Block's Shopify block type; that type is the generated block
+   * filename referenced from parent `blocks[].type` entries.
+   */
+  type?: ShopifyEntryType;
   name?: string;
   /**
    * HTML wrapper tag. Use `null` to render without a wrapper (blocks only).
@@ -85,7 +94,6 @@ export interface ShopifyMeta {
   tag?: string | null;
   class?: string;
   limit?: number;
-  params?: string[];
   settings?: SettingSchema[];
   blocks?: BlockDefinition[];
   max_blocks?: number;

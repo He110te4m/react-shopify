@@ -445,7 +445,7 @@ export const shopifyMeta = {
 
 ## Snippet
 
-Snippet 通过 `params` 传参（而非 `settings`）：
+Snippet 不支持 Shopify schema metadata。不要为 snippet 定义专用 `shopifyMeta` 字段；只保留普通 React 组件逻辑：
 
 ```tsx
 // frontend/snippets/ProductCard.tsx
@@ -453,14 +453,12 @@ import type { ShopifyMeta } from "vite-plugin-react-shopify";
 import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
-  type: "snippet",
   name: "Product Card",
-  params: ["title", "price"],
 } satisfies ShopifyMeta;
 
 export default function ProductCard() {
-  const [title] = useLiquid("title");
-  const [price] = useLiquid("price");
+  const [title] = useLiquid("product.title");
+  const [price] = useLiquid("product.price");
   return (
     <div>
       <h3>{title}</h3>

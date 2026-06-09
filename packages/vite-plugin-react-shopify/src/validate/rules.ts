@@ -3,6 +3,7 @@
  */
 
 import type { BlockDefinition } from "../types/shopify";
+import type { ShopifyEntryType } from "../types/shopify";
 
 /** Maximum allowed length for `shopifyMeta.name` (Shopify limit). */
 export const MAX_NAME_LENGTH = 25;
@@ -31,6 +32,24 @@ export function checkEmptyStringDefault(
     return `Setting "${label}" (type: ${setting.type}) has empty string default`;
   }
   return null;
+}
+
+/** Check deprecated `shopifyMeta.type`; entry kind is directory-inferred. */
+export function checkEntryTypeOverride(
+  metaType: unknown,
+  targetType: ShopifyEntryType | undefined,
+  kebabName: string,
+): string | null {
+  if (metaType === undefined || targetType === undefined) return null;
+
+  const inferred = `entry kind is inferred from the source directory as "${targetType}"`;
+  const mismatch = metaType !== targetType ? ` "${String(metaType)}"` : "";
+
+  return (
+    `[${kebabName}] shopifyMeta.type${mismatch} is deprecated and ignored; ` +
+    `${inferred}. Do not use shopifyMeta.type to define Shopify Theme Block ` +
+    `references; use parent blocks[].type for @theme/@app/generated block filenames.`
+  );
 }
 
 /** A block kind discriminator used by {@link checkBlocksCoexistence}. */

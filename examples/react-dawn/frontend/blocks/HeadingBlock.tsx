@@ -25,7 +25,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Heading (React)",
-  type: "block",
   settings,
 } satisfies ShopifyMeta;
 

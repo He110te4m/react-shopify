@@ -355,7 +355,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Heading (React)",
-  type: "@theme",
   settings,
 } satisfies ShopifyMeta;
 
@@ -372,6 +371,8 @@ export default function Heading() {
 - [ ] 每个 block 独立 build 为 `blocks/react-*.liquid`
 - [ ] 在父 section `BlockSlot` 中正确渲染
 - [ ] Theme Editor 可 add/remove/reorder block
+
+注意：Theme Block 的 Shopify `type` 来自生成后的 `/blocks/*.liquid` 文件名，例如 `blocks/react-heading.liquid` 对应可被父级引用的 `{ "type": "react-heading" }`。不要在 block 自己的 `shopifyMeta` 里写 `type: "@theme"` 或 `type: "block"`。`@theme` / `@app` 只用于父级 `blocks` 允许列表。
 
 ---
 

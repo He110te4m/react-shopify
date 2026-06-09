@@ -11,7 +11,6 @@ function makeEntry(overrides: Partial<SSGEntry> = {}): SSGEntry {
     targetType: "section",
     meta: {
       name: "Test Section",
-      type: "section",
       tag: "section",
       class: "test-class",
       settings: [],
@@ -115,7 +114,7 @@ describe("assembleLiquidFile", () => {
   it("generates block template with correct attributes", () => {
     const entry = makeEntry({
       targetType: "block",
-      meta: { name: "Test Block", type: "block", tag: "div", class: "", settings: [], presets: [], blocks: [] },
+      meta: { name: "Test Block", tag: "div", class: "", settings: [], presets: [], blocks: [] },
     });
     const result = assembleLiquidFile("<div></div>", entry, null, { inline: [], snippets: [] }, defaultOptions, ["block.settings.color"]);
 
@@ -130,7 +129,7 @@ describe("assembleLiquidFile", () => {
   it("generates snippet template", () => {
     const entry = makeEntry({
       targetType: "snippet",
-      meta: { name: "Test Snippet", type: "snippet", tag: "div", class: "", presets: [] },
+      meta: { name: "Test Snippet", tag: "div", class: "", presets: [] },
     });
     const result = assembleLiquidFile("<p></p>", entry, null, { inline: [], snippets: [] }, defaultOptions, ["product_title"]);
 
@@ -195,7 +194,19 @@ describe("getOutputPath", () => {
   it("returns block path", () => {
     const entry = makeEntry({
       targetType: "block",
-      meta: { ...makeEntry().meta, type: "block" },
+    });
+    const p = getOutputPath(entry, {
+      prefix: defaultOptions.prefix,
+      outputName: undefined,
+      themeRoot,
+    });
+    expect(p).toBe("/app/theme/blocks/react-test-section.liquid");
+  });
+
+  it("uses directory-inferred targetType for output path even when meta.type differs", () => {
+    const entry = makeEntry({
+      targetType: "block",
+      meta: { ...makeEntry().meta, type: "section" },
     });
     const p = getOutputPath(entry, {
       prefix: defaultOptions.prefix,
@@ -208,7 +219,6 @@ describe("getOutputPath", () => {
   it("returns snippet path", () => {
     const entry = makeEntry({
       targetType: "snippet",
-      meta: { ...makeEntry().meta, type: "snippet" },
     });
     const p = getOutputPath(entry, {
       prefix: defaultOptions.prefix,
@@ -231,6 +241,27 @@ describe("getOutputPath", () => {
 });
 
 describe("assembleLiquidFile — bridge isolation", () => {
+  it("uses directory-inferred targetType for Liquid assembly even when meta.type differs", () => {
+    const blockEntry = makeEntry({
+      targetType: "block",
+      kebabName: "child-block",
+      meta: { name: "Child", type: "section", tag: "div", class: "", settings: [], presets: [], blocks: [] },
+    });
+
+    const result = assembleLiquidFile(
+      "<span>block content</span>",
+      blockEntry,
+      null,
+      { inline: [], snippets: [] },
+      defaultOptions,
+      ["block.settings.color"],
+    );
+
+    expect(result).toContain("theme-block");
+    expect(result).toContain('id="{{ block.id }}"');
+    expect(result).toContain("{{ block.shopify_attributes }}");
+  });
+
   it("section and block entries get independent bridges", () => {
     const sectionHtml = "<div>section content</div>";
     const blockHtml = "<span>block content</span>";
@@ -242,7 +273,7 @@ describe("assembleLiquidFile — bridge isolation", () => {
     const blockEntry = makeEntry({
       targetType: "block",
       kebabName: "child-block",
-      meta: { name: "Child", type: "block", tag: "div", class: "", settings: [], presets: [], blocks: [] },
+      meta: { name: "Child", tag: "div", class: "", settings: [], presets: [], blocks: [] },
     });
 
     const sectionResult = assembleLiquidFile(

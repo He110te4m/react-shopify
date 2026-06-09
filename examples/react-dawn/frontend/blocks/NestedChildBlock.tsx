@@ -12,7 +12,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Nested Child (React)",
-  type: "block",
   settings,
 } satisfies ShopifyMeta;
 

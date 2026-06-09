@@ -19,6 +19,8 @@ Use this skill for React theme blocks and block-based section architecture in Sh
 
 React Shopify theme work should prefer reusable Theme Blocks when multiple sections share heading, text, button, image, card, column, slide, or row patterns.
 
+Important: in Shopify, a Theme Block's block type is its `/blocks/*.liquid` filename. In React source, the effective type comes from the generated block filename. Do not define the current Theme Block by writing `shopifyMeta.type: "block"`.
+
 ## Dynamic Blocks With `BlockSlot`
 
 Use `BlockSlot` when the merchant controls add/remove/reorder.
@@ -45,6 +47,8 @@ export default function Section() {
 Rules:
 
 - `BlockSlot` must match `shopifyMeta.blocks`.
+- `shopifyMeta.blocks[].type` references child blocks: `@theme`, `@app`, or a concrete generated block type such as `react-heading`.
+- `shopifyMeta.blocks[].type` does not declare the current section or block's own type.
 - Include `@app` if app blocks should be allowed.
 - Verify add/remove/reorder in Theme Editor.
 - Do not use `StaticBlock` for merchant-reorderable content.
@@ -65,7 +69,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Heading",
-  type: "block",
   settings,
 } satisfies ShopifyMeta;
 
@@ -80,6 +83,7 @@ Rules:
 
 - Read block data from `block.settings.*`.
 - Keep block schema local to the block entry.
+- The block's Shopify type is the generated `/blocks/*.liquid` filename, not a `shopifyMeta.type` field.
 - Keep DOM portable unless the block is intentionally private to one section.
 - Avoid parent-specific class names in public reusable blocks unless the theme's design system requires them.
 
@@ -103,6 +107,8 @@ Good uses:
 - Header/menu fixed regions.
 - Private children required by a section.
 - Liquid-owned DOM that should not be hydrated by React.
+
+Here `StaticBlock type` is the child block's generated filename/type. It is not `"block"`.
 
 Bad uses:
 

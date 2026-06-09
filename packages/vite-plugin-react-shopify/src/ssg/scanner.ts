@@ -12,13 +12,13 @@ import glob from "fast-glob";
 import { normalizePath } from "vite";
 import type { ResolvedOptions } from "../core/options";
 import type { SSGEntry } from "../types/ssg";
-import type { ShopifyBlockType } from "../types/shopify";
+import type { ShopifyEntryType } from "../types/shopify";
 import { MAX_NAME_LENGTH } from "../validate/rules";
 import { logger } from "../core/logger";
 
 const log = logger("ssg:scanner");
 
-const TYPE_BY_DIR: Record<string, ShopifyBlockType> = {
+const TYPE_BY_DIR: Record<string, ShopifyEntryType> = {
   templates: "template",
   sections: "section",
   blocks: "block",
@@ -38,7 +38,7 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
       const fileName = path.basename(filePath, path.extname(filePath));
       const componentName = fileName;
       const kebabName = toKebabCase(fileName);
-      const targetType: ShopifyBlockType = TYPE_BY_DIR[dir] ?? "section";
+      const targetType: ShopifyEntryType = TYPE_BY_DIR[dir] ?? "section";
       const meta: SSGEntry["meta"] = { name: deriveName(fileName) };
 
       if (targetType === "section") {

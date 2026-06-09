@@ -130,7 +130,11 @@ async function compileEntry(
 
     const { html, trackedExpressions, liquidBlocks, trackMap } = renderResult;
 
-    validateShopifyMeta(entry.meta, { kebabName: entry.kebabName, filePath: entry.filePath });
+    validateShopifyMeta(entry.meta, {
+      kebabName: entry.kebabName,
+      filePath: entry.filePath,
+      targetType: entry.targetType,
+    });
 
     // Post-render: check BlockSlot usage matches declared blocks config
     validateBlockSlot(html, { kebabName: entry.kebabName, filePath: entry.filePath }, entry.meta.blocks);

@@ -13,7 +13,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Text (React)",
-  type: "block",
   settings,
 } satisfies ShopifyMeta;
 

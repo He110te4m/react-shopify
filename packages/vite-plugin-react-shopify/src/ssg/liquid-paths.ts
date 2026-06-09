@@ -23,7 +23,7 @@ export function getOutputPath(
     themeRoot: string;
   },
 ): string {
-  const type = entry.meta.type ?? entry.targetType;
+  const type = entry.targetType;
   const dirName = typeToDir(type);
   const fileName = resolveFileName(entry, type, options);
   return path.join(options.themeRoot, dirName, fileName);

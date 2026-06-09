@@ -129,10 +129,24 @@ export default function Hero() {
 
 Use theme blocks when content needs to be reusable across sections or merchant-composable.
 
-- Use `type: "block"` or the project-supported `shopifyMeta` block form.
+- Put Theme Block entries under `frontend/blocks/`.
+- Let the generated block filename define the Shopify block type.
+- Do not write `shopifyMeta.type: "block"` to define a Theme Block. That confuses plugin output kind with Shopify block references.
 - Read settings with `block.settings.*`.
 - Keep block DOM self-contained.
 - Avoid hardcoding parent section class names unless the block is intentionally private to that layout.
+
+When a parent section accepts Theme Blocks, declare child block references in the parent `shopifyMeta.blocks`:
+
+```ts
+blocks: [
+  { type: "@theme" },
+  { type: "@app" },
+  { type: "react-heading" },
+]
+```
+
+In this array, `type` means the child block reference: `@theme`, `@app`, or a concrete block filename/type. It does not declare the parent or current block's own type.
 
 ## Snippets
 
@@ -143,6 +157,12 @@ Good candidates:
 - Icons and simple display fragments.
 - Small, repeated UI with stable inputs.
 - Cards after data and hydration behavior are validated.
+
+Snippet rules:
+
+- Snippets do not have Shopify schema metadata.
+- Do not invent snippet-specific `shopifyMeta` fields.
+- Do not migrate snippets before their Liquid ownership and hydration behavior are understood.
 
 Poor candidates:
 
