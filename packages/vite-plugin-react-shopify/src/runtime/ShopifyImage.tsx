@@ -8,6 +8,7 @@
  * that Shopify rendered.
  */
 import { useMemo } from "react";
+import { GW_BLOCKS } from "../constants/attributes";
 import { Island } from "./Island";
 import { useShopifyContext } from "./ShopifyContext";
 
@@ -73,7 +74,8 @@ function buildImageTagParams(o: {
   sizes?: string;
   widths?: string;
 }): string {
-  const L = (v: string) => (v.startsWith("img_") ? v : `'${v}'`);
+  const isLiquidVar = (v: string) => v.startsWith("img_") || v.startsWith("shopify_img_");
+  const L = (v: string) => (isLiquidVar(v) ? v : `'${v}'`);
   const parts: string[] = [];
   if (o.alt !== undefined) parts.push(`alt: '${o.alt.replace(/'/g, "\\'")}'`);
   if (o.loading) parts.push(`loading: ${L(o.loading)}`);
@@ -83,7 +85,7 @@ function buildImageTagParams(o: {
     parts.push(
       o.preload === "true"
         ? "preload: true"
-        : o.preload.startsWith("img_")
+        : isLiquidVar(o.preload)
         ? `preload: ${o.preload}`
         : "preload: true",
     );
@@ -97,17 +99,25 @@ function buildImageTagParams(o: {
 
 const EAGER_THRESHOLD = 4;
 const MEDIUM_THRESHOLD = 8;
-
-let _autoVarId = 0;
+const AUTO_LOAD_STATE_KEY = "__shopify_ssg_image_auto_load_state";
+const AUTO_LOAD_VARS = {
+  loadVar: "shopify_img_ld",
+  fetchVar: "shopify_img_fp",
+  preVar: "shopify_img_pl",
+} as const;
 
 function getAutoLoadVars(
   inject: (code: string) => void,
   track: (path: string) => void,
 ): { loadVar: string; fetchVar: string; preVar: string } {
-  const id = _autoVarId++;
-  const lv = `img_ld_${id}`;
-  const fv = `img_fp_${id}`;
-  const pv = `img_pl_${id}`;
+  const g = globalThis as any;
+  const blocks = g[GW_BLOCKS];
+  const existing = g[AUTO_LOAD_STATE_KEY] as { blocks: unknown; injected: boolean } | undefined;
+  const state: { blocks: unknown; injected: boolean } =
+    existing && existing.blocks === blocks ? existing : { blocks, injected: false };
+  g[AUTO_LOAD_STATE_KEY] = state;
+
+  const { loadVar: lv, fetchVar: fv, preVar: pv } = AUTO_LOAD_VARS;
   const code = `{%- liquid
   assign ${lv} = 'lazy'
   assign ${fv} = 'low'
@@ -120,9 +130,12 @@ function getAutoLoadVars(
     assign ${fv} = 'medium'
   endif
 -%}`;
-  inject(code);
+  if (!state.injected) {
+    inject(code);
+    state.injected = true;
+  }
   track("section.index");
-  return { loadVar: lv, fetchVar: fv, preVar: pv };
+  return AUTO_LOAD_VARS;
 }
 
 export function ShopifyImage({
@@ -173,7 +186,7 @@ export function ShopifyImage({
     });
     const urlPart = urlParams ? ` | image_url: ${urlParams}` : "";
     const tagPart = tagParams ? ` | image_tag: ${tagParams}` : "";
-    return `{{ ${image}${urlPart}${tagPart} }}`;
+    return `{% if ${image} != blank %}{{ ${image}${urlPart}${tagPart} }}{% endif %}`;
   }, [
     ctx.phase,
     image,
