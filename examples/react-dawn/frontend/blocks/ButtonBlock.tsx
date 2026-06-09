@@ -14,14 +14,10 @@ const settings = [
     label: "Button link",
   },
   {
-    type: "select",
-    id: "button_style",
-    label: "Button style",
-    default: "button--primary",
-    options: [
-      { value: "button--primary", label: "Primary" },
-      { value: "button--secondary", label: "Secondary" },
-    ],
+    type: "checkbox",
+    id: "button_style_secondary",
+    label: "Use secondary button style",
+    default: false,
   },
 ] as const satisfies SettingSchema[];
 
@@ -33,10 +29,10 @@ export const shopifyMeta = {
 export default function ButtonBlock() {
   const [label] = useLiquid<string>("block.settings.button_label");
   const [link] = useLiquid<string>("block.settings.button_link");
-  const [style] = useLiquid<string>("block.settings.button_style");
+  const [secondary] = useLiquid<boolean>("block.settings.button_style_secondary", { type: "boolean" });
 
   return (
-    <a href={link || "#"} className={`button ${style}`}>
+    <a href={link || "#"} className={secondary ? "button button--secondary" : "button button--primary"}>
       {label}
     </a>
   );

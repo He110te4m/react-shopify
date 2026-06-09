@@ -24,7 +24,7 @@
           "settings": {
             "button_label": "Shop all",
             "button_link": "shopify://collections/all",
-            "button_style": "button--secondary"
+            "button_style_secondary": true
           }
         }
       },
