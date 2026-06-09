@@ -22,27 +22,29 @@ export default function ColumnBlock() {
   const [link] = useLiquid<string>("block.settings.link");
 
   return (
-    <div className="multicolumn-card content-container">
-      {image != null && (
-        <div className="multicolumn-card__image-wrapper multicolumn-card__image-wrapper--full-width">
-          <div className="media media--transparent media--square">
-            <ShopifyImage
-              image="block.settings.image"
-              widths="275, 550, 710"
-              sizes="(min-width: 990px) 550px, (min-width: 750px) 550px, calc(100vw - 30px)"
-            />
+    <div className="multicolumn-list__item grid__item">
+      <div className="multicolumn-card content-container">
+        {image != null && (
+          <div className="multicolumn-card__image-wrapper multicolumn-card__image-wrapper--full-width">
+            <div className="media media--transparent media--square">
+              <ShopifyImage
+                image="block.settings.image"
+                widths="275, 550, 710"
+                sizes="(min-width: 990px) 550px, (min-width: 750px) 550px, calc(100vw - 30px)"
+              />
+            </div>
           </div>
-        </div>
-      )}
-      <div className="multicolumn-card__info">
-        {title && <h3 className="inline-richtext">{title}</h3>}
-        {text && <div className="rte">{text}</div>}
-        {linkLabel && (
-          <a href={link || "#"} className="link animate-arrow">
-            {linkLabel}
-            <span className="icon-wrap">&nbsp;{`{{- 'icon-arrow.svg' | inline_asset -}}`}</span>
-          </a>
         )}
+        <div className="multicolumn-card__info">
+          {title && <h3 className="inline-richtext">{title}</h3>}
+          {text && <div className="rte">{text}</div>}
+          {linkLabel && (
+            <a href={link || "#"} className="link animate-arrow">
+              {linkLabel}
+              <span className="icon-wrap">&nbsp;{`{{- 'icon-arrow.svg' | inline_asset -}}`}</span>
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );
