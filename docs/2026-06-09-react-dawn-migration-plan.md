@@ -4,7 +4,9 @@
 >
 > 依据：[theme-react-refactor](./2026-06-09-theme-react-refactor.md)
 
-当前状态：已有 Dawn v15.4.1 完整 Liquid 代码 + 1 个 Demo `TodoList` React section + `vite-plugin-react-shopify` 集成。
+计划状态：已同意。本文档现在作为已批准迁移路线图 + 当前进度记录，不再表示仍停留在初始 Demo 状态。
+
+当前状态：已有 Dawn v15.4.1 完整 Liquid 代码 + `vite-plugin-react-shopify` 集成 + 多个 React section/block 迁移草稿。下一步不是重新确认方向，而是修正已发现的生成产物问题，并按已同意顺序逐个验收。
 
 执行原则：这份计划是迁移路线图，不是一次性批量改造清单。每一类 Shopify 语义（Theme Block、form、paginate、product card、多实例 snippet hydration）都必须先做最小验证，再扩大迁移范围。
 
@@ -16,20 +18,35 @@
 
 | 项目 | 状态 |
 |------|------|
+| 计划确认 | ✅ 本迁移路线已同意，后续按本文档顺序推进和验收 |
 | 插件集成 | ✅ `vite-plugin-react-shopify` 已配置，`pnpm build` 可产出 |
-| React Section | 仅 `frontend/sections/TodoList.tsx`（Demo，非 Dawn 业务） |
-| React Block | 无 |
+| Demo/孤文件清理 | ✅ `TodoList.tsx`、`react-todo-list.liquid`、`react-dawn-smoke-test.liquid` 已不再存在 |
+| React Section 源文件 | 13 个草稿：`Main404`、`MainPage`、`RichText`、`Video`、`ImageBanner`、`CollectionList`，以及若干超前草稿（`FeaturedBlog`、`Multicolumn`、`ImageWithText`、`Multirow`、`Collage`、`Slideshow`、`CollapsibleContent`） |
+| React Section 产物 | 已生成 6 个：`react-main404`、`react-main-page`、`react-rich-text`、`react-video`、`react-image-banner`、`react-collection-list` |
+| React Block 源文件 | 8 个草稿：`HeadingBlock`、`TextBlock`、`ButtonBlock`、`CaptionBlock`、`ImageBlock`、`ColumnBlock`、`RowBlock`、`SlideBlock` |
+| React Block 产物 | 已生成 3 个：`react-heading-block`、`react-text-block`、`react-button-block` |
 | React Snippet | 无 |
-| React 基础设施 | `frontend/components/`, `snippets/`, `templates/` 均为空 |
-| 孤文件 | `sections/react-dawn-smoke-test.liquid` 存在但源文件 `DawnSmokeTest.tsx` 缺失 |
-| React 产物 | `sections/react-todo-list.liquid` + `assets/react-shopify-*.js` 存在 |
+| React 基础设施 | ✅ `frontend/styles/`、`utils/`、`i18n/`、`icons/`、`lib/`、`hooks/`、`components/` 已有初始实现 |
+| 当前质量状态 | ⚠️ 见 `docs/2026-06-09-react-dawn-frontend-review.md`；已有产物需先修 P0/P1，再继续扩大迁移范围 |
 | Liquid Section | 54 个，19 个含 `blocks` 定义 |
 | Liquid Snippet | 38 个 |
 | CSS | `assets/` 下 60+ CSS 文件，约 150 SVG icons |
 
+当前优先级：先修复和验收已生成的 6 个 section + 3 个 block，不再继续新增中高复杂度迁移，直到 P0 问题清零。
+
+当前阻塞修正项：
+
+- `useSectionPadding` 不得对 Liquid placeholder 做 JS 数学运算；生成产物中不能再出现 `NaNpx`。
+- `ImageBanner` 生成 CSS selector 不能包含字面量 `${section.id}`，必须输出 `{{ section.id }}`。
+- `CollectionList` / 超前草稿中的 route 链接不能输出 `href="routes.*"` 字面量。
+- `page.content`、richtext 等 Shopify HTML 内容不能作为普通 React 字符串子节点长期保留，需 Liquid-owned boundary。
+- 超出已同意顺序的草稿必须暂停生成或标为未验收，不作为当前完成范围。
+
 ---
 
 ## 1. 阶段 0：现状清理
+
+**状态：✅ 已完成初始清理；空基线已经被后续 React 迁移产物取代。**
 
 **目标：** 移除 Demo 和孤儿文件，确认构建基线。
 
@@ -45,13 +62,17 @@
 
 **验收：**
 
-- `pnpm build` 通过，无 React entry 产物
+- 历史空基线：`pnpm build` 通过，无 Demo/孤儿 React entry 产物
 - `pnpm typecheck` 通过
-- `sections/react-*.liquid`、`blocks/react-*.liquid`、`snippets/react-*.liquid` 不再残留
+- `sections/react-todo-list.liquid`、`sections/react-dawn-smoke-test.liquid` 不再残留
+
+注意：当前仓库已有真实迁移产物，因此不要再按阶段 0 删除所有 `sections/react-*.liquid` / `blocks/react-*.liquid`。阶段 0 的“无 React entry 产物”只表示清理 Demo 后的历史检查点。
 
 ---
 
 ## 2. 阶段 1：基础设施搭建
+
+**状态：✅ 初始实现已完成；后续只按迁移单元补齐。**
 
 **目标：** 建立 `frontend/` 共享层，支撑后续 section/block 迁移。
 
@@ -208,11 +229,14 @@ snippets/shopify-importmap.liquid
 **验收：**
 
 - `pnpm typecheck` + `pnpm build` 通过
-- `frontend/` 目录结构就绪
-- 样式归属规则明确：React entry 不直接 import Dawn 原 `assets/section-*.css`
-- i18n 最小 API 可用；字典生成脚本不作为阶段 1 阻塞
+- ✅ `frontend/styles/`、`utils/`、`i18n/`、`icons/`、`lib/`、`hooks/`、`components/` 目录结构已就绪
+- ✅ 样式归属规则明确：React entry 不直接 import Dawn 原 `assets/section-*.css`
+- ✅ i18n 最小 API 可用；字典生成脚本不作为阶段 1 阻塞
+- ⚠️ `useSectionPadding` 当前实现需修复：不能在 JS 中计算 Liquid placeholder 派生值
 
 ## 3. 阶段 1.5：关键能力 Spike
+
+**状态：🟡 部分已实现，未完成端到端验收。**
 
 **目标：** 在迁移真实 Dawn section 前，先验证高风险插件能力和主题边界。
 
@@ -226,12 +250,15 @@ snippets/shopify-importmap.liquid
 
 **验收：**
 
-- Theme Editor 可添加、删除、重排 block
-- nested block hydrate 无 console error
-- 多实例 snippet hydrate 无重复 id / bridge 冲突
-- `pnpm typecheck` + `pnpm build` 通过
+- ✅ 已有最小 `HeadingBlock` / `TextBlock` / `ButtonBlock` 产物
+- 🟡 `RichText` / `ImageBanner` 已使用 `BlockSlot`，但 Theme Editor add/remove/reorder 仍需人工验收记录
+- 🟡 nested block 相关草稿已存在（如 `SlideBlock`），但当前不算完成，需按迁移顺序单独 spike
+- ❌ React snippet 多实例示例尚未实现
+- `pnpm typecheck` + `pnpm build` 通过后，还需检查生成产物无 `NaNpx`、`${section.id}`、`href="routes.*"`
 
 ## 4. 阶段 2：简单 Section 迁移
+
+**状态：🟡 6 个计划内 section 已有 React 源文件/部分产物，但不是全部验收完成。先修 P0，再逐个验收。**
 
 **原则：**
 
@@ -254,14 +281,16 @@ assets/react-shopify-image-banner-*.js ← 插件自动生成
 
 | # | Section | 行数 | 复杂度 | 涉及能力 |
 |---|---------|------|--------|----------|
-| 1 | `main-404` | 23 | ★ | Shopify `t` filter + `routes`，无 schema/settings |
-| 2 | `main-page` | 58 | ★★ | `page.title` / `page.content` + padding settings + animation class |
-| 3 | `rich-text` | 355 | ★★ | 3 个 block types（heading/text/button），需前置 Theme Blocks |
-| 4 | `video` | 255 | ★★ | `ShopifyVideo` Island，video setting，deferred media 逻辑需核对 |
-| 5 | `image-banner` | 507 | ★★★ | `picture` + `image_tag` → `ShopifyImage`，3 个 block types |
-| 6 | `collection-list` | 308 | ★★★ | blocks（collection），`image_tag`，collection object bridge |
+| 1 | `main-404` | 23 | ★ | 🟡 已生成 `react-main404.liquid`；需最终 Theme Editor/浏览器验收 |
+| 2 | `main-page` | 58 | ★★ | 🟡 已生成；需修 `page.content` HTML boundary + `useSectionPadding` |
+| 3 | `rich-text` | 355 | ★★ | 🟡 已生成；依赖 `HeadingBlock` / `TextBlock` / `ButtonBlock` 验收 |
+| 4 | `video` | 255 | ★★ | 🟡 已生成；需修 padding 产物并核对 deferred media 行为 |
+| 5 | `image-banner` | 507 | ★★★ | 🟡 已生成；需修 `${section.id}` selector、Liquid runtime 分支和图片行为 |
+| 6 | `collection-list` | 308 | ★★★ | 🔴 已生成但策略未定；当前混合 legacy `section.blocks` raw loop 与 no `BlockSlot`，需先停下修正 |
 
 执行顺序建议先做 `main-404` 和 `main-page`，验证 Shopify 对象、routes、translation filter、CSS variables，以及必要时最小 scoped `{% style %}`。`rich-text` 必须在阶段 1.5 的 Theme Blocks 验证通过后开始。
+
+当前执行顺序修正：已有代码已经推进到 `collection-list`，但验收仍按上表从前往后补齐。未通过当前 section 验收前，不继续扩大到中等/复杂 section。
 
 ### rich-text 迁移示例
 
@@ -320,19 +349,21 @@ export default function RichText() {
 
 ## 5. 阶段 3：Theme Blocks 沉淀
 
+**状态：🟡 前 3 个基础 block 已有产物；其余 block 只有源文件草稿或未验收，不算完成。**
+
 **目标：** 将阶段 1.5 和阶段 2 中验证过的 block 逻辑沉淀为可复用 `@theme` block。
 
 注意：`Heading` / `Text` / `Button` 是 `rich-text` 的前置条件，不应等到 `rich-text` 完成后才开始。
 
 | Block | 来源 section | 所属文件 |
 |-------|-------------|----------|
-| `Heading` | rich-text, image-banner, multicolumn | `frontend/blocks/Heading.tsx` |
-| `Text` | rich-text, image-banner, multicolumn, collage | `frontend/blocks/Text.tsx` |
-| `Button` / `Buttons` | rich-text, image-banner, multicolumn | `frontend/blocks/Button.tsx` 或 `Buttons.tsx` |
-| `Image` | collage, multicolumn | `frontend/blocks/Image.tsx` |
-| `Slide` | slideshow | `frontend/blocks/Slide.tsx` |
-| `Column` | multicolumn | `frontend/blocks/Column.tsx` |
-| `Row` | multirow | `frontend/blocks/Row.tsx` |
+| `Heading` | rich-text, image-banner, multicolumn | 🟡 `frontend/blocks/HeadingBlock.tsx` 已生成；schema 文案仍需对齐 Dawn |
+| `Text` | rich-text, image-banner, multicolumn, collage | 🟡 `frontend/blocks/TextBlock.tsx` 已生成；richtext HTML boundary 需确认 |
+| `Button` / `Buttons` | rich-text, image-banner, multicolumn | 🟡 `frontend/blocks/ButtonBlock.tsx` 已生成；空链接语义需修复，不能 `href="#"` |
+| `Image` | collage, multicolumn | ⚪ `frontend/blocks/ImageBlock.tsx` 草稿存在，未生成/未验收 |
+| `Slide` | slideshow | ⚪ `frontend/blocks/SlideBlock.tsx` 草稿存在，未生成/未验收 |
+| `Column` | multicolumn | ⚪ `frontend/blocks/ColumnBlock.tsx` 草稿存在，未生成/未验收 |
+| `Row` | multirow | ⚪ `frontend/blocks/RowBlock.tsx` 草稿存在，未生成/未验收 |
 
 ### Block 实现模式
 
@@ -378,12 +409,14 @@ export default function Heading() {
 
 ## 6. 阶段 4：中等复杂度 Section
 
+**状态：⚪ 暂停。已有若干源文件草稿，但不进入当前完成范围，必须等阶段 2 P0/P1 清零后逐个恢复。**
+
 | # | Section | 行数 | 难点 |
 |---|---------|------|------|
-| 1 | `multicolumn` | 455 | blocks + `image_tag` + responsive grid 布局 |
-| 2 | `multirow` | 中等 | blocks + `image_tag` |
-| 3 | `image-with-text` | 中等 | blocks + `image_tag` + 多种 layout |
-| 4 | `collapsible-content` | 中等 | `{% accordion %}` 交互 → React `useState` |
+| 1 | `multicolumn` | 455 | 源文件草稿存在；暂停生成/验收 |
+| 2 | `multirow` | 中等 | 源文件草稿存在；暂停生成/验收 |
+| 3 | `image-with-text` | 中等 | 源文件草稿存在；暂停生成/验收 |
+| 4 | `collapsible-content` | 中等 | 源文件草稿存在；暂停生成/验收 |
 | 5 | `newsletter` | 中高 | `{% form 'customer' %}` — 默认暂缓或保留 Liquid-owned form |
 | 6 | `contact-form` | 中高 | `{% form 'contact' %}` — 默认暂缓或保留 Liquid-owned form |
 | 7 | `featured-collection` | 中等 | Liquid collection loop + product cards |
@@ -407,6 +440,8 @@ export default function Heading() {
 如果 endpoint、错误回显、成功状态或 bot protection 语义无法等价，保持 Liquid form，不进入 React 全量迁移。
 
 ## 7. 阶段 5：复杂 Section（逐个攻坚）
+
+**状态：⚪ 暂停。已有 `collage` / `slideshow` 源文件草稿，但不算迁移完成。**
 
 每个复杂 section 单独 PR，需先写 design doc。
 
@@ -540,7 +575,43 @@ export default function Heading() {
 
 ---
 
-## 12. 验收标准
+## 12. 当前修复与验收队列
+
+这部分是对已同意计划的进度同步，不改变迁移路线。当前仓库已经越过初始 Demo 阶段，因此后续工作按“先修已生成产物，再继续迁移”的队列执行。
+
+### 12.1 立即修复（P0）
+
+- [ ] 修复 `frontend/hooks/useSectionPadding.ts`，生成产物不再出现 `NaNpx`。
+- [ ] 修复 `frontend/sections/ImageBanner.tsx`，生成 selector 使用 `#Banner-{{ section.id }}`，不出现 `${section.id}`。
+- [ ] 修复所有 `href="routes.*"` 字面量，至少覆盖 `CollectionList` 和超前草稿中的同类问题。
+- [ ] 暂停或排除超出当前验收顺序的 React entries，避免未验收草稿继续生成上传。
+
+### 12.2 当前验收顺序
+
+- [ ] `react-main404`：build、schema、Theme Editor、console、视觉。
+- [ ] `react-main-page`：先处理 `page.content` HTML ownership，再验收。
+- [ ] `react-heading-block` / `react-text-block` / `react-button-block`：schema、空链接、richtext ownership、Theme Editor block 操作。
+- [ ] `react-rich-text`：依赖上面 3 个 block 验收通过。
+- [ ] `react-video`：padding、video media、poster/deferred 行为。
+- [ ] `react-image-banner`：Liquid selector、图片条件、overlay、BlockSlot。
+- [ ] `react-collection-list`：先决定 legacy section blocks / Theme Blocks / 保留 Liquid-owned 的策略，再继续。
+
+### 12.3 暂停范围
+
+以下文件可以作为草稿保留，但不能按“已完成迁移”计算，也不应在 P0 清零前继续扩大：
+
+- `FeaturedBlog.tsx`
+- `Multicolumn.tsx`
+- `ImageWithText.tsx`
+- `Multirow.tsx`
+- `Collage.tsx`
+- `Slideshow.tsx`
+- `CollapsibleContent.tsx`
+- 未生成的 `CaptionBlock` / `ImageBlock` / `ColumnBlock` / `RowBlock` / `SlideBlock`
+
+---
+
+## 13. 验收标准
 
 每个阶段完成时：
 
