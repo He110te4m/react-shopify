@@ -10,30 +10,27 @@
 {
   "sections": {
     "image_banner": {
-      "type": "image-banner",
+      "type": "react-image-banner",
       "blocks": {
-        "heading": {
-          "type": "heading",
+        "heading_block": {
+          "type": "react-heading-block",
           "settings": {
             "heading": "Browse our latest products",
             "heading_size": "h0"
           }
         },
-        "button": {
-          "type": "buttons",
+        "button_block": {
+          "type": "react-button-block",
           "settings": {
-            "button_label_1": "Shop all",
-            "button_link_1": "shopify://collections/all",
-            "button_style_secondary_1": true,
-            "button_label_2": "",
-            "button_link_2": "",
-            "button_style_secondary_2": false
+            "button_label": "Shop all",
+            "button_link": "shopify://collections/all",
+            "button_style": "button--secondary"
           }
         }
       },
       "block_order": [
-        "heading",
-        "button"
+        "heading_block",
+        "button_block"
       ],
       "settings": {
         "image_overlay_opacity": 40,
