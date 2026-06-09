@@ -1,1 +1,25 @@
-{}
+{
+  "general": {
+    "continue_shopping": "Continue shopping",
+    "search": "Search",
+    "view_all": "View all",
+    "learn_more": "Learn more",
+    "add_to_cart": "Add to cart",
+    "sold_out": "Sold out",
+    "unavailable": "Unavailable"
+  },
+  "templates": {
+    "404": {
+      "title": "Page not found",
+      "subtext": "The page you were looking for does not exist or has been moved."
+    }
+  },
+  "sections": {
+    "collection_list": {
+      "view_all": "View all collections"
+    },
+    "video": {
+      "load_video": "Load video: {{ description }}"
+    }
+  }
+}
