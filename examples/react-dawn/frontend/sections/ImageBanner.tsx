@@ -83,108 +83,77 @@ export default function ImageBanner() {
   const [sectionId] = useLiquid<string>("section.id");
   const fadeClass = useAnimation("fade-in");
   const slideClass = useAnimation("slide-in");
-  const [image] = useLiquid<object>("section.settings.image");
-  const [image2] = useLiquid<object>("section.settings.image_2");
-  const [overlayOpacity] = useLiquid<number>("section.settings.image_overlay_opacity", { type: "number" });
   const [imageHeight] = useLiquid<string>("section.settings.image_height");
   const [imageBehavior] = useLiquid<string>("section.settings.image_behavior");
   const [contentPosition] = useLiquid<string>("section.settings.desktop_content_position");
   const [contentAlignment] = useLiquid<string>("section.settings.desktop_content_alignment");
-  const [showTextBox] = useLiquid<boolean>("section.settings.show_text_box", { type: "boolean" });
   const [colorScheme] = useLiquid<string>("section.settings.color_scheme");
-  const [stackOnMobile] = useLiquid<boolean>("section.settings.stack_images_on_mobile", { type: "boolean" });
   const [mobileContentAlign] = useLiquid<string>("section.settings.mobile_content_alignment");
-  const [showTextBelow] = useLiquid<boolean>("section.settings.show_text_below", { type: "boolean" });
   const [sectionIndex] = useLiquid<number>("section.index", { type: "number" });
 
-  const hasImage = image != null;
-  const hasImage2 = image2 != null;
-  const isAdapt = imageHeight === "adapt" && hasImage;
   const behavior = imageBehavior !== "none" ? imageBehavior : null;
   const fetchPriority = sectionIndex === 1 ? "high" : "auto";
-  const stackImages = hasImage && hasImage2 && stackOnMobile;
-  const showBox = showTextBox;
 
-  useLiquidCode(
-    `{%- style -%}
-  #Banner-{{ section.id }}::after {
-    opacity: {{ section.settings.image_overlay_opacity | divided_by: 100.0 }};
-  }
-{%- endstyle -%}`,
-    ["section.settings.image_overlay_opacity"],
-  );
+  useLiquidCode(`{%- if section.settings.image_height == 'adapt' and section.settings.image != blank -%}{%- style -%}@media screen and (max-width: 749px) {#Banner-STARTID::before,#Banner-STARTID .banner__media::before,#Banner-STARTID:not(.banner--mobile-bottom) .banner__content::before {padding-bottom: {{ 1 | divided_by: section.settings.image.aspect_ratio | times: 100 }}%;content: '';display: block;}}@media screen and (min-width: 750px) {#Banner-STARTID::before,#Banner-STARTID .banner__media::before {padding-bottom: {{ 1 | divided_by: section.settings.image.aspect_ratio | times: 100 }}%;content: '';display: block;}}{%- endstyle -%}{%- endif -%}`.replace(/STARTID/g, "${section.id}"), ["section.settings.image_height", "section.settings.image"]);
 
-    const bannerClasses = clsx(
-      "banner",
-      `banner--content-align-${contentAlignment}`,
-      `banner--content-align-mobile-${mobileContentAlign}`,
-      `banner--${imageHeight}`,
-      {
-        "banner--stacked": stackImages,
-        "banner--adapt": isAdapt,
-        "banner--mobile-bottom": showTextBelow,
-        "banner--desktop-transparent": !showBox,
-      },
-      fadeClass,
-    );
+  useLiquidCode(`{%- style -%}#Banner-STARTID::after {opacity: {{ section.settings.image_overlay_opacity | divided_by: 100.0 }};}{%- endstyle -%}`.replace(/STARTID/g, "${section.id}"), ["section.settings.image_overlay_opacity"]);
 
   return (
-    <div id={`Banner-${sectionId}`} className={bannerClasses}>
-      {hasImage && (
-        <div
-            className={clsx("banner__media media", {
-              "banner__media-half": hasImage2,
-              [`animate--${behavior}`]: behavior,
-            }, fadeClass)}
-        >
-          <ShopifyImage
-            image="section.settings.image"
-            widths="375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840"
-            sizes={hasImage2 ? "(min-width: 750px) 50vw, 100vw" : "100vw"}
-            className={hasImage2 ? "banner__media-image-half" : undefined}
-            fetchPriority={fetchPriority}
-          />
-        </div>
+    <div
+      id={`Banner-${sectionId}`}
+      className={clsx(
+        "banner",
+        `banner--content-align-${contentAlignment}`,
+        `banner--content-align-mobile-${mobileContentAlign}`,
+        `banner--${imageHeight}`,
+        fadeClass,
       )}
+    >
+      {`{%- liquid
+  assign full_width = '100vw'
+  assign widths = '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
+  if section.settings.image_behavior == 'ambient'
+    assign full_width = '120vw'
+    assign widths = '450, 660, 900, 1320, 1800, 2136, 2400, 3600, 7680'
+  endif
+  if section.settings.image != blank
+    assign img_height = section.settings.image.width | divided_by: section.settings.image.aspect_ratio
+  endif
+-%}`}
 
-      {!hasImage && !hasImage2 && (
-        <div className={clsx("banner__media media placeholder", { [`animate--${behavior}`]: behavior })}>
-          {`{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}`}
-        </div>
-      )}
+      <div
+        className={clsx("banner__media media", {
+          [`animate--${behavior}`]: behavior,
+        }, fadeClass)}
+      >
+        {`{%- if section.settings.image != blank -%}
+          {{ section.settings.image | image_url: width: 3840 | image_tag: loading: 'eager', sizes: full_width, widths: widths, fetchpriority: 'high' }}
+        {%- else -%}
+          {{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}
+        {%- endif -%}`}
+      </div>
 
-      {hasImage2 && (
+      {`{%- if section.settings.image_2 != blank -%}`}
         <div
-            className={clsx("banner__media media", {
-              "banner__media-half": hasImage,
-              [`animate--${behavior}`]: behavior,
-            }, fadeClass)}
+          className={clsx("banner__media media", "banner__media-half", {
+            [`animate--${behavior}`]: behavior,
+          }, fadeClass)}
         >
-          <ShopifyImage
-            image="section.settings.image_2"
-            widths="375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840"
-            sizes={hasImage ? "(min-width: 750px) 50vw, 100vw" : "100vw"}
-            className={hasImage ? "banner__media-image-half" : undefined}
-            fetchPriority={fetchPriority}
-          />
+          {`{{ section.settings.image_2 | image_url: width: 3840 | image_tag: loading: 'lazy', sizes: '(min-width: 750px) 50vw, 100vw', widths: widths, class: 'banner__media-image-half' }}`}
         </div>
-      )}
+      {`{%- endif -%}`}
 
       <div
         className={clsx(
           "banner__content",
           `banner__content--${contentPosition}`,
-            "page-width",
-            slideClass,
-          )}
-      >
-        {showBox ? (
-          <div className={`banner__box content-container content-container--full-width-mobile color-${colorScheme} gradient`}>
-            <BlockSlot />
-          </div>
-        ) : (
-          <BlockSlot />
+          "page-width",
+          slideClass,
         )}
+      >
+        <div className={`banner__box content-container content-container--full-width-mobile color-${colorScheme} gradient`}>
+          <BlockSlot />
+        </div>
       </div>
     </div>
   );
