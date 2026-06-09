@@ -1,6 +1,7 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
 import { BlockSlot, useLiquid } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
+import { useSectionPadding } from "../hooks/useSectionPadding";
 import "./RichText.css";
 import "./SectionPadding.css";
 import "../styles/shared.css";
@@ -44,12 +45,12 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function RichText() {
+  const { style: paddingStyle } = useSectionPadding();
+
   const [colorScheme] = useLiquid<string>("section.settings.color_scheme");
   const [fullWidth] = useLiquid<boolean>("section.settings.full_width", { type: "boolean" });
   const [contentPosition] = useLiquid<string>("section.settings.desktop_content_position");
   const [contentAlignment] = useLiquid<string>("section.settings.content_alignment");
-  const [pt] = useLiquid<number>("section.settings.padding_top", { type: "number" });
-  const [pb] = useLiquid<number>("section.settings.padding_bottom", { type: "number" });
 
   return (
     <div className={clsx("isolate", !fullWidth && "page-width")}>
@@ -57,10 +58,7 @@ export default function RichText() {
         className={clsx("rich-text content-container", `color-${colorScheme}`, "gradient", {
           "rich-text--full-width content-container--full-width": fullWidth,
         })}
-        style={{
-          "--pt-desktop": `${pt}px`, "--pt-mobile": `${Math.round(pt * 0.75)}px`,
-          "--pb-desktop": `${pb}px`, "--pb-mobile": `${Math.round(pb * 0.75)}px`,
-        } as React.CSSProperties}
+        style={paddingStyle}
       >
         <div className="section-padding">
           <div className={clsx("rich-text__wrapper", `rich-text__wrapper--${contentPosition}`, fullWidth && "page-width")}>

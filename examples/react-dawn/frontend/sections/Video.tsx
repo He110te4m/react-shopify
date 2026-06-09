@@ -1,6 +1,8 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
 import { ShopifyVideo, useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
+import { useAnimation } from "../hooks/useAnimation";
+import { useSectionPadding } from "../hooks/useSectionPadding";
 import "./Video.css";
 import "../styles/shared.css";
 
@@ -43,13 +45,13 @@ export const shopifyMeta = {
 } satisfies ShopifyMeta;
 
 export default function Video() {
+  const { style: paddingStyle } = useSectionPadding();
+  const animClass = useAnimation("slide-in");
+
   const [colorScheme] = useLiquid<string>("section.settings.color_scheme");
   const [fullWidth] = useLiquid<boolean>("section.settings.full_width", { type: "boolean" });
   const [heading] = useLiquid<string>("section.settings.heading");
   const [headingSize] = useLiquid<string>("section.settings.heading_size");
-  const [animEnabled] = useLiquid<boolean>("settings.animations_reveal_on_scroll", { type: "boolean" });
-  const [pt] = useLiquid<number>("section.settings.padding_top", { type: "number" });
-  const [pb] = useLiquid<number>("section.settings.padding_bottom", { type: "number" });
   const [enableLooping] = useLiquid<boolean>("section.settings.enable_video_looping", { type: "boolean" });
 
   useLiquidCode(
@@ -75,15 +77,12 @@ export default function Video() {
     <div className={`color-${colorScheme} gradient`}>
       <div
         className={clsx("video-section isolate", !fullWidth && "page-width")}
-        style={{
-          "--pt-desktop": `${pt}px`, "--pt-mobile": `${Math.round(pt * 0.75)}px`,
-          "--pb-desktop": `${pb}px`, "--pb-mobile": `${Math.round(pb * 0.75)}px`,
-        } as React.CSSProperties}
+        style={paddingStyle}
       >
         <div className="section-padding">
           {heading && (
             <div className={fullWidth ? "page-width" : undefined}>
-              <div className={clsx("title-wrapper title-wrapper--no-top-margin", { "scroll-trigger animate--slide-in": animEnabled })}>
+              <div className={clsx("title-wrapper title-wrapper--no-top-margin", animClass)}>
                 <h2 className={`title inline-richtext ${headingSize}`}>{heading}</h2>
               </div>
             </div>
