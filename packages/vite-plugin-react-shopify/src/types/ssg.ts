@@ -6,12 +6,12 @@
  * merged with auto-derived defaults.
  */
 
-import type { ShopifyBlockType, ShopifyMeta } from "./shopify";
+import type { ShopifyEntryType, ShopifyMeta } from "./shopify";
 
 export interface SSGEntry {
   filePath: string;
   componentName: string;
   kebabName: string;
-  targetType: ShopifyBlockType;
+  targetType: ShopifyEntryType;
   meta: Required<Pick<ShopifyMeta, "name">> & ShopifyMeta;
 }

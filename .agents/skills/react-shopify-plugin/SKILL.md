@@ -42,6 +42,17 @@ Preferred pattern: React owns structure and behavior, CSS files own styling, Liq
 
 Export `shopifyMeta` from each React entry to generate Shopify schema and wrapper metadata.
 
+Entry kind is inferred from the source directory:
+
+| Source directory | Shopify output |
+|---|---|
+| `frontend/sections/*.tsx` | `sections/react-*.liquid` |
+| `frontend/blocks/*.tsx` | `blocks/react-*.liquid` |
+| `frontend/snippets/*.tsx` | `snippets/react-*.liquid` |
+| `frontend/templates/*.tsx` | `templates/*.liquid` |
+
+Do not use `shopifyMeta.type` to declare a Theme Block's Shopify block type. A Theme Block's type is its generated block filename, e.g. `frontend/blocks/Heading.tsx` becomes a block reference such as `{ "type": "react-heading" }` depending on the configured output prefix.
+
 ```tsx
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
 
@@ -63,6 +74,8 @@ Rules:
 - Keep schema labels compatible with Shopify Theme Editor.
 - Use Shopify setting types, not custom React config objects.
 - Preserve merchant-editable behavior in `settings`, `blocks`, `presets`, `enabled_on`, and `disabled_on`.
+- Avoid setting `shopifyMeta.type` in normal theme code. It is an internal/output-kind override and is easy to confuse with Shopify block references.
+- Snippets do not have Shopify schema metadata. Do not invent snippet-specific `shopifyMeta` fields.
 
 ### `useLiquid`
 
@@ -200,7 +213,8 @@ export default function Section() {
 
 Rules:
 
-- Declare compatible blocks in `shopifyMeta.blocks` when using `BlockSlot`.
+- Declare compatible child blocks in `shopifyMeta.blocks` when using `BlockSlot`.
+- In `shopifyMeta.blocks`, `type` means a child block reference: `@theme`, `@app`, or a concrete block filename/type such as `react-heading`. It does not declare the current component's own kind.
 - Verify Theme Editor add/remove/reorder after implementation.
 - For nested blocks, verify hydration order before scaling the pattern.
 

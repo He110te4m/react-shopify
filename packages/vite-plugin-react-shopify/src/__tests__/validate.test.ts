@@ -76,6 +76,27 @@ describe("validate/rules", () => {
   });
 });
 
+describe("checkEntryTypeOverride", () => {
+  it("returns null when meta type is absent", () => {
+    expect(rules.checkEntryTypeOverride(undefined, "block", "test-block")).toBeNull();
+  });
+
+  it("warns even when meta type matches directory-inferred target type", () => {
+    const result = rules.checkEntryTypeOverride("block", "block", "test-block");
+    expect(result).not.toBeNull();
+    expect(result).toContain("shopifyMeta.type is deprecated and ignored");
+    expect(result).toContain('"block"');
+  });
+
+  it("warns when meta type conflicts with directory-inferred target type", () => {
+    const result = rules.checkEntryTypeOverride("section", "block", "test-block");
+    expect(result).not.toBeNull();
+    expect(result).toContain('shopifyMeta.type "section" is deprecated and ignored');
+    expect(result).toContain('"block"');
+    expect(result).toContain("blocks[].type");
+  });
+});
+
 describe("checkBlocksCoexistence", () => {
   it("returns null for empty blocks array", () => {
     expect(rules.checkBlocksCoexistence([], "test-comp")).toBeNull();
@@ -204,5 +225,30 @@ describe("validateShopifyMeta", () => {
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("mutually exclusive");
+  });
+
+  it("warns when shopifyMeta.type conflicts with targetType", () => {
+    const warnings = validateShopifyMeta(
+      {
+        name: "Test Block",
+        type: "section",
+      },
+      { kebabName: "test-block", filePath: "/test.tsx", targetType: "block" },
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("shopifyMeta.type");
+    expect(warnings[0]).toContain("ignored");
+  });
+
+  it("warns when shopifyMeta.type matches targetType because the field is deprecated", () => {
+    const warnings = validateShopifyMeta(
+      {
+        name: "Test Block",
+        type: "block",
+      },
+      { kebabName: "test-block", filePath: "/test.tsx", targetType: "block" },
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("deprecated");
   });
 });

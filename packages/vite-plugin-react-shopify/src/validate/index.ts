@@ -11,11 +11,13 @@ import { logger } from "../core/logger";
 import {
   checkNameLength,
   checkEmptyStringDefault,
+  checkEntryTypeOverride,
   checkBlocksCoexistence,
   checkBlockSlot,
   MAX_NAME_LENGTH,
 } from "./rules";
 import type { BlockDefinition } from "../types/shopify";
+import type { ShopifyEntryType } from "../types/shopify";
 
 const log = logger("validate");
 
@@ -23,11 +25,13 @@ const log = logger("validate");
 export interface ValidateContext {
   kebabName: string;
   filePath: string;
+  targetType?: ShopifyEntryType;
 }
 
 /** Minimum shape of metadata required for validation. */
 export interface ValidatableMeta {
   name: string;
+  type?: unknown;
   settings?: { id?: string; type: string; default?: unknown }[];
   blocks?: BlockDefinition[];
 }
@@ -45,6 +49,9 @@ export function validateShopifyMeta(meta: ValidatableMeta, context: ValidateCont
     warnings.push(nameWarning);
     meta.name = meta.name.slice(0, MAX_NAME_LENGTH);
   }
+
+  const typeWarning = checkEntryTypeOverride(meta.type, context.targetType, context.kebabName);
+  if (typeWarning) warnings.push(typeWarning);
 
   if (meta.settings) {
     for (const s of meta.settings) {

@@ -34,7 +34,7 @@ export function assembleLiquidFile(
   liquidBlocks: string[] = [],
   trackMap?: Map<string, TrackOptions>,
 ): string {
-  const type = entry.meta.type ?? entry.targetType;
+  const type = entry.targetType;
   const parts = [DISCLAIMER];
 
   const liquidPrepend = liquidBlocks.length > 0 ? liquidBlocks.join("\n") : "";

@@ -27,7 +27,6 @@ const settings = [
 
 export const shopifyMeta = {
   name: "Button (React)",
-  type: "block",
   settings,
 } satisfies ShopifyMeta;
 
