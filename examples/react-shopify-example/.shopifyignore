@@ -12,3 +12,4 @@ assets/*.map
 .shopifyignore
 .theme-check.yml
 *.md
+.vscode/*

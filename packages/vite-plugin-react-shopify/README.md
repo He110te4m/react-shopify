@@ -169,12 +169,11 @@ my-theme/
 │   └── shopify-importmap.liquid   ← 自动生成的 importmap
 ├── templates/
 │   └── page.react-index.liquid    ← 由插件生成
-├── assets/                    ← Vite 构建产物（可通过 buildDir 配置子目录）
-│   └── build/
-│       ├── react.js
-│       ├── react-dom.js
-│       ├── hero-banner-xxx.js
-│       └── manifest.json
+├── assets/                    ← Vite 构建产物 + 主题静态资源
+│   ├── react-shopify-react.js
+│   ├── react-shopify-react-dom.js
+│   ├── react-shopify-hero-banner-xxx.js
+│   └── .vite/manifest.json
 ├── layout/
 │   └── theme.liquid           ← 需手动添加 {% render 'shopify-importmap' %}
 ├── vite.config.ts
@@ -517,6 +516,7 @@ vitePluginShopify({
   themeRoot: ".",                         // 主题根目录，默认 "./"
   sourceCodeDir: "frontend",              // React 源码目录，默认 "frontend"
   buildDir: "assets",                     // 构建产物输出目录，默认 "assets"
+  chunkPrefix: "react-shopify-",          // JS/CSS chunk 文件名前缀，默认 "react-shopify-"
 
   // === 调试 ===
   debug: false,                           // 详细日志，也可用环境变量 DEBUG="vite-plugin-shopify:*"
@@ -542,6 +542,22 @@ vitePluginShopify({
   },
 });
 ```
+
+### chunkPrefix 与旧产物清理
+
+Shopify `assets/` 不支持嵌套子目录，因此插件默认把 Vite chunk 直接输出到 `assets/` 根目录，并添加统一前缀：
+
+```ts
+vitePluginShopify({
+  chunkPrefix: "rs-",
+});
+```
+
+构建前插件会：
+
+- 读取上一轮 `.vite/manifest.json`，删除旧构建登记过的 JS/CSS 产物。
+- 删除当前 `chunkPrefix` 匹配的孤儿 `.js` / `.css` / `.map` 文件。
+- 不再默认清空整个 `assets/`，避免误删图片、字体等主题静态资源。
 
 ### outputName 模板变量
 
@@ -713,11 +729,12 @@ Section 需要至少一个 `presets` 条目。检查 `shopifyMeta.presets`。
 
 ### Q: 如何修改构建产物输出路径？
 
-通过 `buildDir` 配置：
+Shopify assets 不支持嵌套子目录，推荐保持默认 `buildDir: "assets"`，通过 `chunkPrefix` 隔离插件产物：
 
 ```ts
 vitePluginShopify({
-  buildDir: "assets/react-app",  // 输出到 assets/react-app/
+  buildDir: "assets",
+  chunkPrefix: "react-shopify-",
 });
 ```
 

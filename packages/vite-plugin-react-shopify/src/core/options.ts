@@ -15,6 +15,7 @@ export interface ResolvedOptions {
   sourceCodeDir: string;
   snippetFile: string;
   buildDir: string;
+  chunkPrefix: string;
   debug: boolean;
   ssg: ResolvedSSGOptions;
   importMap: Required<ImportMapOptions>;
@@ -58,6 +59,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   const sourceCodeDir = options.sourceCodeDir ?? "frontend";
   const snippetFile = options.snippetFile ?? "shopify-importmap.liquid";
   const buildDir = options.buildDir ?? "assets";
+  const chunkPrefix = options.chunkPrefix ?? "react-shopify-";
 
   const ssg: ResolvedSSGOptions = {
     directories: options.ssg?.directories ?? ["sections", "blocks", "templates", "snippets"],
@@ -72,8 +74,8 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
   };
 
   const importMap: Required<ImportMapOptions> = {
-    react: options.importMap?.react ?? liquidAssetUrl(assetRef(buildDir, "react.js")),
-    reactDomClient: options.importMap?.reactDomClient ?? liquidAssetUrl(assetRef(buildDir, "react-dom.js")),
+    react: options.importMap?.react ?? liquidAssetUrl(assetRef(buildDir, `${chunkPrefix}react.js`)),
+    reactDomClient: options.importMap?.reactDomClient ?? liquidAssetUrl(assetRef(buildDir, `${chunkPrefix}react-dom.js`)),
   };
 
   return {
@@ -81,6 +83,7 @@ export const resolveOptions = (options: Options = {}): ResolvedOptions => {
     sourceCodeDir,
     snippetFile,
     buildDir,
+    chunkPrefix,
     debug: options.debug ?? false,
     ssg,
     importMap,

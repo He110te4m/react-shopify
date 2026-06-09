@@ -45,13 +45,13 @@ export default function Counter() {
       <p className="counter-value">{count}</p>
       <div className="counter-buttons">
         <button type="button" className="counter-btn counter-btn--dec" onClick={() => setCount((c) => c - step)}>
-          -{step}
+          {`-${step}`}
         </button>
         <button type="button" className="counter-btn counter-btn--reset" onClick={() => setCount(initialCount)}>
           Reset
         </button>
         <button type="button" className="counter-btn counter-btn--inc" onClick={() => setCount((c) => c + step)}>
-          +{step}
+          {`+${step}`}
         </button>
       </div>
     </SharedCard>

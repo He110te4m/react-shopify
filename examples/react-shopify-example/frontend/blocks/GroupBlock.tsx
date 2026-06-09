@@ -1,5 +1,5 @@
 import type { ShopifyMeta, SettingSchema } from "vite-plugin-react-shopify";
-import { useLiquid } from "vite-plugin-react-shopify/runtime";
+import { BlockSlot, useLiquid } from "vite-plugin-react-shopify/runtime";
 import "./GroupBlock.css";
 
 const settings = [
@@ -40,8 +40,11 @@ export const shopifyMeta = {
 export default function GroupBlock() {
   const [padding] = useLiquid<string>("block.settings.padding");
   const [alignment] = useLiquid<string>("block.settings.alignment");
+  const [layoutDirection] = useLiquid<string>("block.settings.layout_direction");
 
   return (
-    <div className="ssg-group" style={{ padding: `${padding}px 0`, alignItems: alignment }} />
+    <div className={`ssg-group ${layoutDirection}`} style={{ padding: `${padding}px 0`, alignItems: alignment }}>
+      <BlockSlot />
+    </div>
   );
 }

@@ -13,6 +13,7 @@ function makeOptions(root: string): ResolvedOptions {
     sourceCodeDir: "frontend",
     snippetFile: "shopify-importmap.liquid",
     buildDir: "assets",
+    chunkPrefix: "react-shopify-",
     debug: false,
     ssg: {
       directories: ["sections", "blocks"],

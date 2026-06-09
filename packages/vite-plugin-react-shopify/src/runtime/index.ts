@@ -31,6 +31,14 @@ export type {
   StaticBlockLiquidValue,
 } from "./StaticBlock";
 
+export { ClientOnly, clientOnly } from "./ClientOnly";
+export type {
+  ClientOnlyProps,
+  ClientOnlyOptions,
+  ClientOnlyFallback,
+  ClientOnlyModule,
+} from "./ClientOnly";
+
 // ── Specialized Components ─────────────────────────────────────────────────
 export { ShopifyImage } from "./ShopifyImage";
 export type {

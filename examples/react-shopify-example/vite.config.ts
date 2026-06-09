@@ -8,6 +8,7 @@ export default {
       themeRoot: ".",
       sourceCodeDir: "frontend",
       buildDir: "assets",
+      chunkPrefix: "react-shopify-example-",
       debug: isDebug,
       ssg: {
         directories: ["sections", "blocks", "templates", "snippets"],

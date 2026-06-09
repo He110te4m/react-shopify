@@ -1,2 +1,6 @@
 frontend/.ssg-tmp/
-assets/build/
+assets/.vite/
+assets/react-shopify-*.js
+assets/react-shopify-*.js.map
+assets/react-shopify-*.css
+assets/react-shopify-*.css.map

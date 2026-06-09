@@ -2,7 +2,7 @@ import type { ShopifyMeta } from "vite-plugin-react-shopify";
 import { useLiquid, useLiquidCode } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
-  name: "Product Price (React + Liquid Block)",
+  name: "Product Price React",
   settings: [
     {
       type: "text",
@@ -52,13 +52,13 @@ export default function ProductPrice() {
         {hasDiscount && (
           <>
             <del className="original-price">{formattedCompare}</del>
-            <span className="discount-badge">-{formattedDiscount}</span>
+            <span className="discount-badge">{`-${formattedDiscount}`}</span>
           </>
         )}
       </div>
 
       <p className="debug-info">
-        Raw cents: {priceCents}
+        {`Raw cents: ${priceCents}`}
         {hasDiscount && ` (compare: ${compareCents})`}
       </p>
     </div>

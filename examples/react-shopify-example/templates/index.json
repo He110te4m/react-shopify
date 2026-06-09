@@ -165,6 +165,13 @@
         "accent_color": "#6c63ff",
         "secondary_color": "#00b894"
       }
+    },
+    "react_client_only_third_party_BrOnly": {
+      "type": "react-client-only-third-party",
+      "name": "Client Only Third Party",
+      "settings": {
+        "title": "Client-only third party demo"
+      }
     }
   },
   "order": [
@@ -178,6 +185,7 @@
     "react_image_section_J7tPmw",
     "react_multi_component_section_9Uyfbm",
     "react_video_section_kfr94C",
-    "react_static_block_test_H7mQp2"
+    "react_static_block_test_H7mQp2",
+    "react_client_only_third_party_BrOnly"
   ]
 }

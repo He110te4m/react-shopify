@@ -11,6 +11,7 @@ export interface Options {
   sourceCodeDir?: string;
   snippetFile?: string;
   buildDir?: string;
+  chunkPrefix?: string;
   debug?: boolean;
   ssg?: SSGOptions;
   importMap?: ImportMapOptions;

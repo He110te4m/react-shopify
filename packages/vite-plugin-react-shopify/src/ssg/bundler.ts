@@ -15,6 +15,8 @@ import { autoFixAdjacentText } from "../hydration-fix";
 
 const log = logger("ssg:bundler");
 
+const CLIENT_ONLY_RE = /(\?client-only$|\.client($|\.(tsx|ts|jsx|js)$))/;
+
 /** Result of bundling a single entry. */
 export interface BundleResult {
   tmpFile: string;
@@ -79,6 +81,21 @@ export async function bundleEntry(
     write: true,
     allowOverwrite: true,
     plugins: [
+      {
+        // Browser-only modules are intentionally kept out of the Node SSG
+        // bundle. The browser Vite build still sees and chunks the real module.
+        name: "ssg-client-only-stub",
+        setup(build: any) {
+          build.onResolve({ filter: CLIENT_ONLY_RE }, (args: any) => ({
+            namespace: "ssg-client-only",
+            path: args.path,
+          }));
+          build.onLoad({ filter: /.*/, namespace: "ssg-client-only" }, () => ({
+            contents: "export default function ClientOnlySSGStub(){ return null }",
+            loader: "js",
+          }));
+        },
+      },
       {
         // Re-apply hydration fix to all TSX/JSX files loaded during bundle
         name: "ssg-hydration-fix",

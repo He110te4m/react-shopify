@@ -17,6 +17,11 @@ const INTERACTIVE_HOOKS = new Set([
   "useMemo",
 ]);
 
+const INTERACTIVE_RUNTIME_CALLS = new Set([
+  "ClientOnly",
+  "clientOnly",
+]);
+
 const EVENT_HANDLER_RE = /^on[A-Z]/;
 
 // Cache: filePath -> isInteractive
@@ -36,7 +41,15 @@ function checkSource(source: string, filePath: string): boolean {
         if (
           node.type === "CallExpression" &&
           node.callee?.type === "Identifier" &&
-          INTERACTIVE_HOOKS.has(node.callee.name)
+          (INTERACTIVE_HOOKS.has(node.callee.name) || INTERACTIVE_RUNTIME_CALLS.has(node.callee.name))
+        ) {
+          found = true;
+          return;
+        }
+        if (
+          node.type === "JSXElement" &&
+          node.openingElement?.name?.type === "JSXIdentifier" &&
+          INTERACTIVE_RUNTIME_CALLS.has(node.openingElement.name.name)
         ) {
           found = true;
           return;
