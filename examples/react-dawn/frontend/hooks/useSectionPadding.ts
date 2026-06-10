@@ -1,21 +1,19 @@
 import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export function useSectionPadding(): {
-  pt: number;
-  pb: number;
   style: React.CSSProperties;
 } {
-  const [pt] = useLiquid<number>("section.settings.padding_top", { type: "number" });
-  const [pb] = useLiquid<number>("section.settings.padding_bottom", { type: "number" });
+  const [ptDesktop] = useLiquid<string>("section.settings.padding_top");
+  const [pbDesktop] = useLiquid<string>("section.settings.padding_bottom");
+  const [ptMobile] = useLiquid<string>("section.settings.padding_top | times: 0.75 | round: 0");
+  const [pbMobile] = useLiquid<string>("section.settings.padding_bottom | times: 0.75 | round: 0");
 
   return {
-    pt,
-    pb,
     style: {
-      "--pt-desktop": `${pt}px`,
-      "--pt-mobile": `${Math.round(pt * 0.75)}px`,
-      "--pb-desktop": `${pb}px`,
-      "--pb-mobile": `${Math.round(pb * 0.75)}px`,
+      "--pt-desktop": `${ptDesktop}px`,
+      "--pt-mobile": `${ptMobile}px`,
+      "--pb-desktop": `${pbDesktop}px`,
+      "--pb-mobile": `${pbMobile}px`,
     } as React.CSSProperties,
   };
 }

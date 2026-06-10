@@ -1,8 +1,0 @@
-/* image-with-text section — layout overrides for React version */
-.image-with-text__grid {
-  display: flex;
-}
-
-.image-with-text__grid--reverse {
-  flex-direction: row-reverse;
-}
