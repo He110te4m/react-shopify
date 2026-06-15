@@ -10,6 +10,7 @@
 import { useMemo } from "react";
 import { GW_BLOCKS } from "../constants/attributes";
 import { Island } from "./Island";
+import { assignLiquidValue, type LiquidValue, type LiquidValueInput } from "./LiquidValue";
 import { useShopifyContext } from "./ShopifyContext";
 
 export type ImageLoading = "lazy" | "eager";
@@ -32,18 +33,20 @@ export interface ShopifyImageProps
   /** Alt text. */
   alt?: string;
   /** `image_tag` `loading`. Defaults inferred from `section.index` when unset. */
-  loading?: ImageLoading;
+  loading?: LiquidValueInput<ImageLoading>;
   /** `image_tag` `fetchpriority`. Defaults inferred from `section.index`. */
-  fetchPriority?: ImageFetchPriority;
+  fetchPriority?: LiquidValueInput<ImageFetchPriority>;
   /** `image_tag` `decoding`. */
   decoding?: ImageDecoding;
   /** `image_tag` `preload`. Defaults inferred from `section.index`. */
   preload?: boolean;
+  autoLoading?: boolean;
 
-  tagWidth?: number;
-  tagHeight?: number;
-  sizes?: string;
-  widths?: string;
+  imageClass?: LiquidValueInput;
+  tagWidth?: LiquidValueInput<number | string>;
+  tagHeight?: LiquidValueInput<number | string>;
+  sizes?: LiquidValueInput;
+  widths?: LiquidValueInput;
 }
 
 function buildImageUrlParams(o: { width?: number; height?: number; crop?: string }): string {
@@ -63,23 +66,58 @@ function getLargestWidth(widths?: string): number | undefined {
   return parsed.length ? Math.max(...parsed) : undefined;
 }
 
+function isLiquidValue(value: unknown): value is LiquidValue {
+  return typeof value === "object" && value != null && "kind" in value;
+}
+
+function isLiquidVar(v: string): boolean {
+  return /^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)*$/.test(v) || v.startsWith("shopify_img_");
+}
+
+function liquidOrString(v: string): string {
+  return isLiquidVar(v) ? v : `'${v.replace(/'/g, "\\'")}'`;
+}
+
+function liquidParam(
+  value: LiquidValueInput<number | string> | undefined,
+  name: string,
+  assignments: string[],
+): string | undefined {
+  if (value == null) return undefined;
+  if (isLiquidValue(value)) {
+    const varName = `shopify_img_${name}_${assignments.length}`;
+    assignments.push(...assignLiquidValue(varName, value));
+    return varName;
+  }
+  if (typeof value === "number") return String(value);
+  return liquidOrString(value);
+}
+
 function buildImageTagParams(o: {
   alt?: string;
-  loading?: string;
-  fetchPriority?: string;
+  imageClass?: LiquidValueInput;
+  loading?: LiquidValueInput;
+  fetchPriority?: LiquidValueInput;
   decoding?: string;
   preload?: string;
-  tagWidth?: number;
-  tagHeight?: number;
-  sizes?: string;
-  widths?: string;
+  tagWidth?: LiquidValueInput<number | string>;
+  tagHeight?: LiquidValueInput<number | string>;
+  sizes?: LiquidValueInput;
+  widths?: LiquidValueInput;
+  assignments: string[];
 }): string {
-  const isLiquidVar = (v: string) => v.startsWith("img_") || v.startsWith("shopify_img_");
-  const L = (v: string) => (isLiquidVar(v) ? v : `'${v}'`);
   const parts: string[] = [];
   if (o.alt !== undefined) parts.push(`alt: '${o.alt.replace(/'/g, "\\'")}'`);
-  if (o.loading) parts.push(`loading: ${L(o.loading)}`);
-  if (o.fetchPriority) parts.push(`fetchpriority: ${L(o.fetchPriority)}`);
+  const imageClass = liquidParam(o.imageClass, "class", o.assignments);
+  const loading = liquidParam(o.loading, "loading", o.assignments);
+  const fetchPriority = liquidParam(o.fetchPriority, "fetchpriority", o.assignments);
+  const tagWidth = liquidParam(o.tagWidth, "width", o.assignments);
+  const tagHeight = liquidParam(o.tagHeight, "height", o.assignments);
+  const sizes = liquidParam(o.sizes, "sizes", o.assignments);
+  const widths = liquidParam(o.widths, "widths", o.assignments);
+  if (imageClass) parts.push(`class: ${imageClass}`);
+  if (loading) parts.push(`loading: ${loading}`);
+  if (fetchPriority) parts.push(`fetchpriority: ${fetchPriority}`);
   if (o.decoding) parts.push(`decoding: '${o.decoding}'`);
   if (o.preload) {
     parts.push(
@@ -90,10 +128,10 @@ function buildImageTagParams(o: {
         : "preload: true",
     );
   }
-  if (o.tagWidth != null) parts.push(`width: ${o.tagWidth}`);
-  if (o.tagHeight != null) parts.push(`height: ${o.tagHeight}`);
-  if (o.sizes) parts.push(`sizes: '${o.sizes.replace(/'/g, "\\'")}'`);
-  if (o.widths) parts.push(`widths: '${o.widths}'`);
+  if (tagWidth) parts.push(`width: ${tagWidth}`);
+  if (tagHeight) parts.push(`height: ${tagHeight}`);
+  if (sizes) parts.push(`sizes: ${sizes}`);
+  if (widths) parts.push(`widths: ${widths}`);
   return parts.join(", ");
 }
 
@@ -148,6 +186,8 @@ export function ShopifyImage({
   fetchPriority,
   decoding,
   preload,
+  autoLoading = true,
+  imageClass,
   tagWidth,
   tagHeight,
   sizes,
@@ -165,16 +205,20 @@ export function ShopifyImage({
     if (ctx.phase !== "ssg") return "";
     ctx.track(image);
     const needAuto =
-      loading === undefined || fetchPriority === undefined || preload === undefined;
+      autoLoading &&
+      (loading === undefined || fetchPriority === undefined || preload === undefined);
     const autoVars = needAuto ? getAutoLoadVars(ctx.inject, ctx.track) : null;
     const effLoad = loading ?? autoVars?.loadVar;
     const effFetch = fetchPriority ?? autoVars?.fetchVar;
     const effPre =
       preload !== undefined ? (preload ? "true" : undefined) : autoVars?.preVar;
 
-    const urlParams = buildImageUrlParams({ width: width ?? getLargestWidth(widths), height, crop });
+    const inferredWidth = typeof widths === "string" ? getLargestWidth(widths) : undefined;
+    const assignments: string[] = [];
+    const urlParams = buildImageUrlParams({ width: width ?? inferredWidth, height, crop });
     const tagParams = buildImageTagParams({
       alt,
+      imageClass,
       loading: effLoad,
       fetchPriority: effFetch,
       decoding,
@@ -183,10 +227,12 @@ export function ShopifyImage({
       tagHeight,
       sizes,
       widths,
+      assignments,
     });
     const urlPart = urlParams ? ` | image_url: ${urlParams}` : "";
     const tagPart = tagParams ? ` | image_tag: ${tagParams}` : "";
-    return `{% if ${image} != blank %}{{ ${image}${urlPart}${tagPart} }}{% endif %}`;
+    const setup = assignments.length ? `{%- liquid\n  ${assignments.join("\n  ")}\n-%}` : "";
+    return `{% if ${image} != blank %}${setup}{{ ${image}${urlPart}${tagPart} }}{% endif %}`;
   }, [
     ctx.phase,
     image,
@@ -198,6 +244,8 @@ export function ShopifyImage({
     fetchPriority,
     decoding,
     preload,
+    autoLoading,
+    imageClass,
     tagWidth,
     tagHeight,
     sizes,

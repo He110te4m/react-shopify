@@ -69,4 +69,26 @@ describe("ShopifyImage", () => {
     expect(html).toContain("fetchpriority: shopify_img_fp");
     expect(html).toContain("preload: shopify_img_pl");
   });
+
+  it("accepts Liquid variables for image_tag params", () => {
+    const html = renderToStaticMarkup(createElement(ShopifyImage, {
+      image: "section.settings.image",
+      width: 3840,
+      tagWidth: "section.settings.image.width",
+      tagHeight: "image_height",
+      imageClass: "image_class",
+      sizes: "image_sizes",
+      widths: "widths",
+      fetchPriority: "fetch_priority",
+      autoLoading: false,
+    }));
+
+    expect(html).toContain("width: section.settings.image.width");
+    expect(html).toContain("height: image_height");
+    expect(html).toContain("class: image_class");
+    expect(html).toContain("sizes: image_sizes");
+    expect(html).toContain("widths: widths");
+    expect(html).toContain("fetchpriority: fetch_priority");
+    expect(g.__shopify_ssg_liquid_blocks).toHaveLength(0);
+  });
 });

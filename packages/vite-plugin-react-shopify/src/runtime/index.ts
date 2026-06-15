@@ -24,6 +24,12 @@ export type { IslandProps } from "./Island";
 export { BlockSlot } from "./BlockSlot";
 export type { BlockSlotProps } from "./BlockSlot";
 
+export { LiquidIf } from "./LiquidIf";
+export type { LiquidIfProps } from "./LiquidIf";
+
+export { liquid, liquidChoice, liquidIf, useLiquidClass, useLiquidCssVars, useLiquidDynamicClass } from "./LiquidValue";
+export type { LiquidCssVarSpec, LiquidResolvedValue, LiquidValue, LiquidValueInput } from "./LiquidValue";
+
 export { StaticBlock } from "./StaticBlock";
 export type {
   StaticBlockProps,
@@ -56,5 +62,5 @@ export type { ShopifyVideoProps } from "./ShopifyVideo";
 export { LiquidDataProvider, LiquidDataContext } from "./provider";
 
 // ── Internal (used by SSG assembler) ───────────────────────────────────────
-export { buildLiquidBridge } from "./ShopifyContext";
+export { buildLiquidBridge, useShopifyContext } from "./ShopifyContext";
 export type { TrackOptions } from "./ShopifyContext";

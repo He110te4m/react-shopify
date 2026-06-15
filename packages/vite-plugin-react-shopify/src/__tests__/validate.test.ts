@@ -49,6 +49,12 @@ describe("validate/rules", () => {
       expect(result).toContain("test-comp");
       expect(result).toContain("Shopify limit: 25");
     });
+
+    it("allows Shopify translation keys longer than 25 chars", () => {
+      expect(
+        rules.checkNameLength({ name: "t:sections.image-banner.name" }, "test-comp"),
+      ).toBeNull();
+    });
   });
 
   describe("checkEmptyStringDefault", () => {
@@ -175,12 +181,24 @@ describe("checkBlocksCoexistence", () => {
 
 describe("validateShopifyMeta", () => {
   it("warns about long name", () => {
+    const meta = { name: "A".repeat(30) };
     const warnings = validateShopifyMeta(
-      { name: "A".repeat(30) },
+      meta,
       { kebabName: "test-comp", filePath: "/test.tsx" },
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("30 chars");
+    expect(meta.name).toBe("A".repeat(25));
+  });
+
+  it("does not truncate translated names", () => {
+    const meta = { name: "t:sections.image-banner.name" };
+    const warnings = validateShopifyMeta(
+      meta,
+      { kebabName: "test-comp", filePath: "/test.tsx" },
+    );
+    expect(warnings).toHaveLength(0);
+    expect(meta.name).toBe("t:sections.image-banner.name");
   });
 
   it("warns about empty string defaults", () => {
@@ -250,5 +268,19 @@ describe("validateShopifyMeta", () => {
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("deprecated");
+  });
+});
+
+describe("validateBlockSlot", () => {
+  it("does not require BlockSlot for legacy section blocks", () => {
+    expect(
+      rules.checkBlockSlot("", [{ type: "heading", name: "Heading" }], "test-section"),
+    ).toHaveLength(0);
+  });
+
+  it("requires BlockSlot for theme/app block references", () => {
+    const warnings = rules.checkBlockSlot("", [{ type: "@theme" }], "test-section");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("BlockSlot");
   });
 });

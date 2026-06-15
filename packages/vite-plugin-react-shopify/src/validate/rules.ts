@@ -12,6 +12,7 @@ export const MAX_NAME_LENGTH = 25;
  * Check that the component name does not exceed Shopify's 25-character limit.
  */
 export function checkNameLength(meta: { name: string }, kebabName: string): string | null {
+  if (meta.name.startsWith("t:")) return null;
   if (meta.name.length > MAX_NAME_LENGTH) {
     return (
       `[${kebabName}] shopifyMeta.name "${meta.name}" ` +
@@ -66,6 +67,10 @@ function classifyBlock(block: BlockDefinition): BlockKind {
   return "theme-or-app";
 }
 
+function hasThemeOrAppBlockReferences(blocks: BlockDefinition[] | undefined): boolean {
+  return blocks?.some((block) => classifyBlock(block) === "theme-or-app") ?? false;
+}
+
 /**
  * Check that a section's `blocks` array does not mix incompatible block kinds.
  */
@@ -117,7 +122,7 @@ export function checkBlockSlot(
   kebabName: string,
 ): string[] {
   const warnings: string[] = [];
-  const hasDeclaredBlocks = blocks && blocks.length > 0;
+  const hasDeclaredBlocks = hasThemeOrAppBlockReferences(blocks);
   const blockSlotCount = (html.match(/<shopify-block-slot/g) || []).length;
 
   if (hasDeclaredBlocks && blockSlotCount === 0) {
