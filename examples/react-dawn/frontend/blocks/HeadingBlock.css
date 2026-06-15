@@ -1,0 +1,11 @@
+.banner__box > .banner__block--heading {
+  margin-top: 1rem;
+}
+
+.banner__box > .banner__block--heading:first-child {
+  margin-top: 0;
+}
+
+.banner__heading {
+  margin-bottom: 0;
+}
