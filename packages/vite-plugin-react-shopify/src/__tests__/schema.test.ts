@@ -192,4 +192,15 @@ describe("generateSchema — section-level fields", () => {
     const out = generateSchema({ ...base });
     expect(out).not.toContain('"tag"');
   });
+
+  it("emits tag: null for blocks when tag is undefined", () => {
+    const out = generateSchema({ ...base }, "block");
+    expect(out).toContain('"tag": null');
+  });
+
+  it("preserves explicit block tag when provided", () => {
+    const out = generateSchema({ ...base, tag: "article" }, "block");
+    expect(out).toContain('"tag": "article"');
+    expect(out).not.toContain('"tag": null');
+  });
 });

@@ -92,7 +92,7 @@ export function assembleLiquidFile(
   }
 
   if (type !== "snippet") {
-    parts.push(generateSchema(entry.meta));
+    parts.push(generateSchema(entry.meta, type));
   }
 
   return parts.join("\n") + "\n";

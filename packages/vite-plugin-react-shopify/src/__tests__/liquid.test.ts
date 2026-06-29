@@ -126,6 +126,16 @@ describe("assembleLiquidFile", () => {
     expect(result).toContain("data-ssg-h");
   });
 
+  it("emits tag: null in block schema when tag is not configured", () => {
+    const entry = makeEntry({
+      targetType: "block",
+      meta: { name: "Test Block", class: "", settings: [], presets: [], blocks: [] },
+    });
+    const result = assembleLiquidFile("<div></div>", entry, null, { inline: [], snippets: [] }, defaultOptions, []);
+
+    expect(result).toContain('"tag": null');
+  });
+
   it("generates snippet template", () => {
     const entry = makeEntry({
       targetType: "snippet",

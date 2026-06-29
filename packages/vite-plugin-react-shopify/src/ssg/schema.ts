@@ -6,7 +6,7 @@
  * fields into the exact JSON structure the Shopify theme editor expects.
  */
 
-import type { ShopifyMeta, PresetDefinition, BlockDefinition, PresetBlock } from "../types/shopify";
+import type { ShopifyMeta, PresetDefinition, BlockDefinition, PresetBlock, ShopifyEntryType } from "../types/shopify";
 import type { SettingSchema } from "../types/settings";
 
 /** Strip `default` from settings when it's an empty string (Shopify rejects empty defaults). */
@@ -24,18 +24,22 @@ function cleanSettings(settings: SettingSchema[]): SettingSchema[] {
  * Convert a flat `ShopifyMeta` object into the `{% schema %}...{% endschema %}`
  * Liquid block string.
  */
-export function generateSchema(meta: ShopifyMeta): string {
-  const schema = buildSchema(meta);
+export function generateSchema(meta: ShopifyMeta, targetType?: ShopifyEntryType): string {
+  const schema = buildSchema(meta, targetType);
   const json = JSON.stringify(schema, null, 2);
   return `\n{% schema %}\n${json}\n{% endschema %}`;
 }
 
 /** Build the plain JSON object from metadata. */
-function buildSchema(meta: ShopifyMeta): Record<string, unknown> {
+function buildSchema(meta: ShopifyMeta, targetType?: ShopifyEntryType): Record<string, unknown> {
   const schema: Record<string, unknown> = {};
 
   schema.name = meta.name ?? "";
-  if (meta.tag !== undefined) schema.tag = meta.tag;
+  if (meta.tag !== undefined) {
+    schema.tag = meta.tag;
+  } else if (targetType === "block") {
+    schema.tag = null;
+  }
   if (meta.class) schema.class = meta.class;
   if (meta.limit != null && meta.limit > 0) schema.limit = meta.limit;
   if (meta.max_blocks != null && meta.max_blocks > 0) schema.max_blocks = meta.max_blocks;
