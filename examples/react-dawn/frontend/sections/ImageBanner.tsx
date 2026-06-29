@@ -37,6 +37,7 @@ function ImageBannerMedia() {
 
   const firstMediaClassName = clsx(
     "banner__media media",
+    "banner__media--first",
     useLiquidClass("section.settings.image_2 != blank", "banner__media-half"),
     imageBehaviorClass,
     useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
@@ -44,12 +45,14 @@ function ImageBannerMedia() {
 
   const placeholderMediaClassName = clsx(
     "banner__media media placeholder",
+    "banner__media--placeholder",
     imageBehaviorClass,
     useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
   );
 
   const secondMediaClassName = clsx(
     "banner__media media",
+    "banner__media--second",
     useLiquidClass("section.settings.image != blank", "banner__media-half"),
     imageBehaviorClass,
     useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
@@ -174,7 +177,7 @@ export default function ImageBanner() {
             "gradient",
           )}
         >
-          <BlockSlot />
+          <BlockSlot className="banner__blocks" />
         </div>
       </div>
     </div>

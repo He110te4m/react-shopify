@@ -1,6 +1,9 @@
 import vitePluginShopify from "vite-plugin-react-shopify";
 
 export default {
+  build: {
+    cssTarget: "chrome90",
+  },
   plugins: [
     vitePluginShopify({
       themeRoot: ".",

@@ -217,6 +217,8 @@ Rules:
 - In `shopifyMeta.blocks`, `type` means a child block reference: `@theme`, `@app`, or a concrete block filename/type such as `react-heading`. It does not declare the current component's own kind.
 - Verify Theme Editor add/remove/reorder after implementation.
 - For nested blocks, verify hydration order before scaling the pattern.
+- Parent section CSS owns layout around the slot and child block placement. Block CSS should not be the only place that defines section-specific spacing such as `.banner__text`, `.banner__buttons`, or block order.
+- Generated markup includes `<shopify-block-slot>`, child block roots, and hydration wrappers. Check generated Liquid before porting selectors that depend on direct children, adjacent siblings, `:first-child`, or `:nth-child`.
 
 ### `StaticBlock`
 
@@ -260,6 +262,13 @@ Rules:
 - Use a stable `chunkPrefix`, commonly `react-shopify-`.
 - Never clear the whole Shopify `assets/` directory.
 - Ignore only generated plugin output, such as `assets/react-shopify-*.js`, `assets/react-shopify-*.css`, and `assets/.vite/`.
+
+## CSS Ownership
+
+- Normal component styles belong in imported CSS files so Vite can bundle them into the generated Liquid output.
+- Do not use `useLiquidCode` to inject normal CSS or to re-add a legacy theme stylesheet. Use it only for unavoidable Liquid-owned calculations or small scoped dynamic style blocks.
+- When migrating from a Liquid theme, copy the relevant legacy CSS into the React entry's CSS file and then adapt selectors to generated markup.
+- If a legacy section stylesheet contains child block rules, migrate those rules with the parent section unless they are truly reusable block-intrinsic styles.
 
 ## Do Not
 
