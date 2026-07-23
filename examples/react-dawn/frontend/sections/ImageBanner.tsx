@@ -1,13 +1,14 @@
-import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import type { ShopifyEntryConfig, ShopifyMeta } from "vite-plugin-react-shopify";
 import {
   BlockSlot,
   Island,
   LiquidIf,
   ShopifyImage,
+  defineSettings,
   liquid,
   liquidChoice,
   liquidIf,
-  useLiquid,
+  useLiquidExpression,
   useLiquidClass,
   useLiquidCssVars,
   useLiquidDynamicClass,
@@ -17,6 +18,22 @@ import "./ImageBanner.css";
 
 const defaultWidths = "375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840";
 const ambientWidths = "450, 660, 900, 1320, 1800, 2136, 2400, 3600, 7680";
+
+export const shopifyEntry = { runtime: "static" } satisfies ShopifyEntryConfig;
+
+function imageSizes(otherImage: string) {
+  return liquidChoice(
+    [
+      [`section.settings.image_behavior == 'ambient' and ${otherImage} != blank and section.settings.stack_images_on_mobile`, "(min-width: 750px) 60vw, 120vw"],
+      [`section.settings.image_behavior == 'ambient' and ${otherImage} != blank`, "60vw"],
+      ["section.settings.image_behavior == 'ambient'", "120vw"],
+      ["section.settings.image_behavior == 'fixed' or section.settings.image_behavior == 'zoom-in'", "100vw"],
+      [`${otherImage} != blank and section.settings.stack_images_on_mobile`, "(min-width: 750px) 50vw, 100vw"],
+      [`${otherImage} != blank`, "50vw"],
+    ],
+    "100vw",
+  );
+}
 
 function PlaceholderMedia() {
   return (
@@ -68,14 +85,7 @@ function ImageBannerMedia() {
             tagWidth={liquid("section.settings.image.width")}
             tagHeight={liquid("section.settings.image.width | divided_by: section.settings.image.aspect_ratio")}
             imageClass={liquidIf("section.settings.image_2 != blank", "banner__media-image-half")}
-            sizes={liquidChoice(
-              [
-                ["section.settings.image_behavior == 'ambient'", "120vw"],
-                ["section.settings.image_2 != blank and section.settings.stack_images_on_mobile", "(min-width: 750px) 50vw, 100vw"],
-                ["section.settings.image_2 != blank", "50vw"],
-              ],
-              "100vw",
-            )}
+            sizes={imageSizes("section.settings.image_2")}
             widths={liquidChoice([["section.settings.image_behavior == 'ambient'", ambientWidths]], defaultWidths)}
             fetchPriority={liquidChoice([["section.index == 1", "high"]], "auto")}
             autoLoading={false}
@@ -97,14 +107,7 @@ function ImageBannerMedia() {
             tagWidth={liquid("section.settings.image_2.width")}
             tagHeight={liquid("section.settings.image_2.width | divided_by: section.settings.image_2.aspect_ratio")}
             imageClass={liquidIf("section.settings.image != blank", "banner__media-image-half")}
-            sizes={liquidChoice(
-              [
-                ["section.settings.image_behavior == 'ambient'", "120vw"],
-                ["section.settings.image != blank and section.settings.stack_images_on_mobile", "(min-width: 750px) 50vw, 100vw"],
-                ["section.settings.image_2 != blank", "50vw"],
-              ],
-              "100vw",
-            )}
+            sizes={imageSizes("section.settings.image")}
             widths={liquidChoice([["section.settings.image_behavior == 'ambient'", ambientWidths]], defaultWidths)}
             fetchPriority={liquidChoice([["section.index == 1", "high"]], "auto")}
             autoLoading={false}
@@ -116,18 +119,12 @@ function ImageBannerMedia() {
 }
 
 export default function ImageBanner() {
-  const [sectionId] = useLiquid<string>("section.id");
-  const [imageHeight] = useLiquid<string>("section.settings.image_height");
-  const [desktopContentAlignment] = useLiquid<string>(
-    "section.settings.desktop_content_alignment",
-  );
-  const [mobileContentAlignment] = useLiquid<string>(
-    "section.settings.mobile_content_alignment",
-  );
-  const [desktopContentPosition] = useLiquid<string>(
-    "section.settings.desktop_content_position",
-  );
-  const [colorScheme] = useLiquid<string>("section.settings.color_scheme");
+  const sectionId = useLiquidExpression<string>("section.id");
+  const imageHeight = useLiquidExpression<string>(imageBannerSettings.refs.image_height);
+  const desktopContentAlignment = useLiquidExpression<string>(imageBannerSettings.refs.desktop_content_alignment);
+  const mobileContentAlignment = useLiquidExpression<string>(imageBannerSettings.refs.mobile_content_alignment);
+  const desktopContentPosition = useLiquidExpression<string>(imageBannerSettings.refs.desktop_content_position);
+  const colorScheme = useLiquidExpression<string>(imageBannerSettings.refs.color_scheme);
   const style = useLiquidCssVars({
     "--banner-adapt-padding-bottom": {
       liquid: "1 | divided_by: section.settings.image.aspect_ratio | times: 100 | append: '%'",
@@ -395,3 +392,5 @@ export const shopifyMeta = {
     },
   ],
 } satisfies ShopifyMeta;
+
+const imageBannerSettings = defineSettings("section", shopifyMeta.settings);

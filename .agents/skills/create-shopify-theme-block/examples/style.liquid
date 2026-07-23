@@ -1,0 +1,14 @@
+{%- style -%}
+  #{{ el_id }} {
+    --my-gap: {{ bs.gap_mb | default: 8 }}px;
+    --my-padding: {{ bs.padding_mb | default: 16 }}px;
+    --my-radius: {{ bs.radius_mb | default: 8 }}px;
+  }
+  @media screen and (min-width: 1024px) {
+    #{{ el_id }} {
+      --my-gap: {{ bs.gap_pc | default: 16 }}px;
+      --my-padding: {{ bs.padding_pc | default: 24 }}px;
+      --my-radius: {{ bs.radius_pc | default: 16 }}px;
+    }
+  }
+{%- endstyle -%}

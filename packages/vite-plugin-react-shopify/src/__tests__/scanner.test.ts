@@ -58,4 +58,16 @@ describe("scanEntries", () => {
     const section = scanEntries(makeOptions(root)).find((entry) => entry.kebabName === "static-example");
     expect((section?.meta as { _blockTypes?: string[] })._blockTypes).toEqual(["react-hero-banner"]);
   });
+
+  it("reads explicit shopifyEntry runtime metadata", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shopify-scan-"));
+    tmpRoots.push(root);
+    writeFile(root, "frontend/sections/StaticSection.tsx", `
+      export const shopifyEntry = { runtime: "static" } as const;
+      export default function StaticSection() { return <div />; }
+    `);
+
+    const section = scanEntries(makeOptions(root))[0];
+    expect(section.runtime).toBe("static");
+  });
 });

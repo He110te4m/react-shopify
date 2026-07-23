@@ -93,7 +93,11 @@ rm -rf _tmp
 
 ```tsx
 // {sourceCodeDir}/sections/HelloWorld.tsx
-import type { ShopifyMeta } from "vite-plugin-react-shopify";
+import type { ShopifyEntryConfig, ShopifyMeta } from "vite-plugin-react-shopify";
+
+export const shopifyEntry = {
+  runtime: "static", // "static" | "hydrate" | "auto"
+} satisfies ShopifyEntryConfig;
 import { useLiquid } from "vite-plugin-react-shopify/runtime";
 
 export const shopifyMeta = {
@@ -195,9 +199,8 @@ import type { ShopifyMeta } from "vite-plugin-react-shopify";
 export const shopifyMeta = {
   // === 基本信息 ===
   name: "组件名称",               // 必填，≤ 25 字符
-  type: "section",                // 可选，覆盖目录推断
-  tag: "section",                 // 可选，外层 HTML 标签（默认 "div"）
-  class: "custom-class",          // 可选，外层 CSS 类名
+  tag: "section",                 // Shopify schema wrapper 标签
+  class: "custom-class",          // Shopify schema wrapper class
   limit: 1,                       // 可选，同一页面最多出现次数
 
   // === Settings ===
@@ -242,7 +245,13 @@ export default function MySection() {
 | `frontend/templates/X.tsx` | `template` | `templates/page.react-x.liquid` |
 | `frontend/snippets/X.tsx` | `snippet` | `snippets/react-x.liquid` |
 
-可在 `shopifyMeta.type` 中显式指定覆盖。
+`shopifyMeta.type` 已废弃且不会覆盖目录推断。`tag` / `class` 只配置 Shopify 生成的 wrapper，插件不会再重复输出同名 wrapper。
+
+`shopifyEntry.runtime` 是客户端运行时的真相来源：
+
+- `static`：只生成 Liquid/HTML/CSS，不生成 bridge、hydration root 或 React script。
+- `hydrate`：生成 JSON bridge 和客户端 hydration entry。
+- `auto`：仅在静态分析能证明无交互时选择 `static`；不确定时选择 `hydrate`。
 
 ---
 
@@ -254,9 +263,12 @@ export default function MySection() {
 
 ```tsx
 import {
-  useLiquid,
+  useLiquidState,
+  useLiquidExpression,
   useLiquidCode,
   Island,
+  LiquidHtml,
+  defineSettings,
   BlockSlot,
   ShopifyImage,
   ShopifyVideo,
@@ -267,11 +279,11 @@ import {
 
 | API | 签名 | 说明 |
 |-----|------|------|
-| `useLiquid(expr)` | `[T, setter]` | 读取任意 Liquid 表达式，SSG 返回 `{{ expr }}`，客户端读取 JSON bridge |
-| `useLiquid(expr, { type })` | `[T, setter]` | 按 `string` / `number` / `boolean` / `json` / `html` 转换 bridge 值 |
-| `useLiquid(expr, { bridge })` | `[T, setter]` | 自定义 bridge 输出，例如 image_url、条件 Liquid、snippet render |
+| `useLiquidState(expr)` | `[T, setter]` | hydrated entry 中读取 Liquid bridge；`useLiquid` 是兼容别名 |
+| `useLiquidExpression(expr)` | `T` | 仅用于 `runtime: "static"` 的 server-only Liquid expression |
 | `useLiquidCode(code, exprs?)` | `void` | 将原始 Liquid 代码注入生成文件，并可追踪表达式 |
 | `Island` | React component | Liquid-owned DOM 的 hydration 边界 |
+| `LiquidHtml` | React component | richtext / HTML 的显式 Liquid-owned sink |
 | `BlockSlot` | React component | Section 中 child blocks 的插入点 |
 | `ShopifyImage` / `ShopifyVideo` | React component | 基于 `Island` 的图片和视频封装 |
 
@@ -281,7 +293,7 @@ import {
 
 ```tsx
 export default function ProductBanner() {
-  const [title] = useLiquid("section.settings.title");
+  const title = useLiquidExpression("section.settings.title");
   return <h1>{title}</h1>;
 }
 ```
@@ -290,14 +302,8 @@ export default function ProductBanner() {
 
 ```tsx
 export default function ProductPrice() {
-  const [price] = useLiquid("product.price");
-  const [comparePrice] = useLiquid("product.compare_at_price");
-  return (
-    <div>
-      <span>{price}</span>
-      {comparePrice && <s>{comparePrice}</s>}
-    </div>
-  );
+  const price = useLiquidExpression("product.price");
+  return <span>{price}</span>;
 }
 ```
 
@@ -305,8 +311,8 @@ export default function ProductPrice() {
 
 ```tsx
 export default function Counter() {
-  const [initial] = useLiquid<number>("section.settings.initial_count", { type: "number" });
-  const [show] = useLiquid<boolean>("section.settings.show_banner", { type: "boolean" });
+  const [initial] = useLiquidState<number>("section.settings.initial_count", { type: "number" });
+  const [show] = useLiquidState<boolean>("section.settings.show_banner", { type: "boolean" });
 
   return (
     <div>
@@ -317,17 +323,14 @@ export default function Counter() {
 }
 ```
 
-**自定义 bridge：**
+**schema 关联的 setting refs：**
 
 ```tsx
-export default function ProductImage() {
-  const [src] = useLiquid<string>("product.featured_image", {
-    type: "string",
-    bridge: "{{ product.featured_image | image_url: width: 800 | json }}",
-  });
+const settings = defineSettings("section", [
+  { type: "text", id: "title", label: "Title" },
+] as const);
 
-  return <img src={src} alt="" />;
-}
+const title = useLiquidExpression(settings.refs.title);
 ```
 
 **Liquid-owned DOM：**
@@ -344,7 +347,7 @@ export default function Hero() {
 
 ```
 1. SSR 阶段（构建时 Node.js）
-   useLiquid("section.settings.title")
+   useLiquidState("section.settings.title")
    → 返回字符串 "{{ section.settings.title }}"   ← Liquid 模板变量
    → 同时追踪该表达式到 __shopify_ssg_tracked
 
@@ -358,7 +361,7 @@ export default function Hero() {
 
 4. 客户端 hydration
    → LiquidDataProvider 接收 JSON bridge
-   → useLiquid 从 context 读取实际值
+   → useLiquidState 从 context 读取实际值
    → hydrateRoot 完成 React 水合
 ```
 
@@ -439,7 +442,7 @@ export const shopifyMeta = {
 
 - `"@theme"` 接受当前主题中所有已注册的 block 类型
 - 也可指定具体 block 类型：`blocks: [{ type: "react-text-block" }]`
-- 在 React tree 中放置 `<BlockSlot />`，插件会在该位置输出 `{% content_for 'blocks' %}` 并隔离父子 hydration
+- 在 React tree 中放置 `<BlockSlot />`，插件会在该位置输出 `{% content_for 'blocks' %}`。交互子 block 会等待最近的 hydrated parent slot commit；static parent 下可直接 hydrate。
 
 ---
 
@@ -449,12 +452,7 @@ Snippet 不支持 Shopify schema metadata。不要为 snippet 定义专用 `shop
 
 ```tsx
 // frontend/snippets/ProductCard.tsx
-import type { ShopifyMeta } from "vite-plugin-react-shopify";
 import { useLiquid } from "vite-plugin-react-shopify/runtime";
-
-export const shopifyMeta = {
-  name: "Product Card",
-} satisfies ShopifyMeta;
 
 export default function ProductCard() {
   const [title] = useLiquid("product.title");
@@ -743,8 +741,7 @@ vitePluginShopify({
 ### Q: HTML 富文本内容如何渲染？
 
 ```tsx
-const [html] = useLiquid<string>("section.settings.richtext_content", { type: "html" });
-return <div dangerouslySetInnerHTML={{ __html: html || "" }} />;
+return <LiquidHtml as="div" expression="section.settings.richtext_content" />;
 ```
 
 ---

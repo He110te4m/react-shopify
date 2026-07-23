@@ -1,0 +1,24 @@
+<section
+  id="{{ el_id }}"
+  class="my-block my-block--{{ layout_modifier }}"
+  data-section-id="{{ section.id }}"
+  {{ block.shopify_attributes }}
+>
+  <div class="my-block__media">
+    {%- content_for "block", type: "ndev-media", id: "block-image" -%}
+  </div>
+
+  <div class="my-block__content">
+    {{ badge_slot }}
+
+    <div class="my-block__title">
+      {%- content_for "block", type: "ndev-text", id: "block-title", text: cur_title -%}
+    </div>
+
+    <div class="my-block__info">
+      {{ items_html }}
+      {%- content_for "block", type: "ndev-price", id: "block-price" -%}
+      {% content_for 'blocks' %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,105 @@
+{% schema %}
+{
+  "name": "My Block",
+  "tag": null,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Content"
+    },
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "vertical", "label": "Vertical" },
+        { "value": "horizontal", "label": "Horizontal" }
+      ],
+      "default": "vertical"
+    },
+    {
+      "type": "range",
+      "id": "gap_mb",
+      "label": "Gap (mobile)",
+      "min": 0,
+      "max": 40,
+      "step": 4,
+      "unit": "px",
+      "default": 8
+    },
+    {
+      "type": "range",
+      "id": "gap_pc",
+      "label": "Gap (desktop)",
+      "min": 0,
+      "max": 60,
+      "step": 4,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "header",
+      "content": "Visibility"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badge",
+      "label": "Show badge",
+      "default": false
+    }
+  ],
+  "blocks": [
+    { "type": "@theme" },
+    { "type": "@app" }
+  ],
+  "presets": [
+    {
+      "name": "Default",
+      "category": "Cards",
+      "settings": {
+        "layout": "vertical",
+        "gap_mb": 8,
+        "gap_pc": 16
+      },
+      "blocks": [
+        {
+          "type": "ndev-media",
+          "static": true,
+          "id": "block-image",
+          "settings": {
+            "image": "{{ closest.product.featured_image }}"
+          }
+        },
+        {
+          "type": "ndev-text",
+          "static": true,
+          "id": "block-title",
+          "settings": {
+            "text_content": "{{ closest.product.title }}",
+            "text_font_size": 24
+          }
+        }
+      ]
+    },
+    {
+      "name": "Compact",
+      "category": "Cards",
+      "settings": {
+        "layout": "horizontal",
+        "gap_mb": 4,
+        "gap_pc": 8
+      },
+      "blocks": []
+    }
+  ]
+}
+{% endschema %}

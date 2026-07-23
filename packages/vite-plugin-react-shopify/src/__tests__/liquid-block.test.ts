@@ -137,7 +137,8 @@ describe("useLiquid — SSR path", () => {
       type: "string",
       bridge: "{{ expr | image_url: width: 800 | json }}",
     });
-    const opts = g.__shopify_ssg_tracked.get("section.settings.image");
+    const opts = [...g.__shopify_ssg_tracked.values()][0];
+    expect(opts.expression).toBe("section.settings.image");
     expect(opts.bridge).toBe("{{ expr | image_url: width: 800 | json }}");
   });
 

@@ -3,8 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --dir ../../packages/vite-plugin-react-shopify build",
     "dev": "vite build --watch",
+    "prebuild": "pnpm --dir ../../packages/vite-plugin-react-shopify build",
     "build": "vite build",
+    "pretypecheck": "pnpm --dir ../../packages/vite-plugin-react-shopify build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

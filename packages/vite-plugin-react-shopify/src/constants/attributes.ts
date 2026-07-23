@@ -23,6 +23,10 @@ export const GW_BLOCKS = '__shopify_ssg_liquid_blocks' as const;
 export const GW_FILTERS = '__shopify_ssg_liquid_filters' as const;
 export const GW_TRACK_MAP = '__shopify_ssg_tracked' as const;
 export const GW_ISLAND_COUNTER = '__shopify_ssg_island_counter' as const;
+export const GW_LIQUID_TOKENS = '__shopify_ssg_liquid_tokens' as const;
+export const GW_LIQUID_TOKEN_PREFIX = '__shopify_ssg_liquid_token_prefix' as const;
+export const GW_RUNTIME = '__shopify_ssg_runtime' as const;
+export const GW_HTML_EXPRESSIONS = '__shopify_ssg_html_expressions' as const;
 
 export const EVENT_SECTION_LOAD = 'shopify:section:load' as const;
 export const EVENT_SECTION_UNLOAD = 'shopify:section:unload' as const;

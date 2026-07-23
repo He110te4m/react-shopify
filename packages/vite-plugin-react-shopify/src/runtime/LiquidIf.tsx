@@ -25,9 +25,9 @@ function LiquidIfImpl({ condition, trackKey = condition, unless = false, childre
     });
     return (
       <>
-        {`{% ${unless ? "unless" : "if"} ${condition} %}`}
+        {ctx.serialize(`{% ${unless ? "unless" : "if"} ${condition} %}`)}
         {children}
-        {`{% end${unless ? "unless" : "if"} %}`}
+        {ctx.serialize(`{% end${unless ? "unless" : "if"} %}`)}
       </>
     );
   }

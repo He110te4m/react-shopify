@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { generateEntryModule } from "../core/entry-template";
 
 const entriesModule = `
 import { createElement } from 'react';
@@ -115,5 +116,31 @@ describe("nested section+block isolation", () => {
 
   it("unmount function cleans up roots Map", () => {
     expect(entriesModule).toContain("roots.delete(h)");
+  });
+});
+
+describe("dynamic block hydration coordination", () => {
+  const blockModule = generateEntryModule(
+    {
+      filePath: "/app/frontend/blocks/Interactive.tsx",
+      componentName: "Interactive",
+      kebabName: "interactive",
+      targetType: "block",
+      runtime: "hydrate",
+      meta: { name: "Interactive" },
+    },
+    "blocks/Interactive.tsx",
+  );
+
+  it("defers blocks inside an uncommitted hydrated slot", () => {
+    expect(blockModule).toContain("const IS_BLOCK = true");
+    expect(blockModule).toContain("data-ssg-blocks-ready");
+    expect(blockModule).toContain("!canHydrate(el)");
+  });
+
+  it("always listens for parent slot readiness and theme editor reloads", () => {
+    expect(blockModule).toContain("ssg:blocks:ready");
+    expect(blockModule).toContain("shopify:section:load");
+    expect(blockModule.indexOf("scan(document)")).toBeGreaterThan(0);
   });
 });

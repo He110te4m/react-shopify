@@ -22,9 +22,9 @@
         "button_block": {
           "type": "react-button-block",
           "settings": {
-            "button_label": "Shop all",
-            "button_link": "shopify://collections/all",
-            "button_style_secondary": true
+            "button_label_1": "Shop all",
+            "button_link_1": "shopify://collections/all",
+            "button_style_secondary_1": true
           }
         }
       },

@@ -9,7 +9,7 @@ function useLiquidChoice(key: string, condition: string, truthy: string, falsy: 
     ctx.track(key, {
       bridge: `{% if ${condition} %}${JSON.stringify(truthy)}{% else %}${JSON.stringify(falsy)}{% endif %}`,
     });
-    return `{% if ${condition} %}${truthy}{% else %}${falsy}{% endif %}`;
+    return ctx.serialize(`{% if ${condition} %}${truthy}{% else %}${falsy}{% endif %}`);
   }
   return String(ctx.read(key) ?? falsy);
 }

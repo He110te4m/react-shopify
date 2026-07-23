@@ -10,10 +10,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import crypto from "node:crypto";
 import { Manifest } from "vite";
 import { logger } from "../core/logger";
-import { GW_TARGET, GW_TRACK, GW_BLOCKS, GW_FILTERS, GW_TRACK_MAP, GW_ISLAND_COUNTER } from "../constants/attributes";
-import { normalizeVoidElements, normalizeStyleAttributes, unwrapHtmlEntities } from "./post-process";
+import {
+  GW_TARGET,
+  GW_TRACK,
+  GW_BLOCKS,
+  GW_FILTERS,
+  GW_TRACK_MAP,
+  GW_ISLAND_COUNTER,
+  GW_LIQUID_TOKENS,
+  GW_LIQUID_TOKEN_PREFIX,
+  GW_RUNTIME,
+  GW_HTML_EXPRESSIONS,
+} from "../constants/attributes";
+import { normalizeVoidElements, normalizeStyleAttributes, restoreLiquidTokens } from "./post-process";
 
 /**
  * Converts a local filesystem path to a `file://` URL suitable for dynamic
@@ -74,6 +86,7 @@ export interface RenderResult {
   liquidBlocks: string[];
   trackMap: Map<string, any>;
   entryMeta: any;
+  runtime: "static" | "hydrate";
 }
 
 /**
@@ -99,10 +112,22 @@ export function renderEntry(
   tmpFile: string,
   entry: { filePath: string; kebabName: string; targetType: string; meta: any },
   projectRoot: string,
+  inferredRuntime: "static" | "hydrate",
 ): Promise<RenderResult | null> {
   return import(pathToFileURL(tmpFile)).then((mod) => {
     const Component = mod.default;
     const shopifyMeta = mod.shopifyMeta;
+    const configuredRuntime = mod.shopifyEntry?.runtime;
+    if (configuredRuntime && !["auto", "static", "hydrate"].includes(configuredRuntime)) {
+      throw new Error(`${entry.filePath} exports invalid shopifyEntry.runtime ${JSON.stringify(configuredRuntime)}`);
+    }
+    const runtime = configuredRuntime && configuredRuntime !== "auto"
+      ? configuredRuntime as "static" | "hydrate"
+      : inferredRuntime;
+
+    if (runtime === "static" && inferredRuntime === "hydrate") {
+      throw new Error(`${entry.filePath} declares static runtime but contains client interaction`);
+    }
 
     if (!Component) {
       log.warn("No default export found in %s, skipping", entry.filePath);
@@ -128,19 +153,29 @@ export function renderEntry(
     const trackMap = new Map<string, any>();
     const trackedExpressions = new Set<string>();
     const liquidBlocks: string[] = [];
+    const liquidTokens = new Map<string, string>();
 
     try {
       // Global state: tells hooks what type of Liquid entity we're rendering.
       (globalThis as any)[GW_TARGET] = entry.targetType;
+      (globalThis as any)[GW_RUNTIME] = runtime;
 
       // Build and register the Liquid filter map so hooks output correct filters.
       const prefix = entry.targetType === "block" ? "block.settings." : "section.settings.";
       const filterMap = buildLiquidFilterMap(shopifyMeta?.settings, prefix);
       (globalThis as any)[GW_FILTERS] = filterMap;
+      const htmlExpressions = new Set<string>();
+      for (const setting of shopifyMeta?.settings ?? []) {
+        if (!["html", "richtext", "inline_richtext"].includes(setting.type) || !setting.id) continue;
+        htmlExpressions.add(`${prefix}${setting.id}`);
+      }
+      (globalThis as any)[GW_HTML_EXPRESSIONS] = htmlExpressions;
 
       (globalThis as any)[GW_TRACK_MAP] = trackMap;
       (globalThis as any)[GW_TRACK] = trackedExpressions;
       (globalThis as any)[GW_BLOCKS] = liquidBlocks;
+      (globalThis as any)[GW_LIQUID_TOKENS] = liquidTokens;
+      (globalThis as any)[GW_LIQUID_TOKEN_PREFIX] = `__VRS_LIQUID_${crypto.randomBytes(8).toString("hex")}`;
 
       // Island key counter — auto-incremented by <Island> during SSR so each
       // island gets a unique `data-ssg-i` attribute for client pre-capture.
@@ -151,16 +186,20 @@ export function renderEntry(
 
       html = normalizeVoidElements(html);
       html = normalizeStyleAttributes(html);
-      html = unwrapHtmlEntities(html);
+      html = restoreLiquidTokens(html, liquidTokens);
 
-      return { html, trackedExpressions, liquidBlocks, trackMap, entryMeta: entry.meta };
+      return { html, trackedExpressions, liquidBlocks, trackMap, entryMeta: entry.meta, runtime };
     } finally {
       // Prevent failed renders from leaking registry state into the next entry.
       delete (globalThis as any)[GW_TARGET];
+      delete (globalThis as any)[GW_RUNTIME];
       delete (globalThis as any)[GW_TRACK_MAP];
       delete (globalThis as any)[GW_TRACK];
       delete (globalThis as any)[GW_BLOCKS];
       delete (globalThis as any)[GW_FILTERS];
+      delete (globalThis as any)[GW_HTML_EXPRESSIONS];
+      delete (globalThis as any)[GW_LIQUID_TOKENS];
+      delete (globalThis as any)[GW_LIQUID_TOKEN_PREFIX];
       delete (globalThis as any)[GW_ISLAND_COUNTER];
     }
   });

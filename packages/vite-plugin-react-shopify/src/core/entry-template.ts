@@ -2,10 +2,7 @@ import type { SSGEntry } from "../types/ssg";
 import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, ATTR_ISLAND } from "../constants/attributes";
 import { debugLines } from "./runtime-debug";
 
-export type EntryMode = "scan" | "listen";
-
 export interface EntryOptions {
-  mode?: EntryMode;
   debug?: boolean;
 }
 
@@ -15,7 +12,7 @@ export function generateEntryModule(
   opts: EntryOptions = {},
 ): string {
   const { kebabName } = entry;
-  const { mode = "scan", debug = false } = opts;
+  const { debug = false } = opts;
 
   const dbg = debugLines(debug);
 
@@ -26,6 +23,7 @@ export function generateEntryModule(
     `import { LiquidDataProvider } from 'vite-plugin-react-shopify/runtime'`,
     ``,
     `const SELECTOR = '[${ATTR_COMPONENT}="${kebabName}"]'`,
+    `const IS_BLOCK = ${entry.targetType === "block"}`,
     `const ISLAND_DATA_KEY = '__ssg_islands'`,
     `const ISLAND_COUNTER_KEY = '__ssg_island_counter'`,
     `const roots = new Map()`,
@@ -50,9 +48,18 @@ export function generateEntryModule(
     `  return html`,
     `}`,
     ``,
+    `function canHydrate(el) {`,
+    `  if (!IS_BLOCK) return true`,
+    `  const slot = el.closest('shopify-block-slot')`,
+    `  if (!slot) return true`,
+    `  const parentRoot = slot.closest('[${ATTR_HYDRATE}]')`,
+    `  if (!parentRoot) return true`,
+    `  return slot.getAttribute('data-ssg-blocks-ready') === 'true'`,
+    `}`,
+    ``,
     `function hydrate(el) {`,
     `  const h = el.querySelector(':scope > [${ATTR_HYDRATE}]') || (el.matches('[${ATTR_HYDRATE}]') ? el : null)`,
-    `  if (!h || roots.has(h)) return`,
+    `  if (!h || roots.has(h) || !canHydrate(el)) return`,
     ...dbg(`  console.debug('[SSG:${kebabName}] hydrate start')`),
     `  const liquidData = readLiquidData(el)`,
     ...dbg(`  console.debug('[SSG:${kebabName}] liquidData', liquidData)`),
@@ -79,36 +86,23 @@ export function generateEntryModule(
     `}`,
   ];
 
-  if (mode === "listen") {
-    lines.push(
-      ``,
-      `document.addEventListener('ssg:blocks:ready', (e) => {`,
-      ...dbg(`  console.debug('[SSG:${kebabName}] blocks-ready event', e.target)`),
-      `  scan(e.target)`,
-      `})`,
-      ``,
-      `document.addEventListener('shopify:section:load', (e) => {`,
-      `  scan(e.target)`,
-      `})`,
-      ``,
-      `document.addEventListener('shopify:section:unload', (e) => {`,
-      `  sweep(e.target)`,
-      `})`,
-    );
-  } else {
-    lines.push(
-      ``,
-      `scan(document)`,
-      ``,
-      `document.addEventListener('shopify:section:load', (e) => {`,
-      `  scan(e.target)`,
-      `})`,
-      ``,
-      `document.addEventListener('shopify:section:unload', (e) => {`,
-      `  sweep(e.target)`,
-      `})`,
-    );
-  }
+  lines.push(
+    ``,
+    `scan(document)`,
+    ``,
+    `document.addEventListener('ssg:blocks:ready', (e) => {`,
+    ...dbg(`  console.debug('[SSG:${kebabName}] blocks-ready event', e.target)`),
+    `  scan(e.target)`,
+    `})`,
+    ``,
+    `document.addEventListener('shopify:section:load', (e) => {`,
+    `  scan(e.target)`,
+    `})`,
+    ``,
+    `document.addEventListener('shopify:section:unload', (e) => {`,
+    `  sweep(e.target)`,
+    `})`,
+  );
 
   return lines.join("\n");
 }

@@ -58,10 +58,10 @@ export function analyzeCssDistribution(
 export function generateSharedCssSnippets(
   cssRefCount: Map<string, number>,
   options: ResolvedOptions,
-): Map<string, string> {
+): { map: Map<string, string>; outputs: Array<{ path: string; content: string }> } {
   const cssSnippetMap = new Map<string, string>();
+  const outputs: Array<{ path: string; content: string }> = [];
   const snippetsDir = path.resolve(options.themeRoot, "snippets");
-  fs.mkdirSync(snippetsDir, { recursive: true });
 
   for (const [cssFile, count] of cssRefCount) {
     if (count < 2) continue;
@@ -70,15 +70,15 @@ export function generateSharedCssSnippets(
     const snippetName = `${options.ssg.cssPrefix}${cssName}`;
     const cssContent = readCssFile(cssFile, options.buildDir, options.themeRoot);
 
-    fs.writeFileSync(
-      path.join(snippetsDir, `${snippetName}.liquid`),
-      `{% stylesheet %}\n${cssContent}\n{% endstylesheet %}\n`,
-    );
+    outputs.push({
+      path: path.join(snippetsDir, `${snippetName}.liquid`),
+      content: `{% stylesheet %}\n${cssContent}\n{% endstylesheet %}\n`,
+    });
 
     cssSnippetMap.set(cssFile, snippetName);
   }
 
-  return cssSnippetMap;
+  return { map: cssSnippetMap, outputs };
 }
 
 /**

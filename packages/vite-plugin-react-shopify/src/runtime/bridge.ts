@@ -8,8 +8,21 @@
 import { GW_TRACK_MAP, ATTR_LIQUID_BRIDGE } from "../constants/attributes";
 
 export interface TrackOptions {
+  expression?: string;
   bridge?: string;
   type?: "string" | "number" | "boolean" | "json" | "html";
+}
+
+export function bridgeId(expression: string, opts?: TrackOptions): string {
+  if (!opts?.bridge && !opts?.type) return expression;
+
+  const signature = JSON.stringify({ expression, bridge: opts.bridge ?? null, type: opts.type ?? null });
+  let hash = 2166136261;
+  for (let i = 0; i < signature.length; i += 1) {
+    hash ^= signature.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `vrs:${(hash >>> 0).toString(36)}:${expression}`;
 }
 
 /**
@@ -28,9 +41,10 @@ export function buildLiquidBridge(
   if (!trackMap || trackMap.size === 0) return "";
 
   const entries: string[] = [];
-  for (const [path, opts] of trackMap) {
-    const bridge = opts.bridge ?? `{{ ${path} | json }}`;
-    entries.push(`    "${path}": ${bridge}`);
+  for (const [id, opts] of trackMap) {
+    const expression = opts.expression ?? id;
+    const bridge = opts.bridge ?? `{{ ${expression} | json }}`;
+    entries.push(`    ${JSON.stringify(id)}: ${bridge}`);
   }
 
   return [

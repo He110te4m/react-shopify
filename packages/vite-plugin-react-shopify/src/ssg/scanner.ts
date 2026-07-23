@@ -39,6 +39,7 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
       const componentName = fileName;
       const kebabName = toKebabCase(fileName);
       const targetType: ShopifyEntryType = TYPE_BY_DIR[dir] ?? "section";
+      const runtime = extractEntryRuntime(absPath);
       const meta: SSGEntry["meta"] = { name: deriveName(fileName) };
 
       if (targetType === "section") {
@@ -49,11 +50,21 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
         }
       }
 
-      entries.push({ filePath: absPath, componentName, kebabName, targetType, meta });
+      entries.push({ filePath: absPath, componentName, kebabName, targetType, runtime, meta });
     }
   }
 
   return entries;
+}
+
+function extractEntryRuntime(filePath: string): SSGEntry["runtime"] {
+  try {
+    const source = fs.readFileSync(filePath, "utf-8");
+    const match = source.match(/(?:export\s+)?const\s+shopifyEntry\s*=\s*\{[\s\S]*?\bruntime\s*:\s*["'](auto|static|hydrate)["']/);
+    return (match?.[1] as SSGEntry["runtime"] | undefined) ?? "auto";
+  } catch {
+    return "auto";
+  }
 }
 
 function extractBlockTypes(filePath: string): string[] {

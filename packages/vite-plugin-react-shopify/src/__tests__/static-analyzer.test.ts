@@ -22,4 +22,26 @@ describe("isStaticComponent", () => {
 
     expect(isStaticComponent(source, "/tmp/ClientOnlyJsxSection.tsx")).toBe(false);
   });
+
+  it("invalidates cached analysis when source changes", () => {
+    const file = "/tmp/ChangingSection.tsx";
+    expect(isStaticComponent("export default function A(){ return <div /> }", file)).toBe(true);
+    expect(isStaticComponent("export default function A(){ return <button onClick={() => {}} /> }", file)).toBe(false);
+  });
+
+  it("conservatively hydrates unknown external JSX components", () => {
+    const source = `
+      import { Widget } from "third-party-ui";
+      export default function Section() { return <Widget />; }
+    `;
+    expect(isStaticComponent(source, "/tmp/ExternalWidget.tsx")).toBe(false);
+  });
+
+  it("does not classify useMemo alone as client interaction", () => {
+    const source = `
+      import { useMemo } from "react";
+      export default function Section() { return <div>{useMemo(() => "value", [])}</div>; }
+    `;
+    expect(isStaticComponent(source, "/tmp/MemoSection.tsx")).toBe(true);
+  });
 });

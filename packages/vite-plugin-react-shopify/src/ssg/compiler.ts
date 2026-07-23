@@ -14,6 +14,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { Manifest } from "vite";
 import type { ResolvedOptions } from "../core/options";
 import { logger } from "../core/logger";
@@ -25,9 +26,14 @@ import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
 import { validateShopifyMeta, validateBlockSlot } from "../validate";
 import { isStaticComponent } from "./static-analyzer";
-import { findBlockEntry, getDeclaredBlockTypes, getSectionManagedBlocks } from "../core/block-graph";
+import { getPluginVersion } from "../core/package-info";
 
 const log = logger("ssg:compiler");
+
+interface GeneratedOutput {
+  path: string;
+  content: string;
+}
 
 /**
  * Entry point for SSG compilation. Scans the source directory for entries,
@@ -49,47 +55,43 @@ export async function compileAllEntries(
   const projectRoot = path.resolve(options.themeRoot);
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
 
-  // Build section → block script mapping.
-  // Blocks referenced by sections skip their own <script> tags;
-  // instead the section liquid emits those scripts BEFORE its own
-  // script so block entry modules register event listeners first.
-  const sectionBlockScripts = new Map<string, string[]>();
-  const sectionManagedKebabNames = getSectionManagedBlocks(entries, options);
-
-  for (const entry of entries) {
-    if (entry.targetType !== "section") continue;
-    const blockTypes = getDeclaredBlockTypes(entry);
-    if (!blockTypes || blockTypes.length === 0) continue;
-
-    const scripts: string[] = [];
-    for (const blockType of blockTypes) {
-      const be = findBlockEntry(entries, blockType, options);
-      if (be) {
-        // Only add non-static block scripts
-        const source = fs.readFileSync(be.filePath, "utf-8");
-        if (!isStaticComponent(source, be.filePath)) {
-          const script = resolveScriptAsset(be.kebabName, manifest);
-          if (script) scripts.push(script);
-        }
-      }
-    }
-    if (scripts.length > 0) sectionBlockScripts.set(entry.kebabName, scripts);
-  }
-
-  // Analyze CSS distribution and generate shared snippets
+  // Prepare every output in memory. Nothing in the theme is replaced until
+  // all entries have compiled successfully.
   const { entryCssFiles, cssRefCount } = analyzeCssDistribution(entries, manifest);
-  const cssSnippetMap = generateSharedCssSnippets(cssRefCount, options);
+  const sharedCss = generateSharedCssSnippets(cssRefCount, options);
+  const outputs: GeneratedOutput[] = [...sharedCss.outputs];
+  const errors: Error[] = [];
+  const runtimes = new Map<string, "static" | "hydrate">();
 
-  // Compile each entry
   for (const entry of entries) {
     try {
-      await compileEntry(entry, options, manifest, projectRoot, sourceDir,
-        entryCssFiles, cssSnippetMap, sectionBlockScripts, sectionManagedKebabNames);
+      const result = await compileEntry(
+        entry,
+        options,
+        manifest,
+        projectRoot,
+        sourceDir,
+        entryCssFiles,
+        sharedCss.map,
+      );
+      outputs.push(result.output);
+      runtimes.set(entry.kebabName, result.runtime);
     } catch (err) {
       log.error("Failed to compile %s:", entry.filePath, err);
+      errors.push(err instanceof Error ? err : new Error(String(err)));
     }
   }
 
+  if (errors.length > 0) {
+    fs.rmSync(path.join(sourceDir, ".ssg-tmp"), { recursive: true, force: true });
+    throw new AggregateError(errors, `Failed to compile ${errors.length} of ${entries.length} Shopify entries`);
+  }
+
+  const clientAssets = planClientAssetPrune(entries, runtimes, manifest, options);
+  outputs.push(clientAssets.manifestOutput);
+  commitOutputs(outputs, sourceDir, options.themeRoot);
+  cleanupOrphanLiquid(outputs, options);
+  removeRedundantClientAssets(clientAssets.files);
   log.info("Compiled %d entries", entries.length);
 
   // Cleanup
@@ -116,19 +118,19 @@ async function compileEntry(
   sourceDir: string,
   entryCssFiles: Map<string, string[]>,
   cssSnippetMap: Map<string, string>,
-  sectionBlockScripts: Map<string, string[]>,
-  sectionManagedKebabNames: Set<string>,
-): Promise<void> {
+): Promise<{ output: GeneratedOutput; runtime: "static" | "hydrate" }> {
   // Bundle via esbuild
   const bundleResult = await bundleEntry(entry, projectRoot, sourceDir);
-  if (!bundleResult) return;
+  if (!bundleResult) throw new Error(`Unable to bundle ${entry.filePath}`);
 
   try {
     // SSR render
-    const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot);
-    if (!renderResult) return;
+    const source = fs.readFileSync(entry.filePath, "utf-8");
+    const inferredRuntime = isStaticComponent(source, entry.filePath) ? "static" : "hydrate";
+    const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot, inferredRuntime);
+    if (!renderResult) throw new Error(`Unable to render ${entry.filePath}`);
 
-    const { html, trackedExpressions, liquidBlocks, trackMap } = renderResult;
+    const { html, trackedExpressions, liquidBlocks, trackMap, runtime } = renderResult;
 
     validateShopifyMeta(entry.meta, {
       kebabName: entry.kebabName,
@@ -147,21 +149,10 @@ async function compileEntry(
     log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
       entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
 
-    // Script asset: blocks managed by sections skip their own <script>
-    // tags — the parent section liquid emits them at the correct position.
-    const isManagedBlock = entry.targetType === "block" && sectionManagedKebabNames.has(entry.kebabName);
-    let scriptAsset: string | null = null;
-    if (!isManagedBlock) {
-      const source = fs.readFileSync(entry.filePath, "utf-8");
-      scriptAsset = isStaticComponent(source, entry.filePath) ? null : resolveScriptAsset(entry.kebabName, manifest);
+    const scriptAsset = runtime === "hydrate" ? resolveScriptAsset(entry.kebabName, manifest) : null;
+    if (runtime === "hydrate" && !scriptAsset) {
+      throw new Error(`Missing client manifest entry for hydrated component ${entry.kebabName}`);
     }
-
-    // Sections: pass block script assets so they are emitted BEFORE the
-    // section's own <script> tag (block entry modules register event
-    // listeners before the section script runs).
-    const blockScripts = entry.targetType === "section"
-      ? sectionBlockScripts.get(entry.kebabName)
-      : undefined;
 
     // Assemble Liquid
     const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
@@ -171,7 +162,12 @@ async function compileEntry(
       prefix: options.ssg.prefix,
       outputName: options.ssg.outputName || undefined,
       buildDir: options.buildDir,
-      blockScripts,
+      runtime,
+      source: {
+        path: path.relative(options.themeRoot, entry.filePath),
+        hash: crypto.createHash("sha256").update(source).digest("hex").slice(0, 12),
+        pluginVersion: getPluginVersion(),
+      },
     }, [...trackedExpressions], liquidBlocks, trackMap);
 
     // Write output
@@ -181,17 +177,142 @@ async function compileEntry(
       themeRoot: options.themeRoot,
     });
 
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(outputPath, liquidContent);
+    return { output: { path: outputPath, content: liquidContent }, runtime };
   } finally {
     try {
       fs.unlinkSync(bundleResult.tmpFile);
     } catch {
       /* ignore */
+    }
+  }
+}
+
+function commitOutputs(outputs: GeneratedOutput[], sourceDir: string, themeRoot: string): void {
+  const stageRoot = path.join(sourceDir, ".ssg-tmp", "output");
+  const backupRoot = path.join(sourceDir, ".ssg-tmp", "backup");
+  fs.rmSync(stageRoot, { recursive: true, force: true });
+  fs.rmSync(backupRoot, { recursive: true, force: true });
+
+  const seen = new Set<string>();
+  for (const output of outputs) {
+    const absoluteOutput = path.resolve(output.path);
+    if (seen.has(absoluteOutput)) throw new Error(`Duplicate generated output path: ${output.path}`);
+    seen.add(absoluteOutput);
+    const relative = path.relative(themeRoot, output.path);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(`Refusing to write generated output outside theme root: ${output.path}`);
+    }
+    const staged = path.join(stageRoot, relative);
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.writeFileSync(staged, output.content);
+  }
+
+  const committed: Array<{ target: string; backup: string | null }> = [];
+  try {
+    for (const output of outputs) {
+      const relative = path.relative(themeRoot, output.path);
+      const staged = path.join(stageRoot, relative);
+      const backup = path.join(backupRoot, relative);
+      fs.mkdirSync(path.dirname(output.path), { recursive: true });
+      let backupPath: string | null = null;
+      if (fs.existsSync(output.path)) {
+        fs.mkdirSync(path.dirname(backup), { recursive: true });
+        fs.copyFileSync(output.path, backup);
+        backupPath = backup;
+      }
+      fs.renameSync(staged, output.path);
+      committed.push({ target: output.path, backup: backupPath });
+    }
+  } catch (error) {
+    for (const item of committed.reverse()) {
+      if (item.backup) fs.copyFileSync(item.backup, item.target);
+      else fs.rmSync(item.target, { force: true });
+    }
+    throw error;
+  }
+}
+
+function cleanupOrphanLiquid(outputs: GeneratedOutput[], options: ResolvedOptions): void {
+  const expected = new Set(outputs.map((output) => path.resolve(output.path)));
+  for (const directory of ["sections", "blocks", "snippets", "templates"]) {
+    const dir = path.join(options.themeRoot, directory);
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith(".liquid")) continue;
+      const file = path.resolve(dir, name);
+      if (expected.has(file)) continue;
+      let content: string;
+      try {
+        content = fs.readFileSync(file, "utf-8");
+      } catch (error) {
+        log.warn("Unable to inspect orphan candidate %s: %s", file, error);
+        continue;
+      }
+      const generatedEntry = content.includes("automatically generated by vite-plugin");
+      const generatedCss = directory === "snippets"
+        && name.startsWith(options.ssg.cssPrefix)
+        && content.startsWith("{% stylesheet %}");
+      if (generatedEntry || generatedCss) {
+        try {
+          fs.rmSync(file, { force: true });
+        } catch (error) {
+          log.warn("Unable to remove orphan generated Liquid %s: %s", file, error);
+        }
+      }
+    }
+  }
+}
+
+function planClientAssetPrune(
+  entries: ReturnType<typeof scanEntries>,
+  runtimes: Map<string, "static" | "hydrate">,
+  manifest: Manifest,
+  options: ResolvedOptions,
+): { manifestOutput: GeneratedOutput; files: Set<string> } {
+  const reachable = new Set<string>();
+  const files = new Set<string>();
+  const visit = (key: string) => {
+    const chunk = manifest[key];
+    if (!chunk || reachable.has(chunk.file)) return;
+    reachable.add(chunk.file);
+    for (const imported of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) visit(imported);
+  };
+
+  for (const entry of entries) {
+    if (runtimes.get(entry.kebabName) === "hydrate") visit(`shopify:entry:${entry.kebabName}`);
+  }
+
+  const buildRoot = path.resolve(options.themeRoot, options.buildDir);
+  if (fs.existsSync(buildRoot)) {
+    for (const item of fs.readdirSync(buildRoot, { withFileTypes: true })) {
+      if (!item.isFile() || !item.name.startsWith(options.chunkPrefix)) continue;
+      if (!/\.(js|css)(\.map)?$/.test(item.name)) continue;
+      const relative = item.name;
+      const sourceFile = relative.endsWith(".map") ? relative.slice(0, -4) : relative;
+      if (sourceFile.endsWith(".js") && reachable.has(sourceFile)) continue;
+      files.add(path.join(buildRoot, item.name));
+    }
+  }
+
+  const prunedManifest: Manifest = {};
+  for (const [key, chunk] of Object.entries(manifest)) {
+    if (chunk.file.endsWith(".css") && path.basename(chunk.file).startsWith(options.chunkPrefix)) continue;
+    if (chunk.file.endsWith(".js") && !reachable.has(chunk.file)) continue;
+    prunedManifest[key] = { ...chunk, css: undefined };
+  }
+  const manifestPath = path.resolve(options.themeRoot, options.buildDir, ".vite", "manifest.json");
+  return {
+    manifestOutput: { path: manifestPath, content: `${JSON.stringify(prunedManifest, null, 2)}\n` },
+    files,
+  };
+}
+
+function removeRedundantClientAssets(files: Set<string>): void {
+  for (const file of files) {
+    try {
+      fs.rmSync(file, { force: true });
+    } catch (error) {
+      log.warn("Unable to remove unreferenced client asset %s: %s", file, error);
     }
   }
 }

@@ -1,0 +1,158 @@
+{% doc %}
+  Brief description of the block.
+
+  **Execution context**: parent section/block, `block.settings`, `block.id`.
+  **DOM zones**: `__media`, `__content`, `__footer`.
+  **Sub-blocks**: list child block types this block expects.
+
+  @param {product} [prod] - Optional product override from parent
+  @param {variant} [var] - Optional variant override from parent
+
+  @example
+  In parent schema: `{ "type": "my-block" }` — configure in theme editor.
+{% enddoc %}
+
+{% liquid
+  assign bs = block.settings
+  assign el_id = 'my-block-' | append: block.id
+
+  # Priority chain: block setting → passed param → global
+  assign cur_product = bs.product | default: prod | default: product
+
+  # Compute layout class — no logic in HTML
+  assign layout = bs.layout | default: 'vertical'
+  assign layout_modifier = 'layout-' | append: layout
+
+  # Capture conditional output for HTML
+  capture badge_html
+    if bs.show_badge and badge_text != blank
+      echo '<div class="my-block__badge">' | append: badge_text | append: '</div>'
+    endif
+  endcapture
+
+  # Capture loop output for HTML
+  capture tags_html
+    for tag in cur_product.tags limit: 5
+      echo '<span class="my-block__tag">' | append: tag | append: '</span>'
+    endfor
+  endcapture
+%}
+
+{%- style -%}
+  #{{ el_id }} {
+    --my-gap: {{ bs.gap_mb | default: 8 }}px;
+    --my-padding: {{ bs.padding_mb | default: 16 }}px;
+    --my-bg: {{ bs.bg_color | default: 'transparent' }};
+  }
+  @media screen and (min-width: 1024px) {
+    #{{ el_id }} {
+      --my-gap: {{ bs.gap_pc | default: 16 }}px;
+      --my-padding: {{ bs.padding_pc | default: 24 }}px;
+    }
+  }
+{%- endstyle -%}
+
+<my-block
+  id="{{ el_id }}"
+  class="my-block my-block--{{ layout_modifier }}"
+  data-section-id="{{ section.id }}"
+  {{ block.shopify_attributes }}
+>
+  <div class="my-block__content">
+    {{ badge_html }}
+    <h2 class="my-block__title">{{ cur_product.title }}</h2>
+    {{ tags_html }}
+  </div>
+</my-block>
+
+{%- stylesheet -%}
+  .my-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--my-gap, 8px);
+    padding: var(--my-padding, 16px);
+    background: var(--my-bg, transparent);
+  }
+{%- endstylesheet -%}
+
+{%- javascript -%}
+  {% render 'shared-utils' %}
+{%- endjavascript -%}
+
+<script>
+  class MyBlock extends HTMLElement {
+    connectedCallback() {
+      // shopify:section:load fires after connectedCallback on initial load.
+      // init() is idempotent (calls destroy() first), so double-call is safe.
+      this.init();
+    }
+
+    disconnectedCallback() {
+      this.destroy();
+    }
+
+    init() {
+      this.destroy();
+      this._onSectionLoad = (e) => {
+        if (e.detail.sectionId !== this.dataset.sectionId) return;
+        this.init();
+      };
+      this._onSectionUnload = (e) => {
+        if (e.detail.sectionId !== this.dataset.sectionId) return;
+        this.destroy();
+      };
+      document.addEventListener('shopify:section:load', this._onSectionLoad);
+      document.addEventListener('shopify:section:unload', this._onSectionUnload);
+      // ... initialization logic
+    }
+
+    destroy() {
+      if (this._onSectionLoad) {
+        document.removeEventListener('shopify:section:load', this._onSectionLoad);
+        document.removeEventListener('shopify:section:unload', this._onSectionUnload);
+        delete this._onSectionLoad;
+        delete this._onSectionUnload;
+      }
+      // ... cleanup (timers, observers, event listeners)
+    }
+  }
+
+  if (!customElements.get('my-block')) {
+    customElements.define('my-block', MyBlock);
+  }
+</script>
+
+{% schema %}
+{
+  "name": "My Block",
+  "tag": null,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "vertical", "label": "Vertical" },
+        { "value": "horizontal", "label": "Horizontal" }
+      ],
+      "default": "vertical"
+    }
+  ],
+  "blocks": [
+    { "type": "@theme" },
+    { "type": "@app" }
+  ],
+  "presets": [
+    {
+      "name": "Default",
+      "category": "Cards",
+      "settings": {},
+      "blocks": []
+    }
+  ]
+}
+{% endschema %}

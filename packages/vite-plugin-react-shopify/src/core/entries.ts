@@ -6,29 +6,23 @@ import type { SSGEntry } from "../types/ssg";
 import { logger } from "./logger";
 import { scanEntries } from "../ssg/scanner";
 import { generateEntryModule } from "./entry-template";
-import { getSectionManagedBlocks } from "./block-graph";
 
 const log = logger("entries");
 
 export default function shopifyEntries(options: ResolvedOptions): Plugin {
   let entries: SSGEntry[] = [];
-  let sectionManagedBlocks: Set<string> = new Set();
 
   return {
     name: "vite-plugin-shopify:entries",
 
     config(config) {
       entries = scanEntries(options);
-      sectionManagedBlocks = getSectionManagedBlocks(entries, options);
 
       const byType: Record<string, number> = {};
       for (const e of entries) {
         byType[e.targetType] = (byType[e.targetType] || 0) + 1;
       }
       log.debug("scanned %d entries: %s", entries.length, JSON.stringify(byType));
-      if (sectionManagedBlocks.size > 0) {
-        log.debug("section-managed blocks: %s", [...sectionManagedBlocks].join(", "));
-      }
 
       if (entries.length === 0) return {};
 
@@ -62,13 +56,7 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
       const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
       const componentRel = normalizePath(path.relative(sourceDir, entry.filePath));
 
-      // Section-managed blocks: listen for ssg:blocks:ready event
-      // instead of auto-scanning at module load.
-      const isListen =
-        entry.targetType === "block" && sectionManagedBlocks.has(kebabName);
-
       return generateEntryModule(entry, componentRel, {
-        mode: isListen ? "listen" : "scan",
         debug: options.debug,
       });
     },

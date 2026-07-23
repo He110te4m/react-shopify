@@ -61,6 +61,8 @@ export type {
   PresetDefinition,
   PresetBlock,
   ShopifyEntryType,
+  ShopifyEntryRuntime,
+  ShopifyEntryConfig,
   ShopifyBlockType,
   SSGEntry,
   ImportMapOptions,

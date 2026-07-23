@@ -15,7 +15,9 @@
  */
 import { useState, useCallback, useMemo } from "react";
 import { useShopifyContext } from "./ShopifyContext";
-import type { TrackOptions } from "./bridge";
+import { bridgeId, type TrackOptions } from "./bridge";
+import { GW_HTML_EXPRESSIONS } from "../constants/attributes";
+import type { LiquidExpression } from "./defineSettings";
 
 export interface UseLiquidOptions {
   type?: TrackOptions["type"];
@@ -53,32 +55,63 @@ function coerce(raw: unknown, type: TrackOptions["type"], fallback: unknown): un
  *   bridge: "{{ section.settings.image | image_url: width: 800 | json }}",
  * })
  */
-export function useLiquid<T = string>(
+export function useLiquidState<T>(
+  path: LiquidExpression<T, any>,
+  opts?: UseLiquidOptions,
+): [T, Setter<T>];
+export function useLiquidState<T = string>(
+  path: string,
+  opts?: UseLiquidOptions,
+): [T, Setter<T>];
+export function useLiquidState<T = string>(
   path: string,
   opts?: UseLiquidOptions,
 ): [T, Setter<T>] {
   const ctx = useShopifyContext();
   const type = opts?.type ?? "string";
+  const trackOptions: TrackOptions = {
+    expression: path,
+    bridge: opts?.bridge,
+    type: opts?.type,
+  };
+  const id = bridgeId(path, trackOptions);
 
   const initial = useMemo(() => {
     if (ctx.phase === "ssg") {
-      ctx.track(path, opts ? { bridge: opts.bridge, type: opts.type } : undefined);
+      const htmlExpressions = (globalThis as any)[GW_HTML_EXPRESSIONS] as Set<string> | undefined;
+      if (htmlExpressions?.has(path)) {
+        throw new Error(`${path} contains HTML. Render it through <LiquidHtml> instead of useLiquidState().`);
+      }
+      ctx.track(id, trackOptions);
       // Number/boolean placeholders need to be the *string form* because
       // they're embedded into HTML text. Liquid will replace them with
       // real numbers/booleans which the bridge then sends to the client.
-      return `{{ ${path} }}` as unknown as T;
+      return ctx.read(path) as T;
     }
     // Client (hydrating + mounted): read bridge value with type coercion.
-    const raw = ctx.read(path);
+    const raw = ctx.read(id);
     return coerce(raw, type, opts?.defaultValue) as T;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.phase, path, type, opts?.bridge, opts?.defaultValue]);
+  }, [ctx.phase, id, path, type, opts?.bridge, opts?.defaultValue]);
 
   const [value, setValue] = useState<T>(initial);
 
   const setter = useCallback((v: T) => setValue(v), []);
 
   return [value, setter];
+}
+
+/** @deprecated Prefer useLiquidState for hydrated values or useLiquidExpression for static entries. */
+export const useLiquid = useLiquidState;
+
+export function useLiquidExpression<T>(expression: LiquidExpression<T, any>): T;
+export function useLiquidExpression<T = string>(expression: string): T;
+export function useLiquidExpression<T = string>(expression: string): T {
+  const ctx = useShopifyContext();
+  if (ctx.phase !== "ssg" || ctx.runtime !== "static") {
+    throw new Error("useLiquidExpression() is server-only and requires shopifyEntry.runtime = 'static'.");
+  }
+  return ctx.read(expression) as T;
 }
 
 /**

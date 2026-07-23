@@ -9,12 +9,14 @@ const log = logger("ssg:static");
 const INTERACTIVE_HOOKS = new Set([
   "useState",
   "useReducer",
-  "useRef",
   "useEffect",
   "useLayoutEffect",
   "useInsertionEffect",
-  "useCallback",
-  "useMemo",
+  "useSyncExternalStore",
+  "useTransition",
+  "useDeferredValue",
+  "useActionState",
+  "useOptimistic",
 ]);
 
 const INTERACTIVE_RUNTIME_CALLS = new Set([
@@ -24,20 +26,32 @@ const INTERACTIVE_RUNTIME_CALLS = new Set([
 
 const EVENT_HANDLER_RE = /^on[A-Z]/;
 
-// Cache: filePath -> isInteractive
-const cache = new Map<string, boolean>();
+const cache = new Map<string, { source: string; interactive: boolean }>();
 
 function checkSource(source: string, filePath: string): boolean {
   const cached = cache.get(filePath);
-  if (cached !== undefined) return cached;
+  if (cached?.source === source) return cached.interactive;
 
   let found = false;
+  const externalComponents = new Set<string>();
+  cache.set(filePath, { source, interactive: false });
 
   try {
     const parseResult = parseSync(filePath, source);
     walk(parseResult.program, {
       enter(node: any) {
         if (found) return;
+        if (node.type === "ImportDeclaration" && node.source?.value) {
+          const importPath = node.source.value as string;
+          const trusted = importPath === "react" || importPath.startsWith("vite-plugin-react-shopify/");
+          if (!trusted && !importPath.startsWith(".") && !importPath.startsWith("~/") && !importPath.startsWith("@/")) {
+            for (const specifier of node.specifiers ?? []) {
+              if (specifier.importKind !== "type" && specifier.local?.name) {
+                externalComponents.add(specifier.local.name);
+              }
+            }
+          }
+        }
         if (
           node.type === "CallExpression" &&
           node.callee?.type === "Identifier" &&
@@ -54,6 +68,18 @@ function checkSource(source: string, filePath: string): boolean {
           found = true;
           return;
         }
+        if (node.type === "JSXElement") {
+          const name = node.openingElement?.name;
+          const rootName = name?.type === "JSXIdentifier"
+            ? name.name
+            : name?.type === "JSXMemberExpression" && name.object?.type === "JSXIdentifier"
+              ? name.object.name
+              : undefined;
+          if (rootName && externalComponents.has(rootName)) {
+            found = true;
+            return;
+          }
+        }
         if (
           node.type === "JSXAttribute" &&
           node.name?.type === "JSXIdentifier" &&
@@ -67,7 +93,7 @@ function checkSource(source: string, filePath: string): boolean {
     found = true;
   }
 
-  cache.set(filePath, found);
+  cache.set(filePath, { source, interactive: found });
 
   if (found) return true;
 
@@ -78,7 +104,8 @@ function checkSource(source: string, filePath: string): boolean {
         if (found) return;
         if (node.type === "ImportDeclaration" && node.source?.value) {
           const importPath = node.source.value as string;
-          if (!importPath.startsWith(".")) return;
+          if (node.importKind === "type" || /\.(css|scss|sass|less|json|svg|png|jpe?g|webp|avif)$/.test(importPath)) return;
+          if (!importPath.startsWith(".") && !importPath.startsWith("~/") && !importPath.startsWith("@/")) return;
           const resolved = resolveImport(importPath, filePath);
           if (resolved) {
             try {
@@ -89,6 +116,8 @@ function checkSource(source: string, filePath: string): boolean {
             } catch {
               found = true;
             }
+          } else {
+            found = true;
           }
         }
       },
@@ -97,7 +126,7 @@ function checkSource(source: string, filePath: string): boolean {
     found = true;
   }
 
-  if (found) cache.set(filePath, true);
+  cache.set(filePath, { source, interactive: found });
   return found;
 }
 
@@ -106,7 +135,15 @@ function resolveImport(
   fromFile: string,
 ): string | null {
   const dir = path.dirname(fromFile);
-  const resolved = path.resolve(dir, importPath);
+  const frontendMarker = `${path.sep}frontend${path.sep}`;
+  const frontendIndex = fromFile.lastIndexOf(frontendMarker);
+  const sourceRoot = frontendIndex >= 0
+    ? fromFile.slice(0, frontendIndex + frontendMarker.length - 1)
+    : dir;
+  const resolved = importPath.startsWith("~/") || importPath.startsWith("@/")
+    ? path.resolve(sourceRoot, importPath.slice(2))
+    : path.resolve(dir, importPath);
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
   const extensions = [
     ".tsx", ".ts", ".jsx", ".js",
     "/index.tsx", "/index.ts", "/index.jsx", "/index.js",
@@ -118,6 +155,10 @@ function resolveImport(
     }
   }
   return null;
+}
+
+export function clearStaticAnalysisCache(): void {
+  cache.clear();
 }
 
 /**

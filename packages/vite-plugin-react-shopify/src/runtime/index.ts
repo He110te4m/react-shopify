@@ -14,12 +14,18 @@
  */
 
 // ── Core Hooks ─────────────────────────────────────────────────────────────
-export { useLiquid, useLiquidCode } from "./useLiquid";
+export { useLiquid, useLiquidState, useLiquidExpression, useLiquidCode } from "./useLiquid";
 export type { UseLiquidOptions } from "./useLiquid";
+
+export { defineSettings, liquidExpression } from "./defineSettings";
+export type { LiquidExpression } from "./defineSettings";
 
 // ── Hydration Boundaries ───────────────────────────────────────────────────
 export { Island } from "./Island";
 export type { IslandProps } from "./Island";
+
+export { LiquidHtml } from "./LiquidHtml";
+export type { LiquidHtmlProps } from "./LiquidHtml";
 
 export { BlockSlot } from "./BlockSlot";
 export type { BlockSlotProps } from "./BlockSlot";

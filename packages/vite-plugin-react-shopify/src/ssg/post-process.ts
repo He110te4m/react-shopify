@@ -6,8 +6,7 @@
  *  - Void elements must not be self-closing (otherwise Liquid's parser may
  *    misinterpret `/>` inside expressions).
  *  - Style attribute spacing is normalized for consistency.
- *  - HTML entities are unwrapped so Liquid `{{ }}` expressions (which React
- *    may encode as `&amp;`) remain parseable.
+ *  - Registered Liquid tokens are restored after React serialization.
  */
 
 /** Matches self-closing void elements like `<img/>`, `<br/>`, etc. */
@@ -28,17 +27,10 @@ export function normalizeStyleAttributes(html: string): string {
   });
 }
 
-/**
- * Decode common HTML entities back to raw characters.
- *
- * Critical for preserving Liquid `{{ }}` expressions that React may encode
- * as `&amp;` during SSR.
- */
-export function unwrapHtmlEntities(html: string): string {
-  return html
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'");
+export function restoreLiquidTokens(html: string, tokens: Map<string, string>): string {
+  let result = html;
+  for (const [token, liquid] of tokens) {
+    result = result.replaceAll(token, liquid);
+  }
+  return result;
 }

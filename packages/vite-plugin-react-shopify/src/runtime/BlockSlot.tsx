@@ -50,8 +50,12 @@ function BlockSlotImpl({ className, style }: BlockSlotProps) {
     return createElement(TAG_BLOCK_SLOT, {
       className,
       style,
-      [ATTR_ISLAND]: BLOCKS_CAPTURE_KEY,
-      suppressHydrationWarning: true,
+      ...(ctx.runtime === "hydrate"
+        ? {
+            [ATTR_ISLAND]: BLOCKS_CAPTURE_KEY,
+            suppressHydrationWarning: true,
+          }
+        : {}),
       dangerouslySetInnerHTML: { __html: "{% content_for 'blocks' %}" },
     });
   }
@@ -62,6 +66,7 @@ function BlockSlotImpl({ className, style }: BlockSlotProps) {
 
   useLayoutEffect(() => {
     if (ref.current) {
+      ref.current.setAttribute("data-ssg-blocks-ready", "true");
       // Notify section-managed block entry modules that the block
       // DOM has committed.  Block entries listen for this event
       // (instead of auto-scanning at module-load time) so they only

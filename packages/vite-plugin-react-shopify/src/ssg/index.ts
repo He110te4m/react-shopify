@@ -40,8 +40,7 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
       );
 
       if (!fs.existsSync(manifestPath)) {
-        log.warn("No manifest.json found, skipping SSG");
-        return;
+        throw new Error(`No Vite manifest found at ${manifestPath}; Shopify SSG cannot continue`);
       }
 
       log.debug("reading manifest from %s", manifestPath);
@@ -64,12 +63,13 @@ export default function shopifySSG(options: ResolvedOptions): Plugin {
     load(id) {
       if (id === "\0vite-plugin-shopify:runtime") {
         const exports = [
-          `export { useLiquid, useLiquidCode } from 'vite-plugin-react-shopify/runtime'`,
-          `export { Island } from 'vite-plugin-react-shopify/runtime'`,
+          `export { useLiquid, useLiquidState, useLiquidExpression, useLiquidCode } from 'vite-plugin-react-shopify/runtime'`,
+          `export { Island, LiquidHtml, LiquidIf } from 'vite-plugin-react-shopify/runtime'`,
           `export { BlockSlot } from 'vite-plugin-react-shopify/runtime'`,
           `export { StaticBlock } from 'vite-plugin-react-shopify/runtime'`,
           `export { ClientOnly, clientOnly } from 'vite-plugin-react-shopify/runtime'`,
           `export { ShopifyImage, ShopifyVideo } from 'vite-plugin-react-shopify/runtime'`,
+          `export { defineSettings, liquidExpression } from 'vite-plugin-react-shopify/runtime'`,
           `export { LiquidDataProvider, LiquidDataContext } from 'vite-plugin-react-shopify/runtime'`,
           `export { buildLiquidBridge } from 'vite-plugin-react-shopify/runtime'`,
         ];

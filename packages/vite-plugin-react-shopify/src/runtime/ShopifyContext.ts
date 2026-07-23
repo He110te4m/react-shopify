@@ -22,6 +22,9 @@ import {
   GW_TRACK,
   GW_BLOCKS,
   GW_TRACK_MAP,
+  GW_LIQUID_TOKENS,
+  GW_LIQUID_TOKEN_PREFIX,
+  GW_RUNTIME,
 } from "../constants/attributes";
 import type { TrackOptions } from "./bridge";
 export type { TrackOptions } from "./bridge";
@@ -30,12 +33,15 @@ export type ShopifyPhase = "ssg" | "hydrating" | "mounted";
 
 export interface ShopifyContext {
   phase: ShopifyPhase;
+  runtime: "static" | "hydrate";
   /** Read a Liquid value. SSG: returns `{{ path }}` placeholder. Client: bridge value. */
   read(path: string): unknown;
   /** Register an expression for inclusion in the JSON bridge. SSG-only; no-op on client. */
   track(path: string, opts?: TrackOptions): void;
   /** Push raw Liquid code into the assembler. SSG-only; no-op on client. */
   inject(code: string): void;
+  /** Protect Liquid code from React's HTML serializer during SSG. */
+  serialize(code: string): string;
 }
 
 /** True when running in the Node SSG render pass (no `document` global). */
@@ -44,24 +50,40 @@ function isSSGEnvironment(): boolean {
 }
 
 function createSSGContext(): ShopifyContext {
+  const runtime = ((globalThis as any)[GW_RUNTIME] ?? "hydrate") as "static" | "hydrate";
   return {
     phase: "ssg",
+    runtime,
     read(path: string) {
-      const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
-      if (tracker) tracker.add(path);
-      const map = (globalThis as any)[GW_TRACK_MAP] as Map<string, TrackOptions> | undefined;
-      if (map && !map.has(path)) map.set(path, {});
-      return `{{ ${path} }}`;
+      return this.serialize(`{{ ${path} }}`);
     },
-    track(path: string, opts?: TrackOptions) {
+    track(id: string, opts?: TrackOptions) {
+      if (runtime === "static") return;
       const map = (globalThis as any)[GW_TRACK_MAP] as Map<string, TrackOptions> | undefined;
-      if (map) map.set(path, opts ?? {});
+      const next: TrackOptions = {
+        expression: opts?.expression ?? id,
+        ...(opts?.bridge !== undefined ? { bridge: opts.bridge } : {}),
+        ...(opts?.type !== undefined ? { type: opts.type } : {}),
+      };
+      const existing = map?.get(id);
+      if (existing && JSON.stringify(existing) !== JSON.stringify(next)) {
+        throw new Error(`Conflicting Liquid bridge contract for ${JSON.stringify(id)}`);
+      }
+      if (map && !existing) map.set(id, next);
       const tracker = (globalThis as any)[GW_TRACK] as Set<string> | undefined;
-      if (tracker) tracker.add(path);
+      if (tracker) tracker.add(id);
     },
     inject(code: string) {
       const blocks = (globalThis as any)[GW_BLOCKS] as string[] | undefined;
       if (blocks) blocks.push(code);
+    },
+    serialize(code: string) {
+      const registry = (globalThis as any)[GW_LIQUID_TOKENS] as Map<string, string> | undefined;
+      if (!registry) return code;
+      const prefix = (globalThis as any)[GW_LIQUID_TOKEN_PREFIX] ?? "__VRS_LIQUID_TOKEN";
+      const token = `${prefix}_${registry.size.toString(36)}__`;
+      registry.set(token, code);
+      return token;
     },
   };
 }
@@ -75,6 +97,7 @@ function createClientContext(
     // same bridge data in both, and Island uses memo(() => true) to lock
     // its content — there's no behavioral difference between the two.
     phase: "hydrating",
+    runtime: "hydrate",
     read(path: string) {
       return bridgeData[path];
     },
@@ -83,6 +106,9 @@ function createClientContext(
     },
     inject() {
       /* no-op */
+    },
+    serialize(code: string) {
+      return code;
     },
   };
 }

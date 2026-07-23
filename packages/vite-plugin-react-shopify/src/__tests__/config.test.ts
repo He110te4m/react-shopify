@@ -27,7 +27,7 @@ describe("shopifyConfig", () => {
     expect(output.assetFileNames).toBe("rs-[name]-[hash][extname]");
   });
 
-  it("removes old manifest assets and same-prefix orphan chunks only", () => {
+  it("preserves previous generated assets until SSG succeeds", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "shopify-config-"));
     tmpRoots.push(root);
 
@@ -49,13 +49,13 @@ describe("shopifyConfig", () => {
     const options = resolveOptions({ themeRoot: root, buildDir: "assets", chunkPrefix: "rs-" });
     const plugin = shopifyConfig(options) as any;
 
-    plugin.configResolved({ build: { outDir } });
-    plugin.buildStart();
+    plugin.config({});
 
-    expect(fs.existsSync(path.join(outDir, "old-entry.js"))).toBe(false);
-    expect(fs.existsSync(path.join(outDir, "old-entry.js.map"))).toBe(false);
-    expect(fs.existsSync(path.join(outDir, "old-style.css"))).toBe(false);
-    expect(fs.existsSync(path.join(outDir, "rs-orphan.js"))).toBe(false);
+    expect(plugin.buildStart).toBeUndefined();
+    expect(fs.existsSync(path.join(outDir, "old-entry.js"))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, "old-entry.js.map"))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, "old-style.css"))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, "rs-orphan.js"))).toBe(true);
     expect(fs.existsSync(path.join(outDir, "other.js"))).toBe(true);
     expect(fs.existsSync(path.join(outDir, "image.png"))).toBe(true);
   });

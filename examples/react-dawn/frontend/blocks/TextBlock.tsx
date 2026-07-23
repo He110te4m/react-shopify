@@ -1,16 +1,17 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { useLiquid } from "vite-plugin-react-shopify/runtime";
+import { LiquidHtml, useLiquid } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
 import "./TextBlock.css";
 
 export default function TextBlock() {
-  const [text] = useLiquid<string>("block.settings.text");
   const [textStyle] = useLiquid<string>("block.settings.text_style");
 
   return (
-    <div className={clsx("banner__text", "rte", textStyle)}>
-      <p>{text}</p>
-    </div>
+    <LiquidHtml
+      as="div"
+      className={clsx("banner__text", "rte", textStyle)}
+      expression="block.settings.text"
+    />
   );
 }
 

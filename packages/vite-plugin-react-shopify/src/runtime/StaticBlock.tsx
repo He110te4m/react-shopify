@@ -85,6 +85,14 @@ function StaticBlockImpl({
   const ref = useRef<any>(null);
 
   if (ctx.phase === "ssg") {
+    if (ctx.runtime === "static") {
+      return createElement(Tag, {
+        className,
+        style,
+        dangerouslySetInnerHTML: { __html: buildStaticBlockExpression(type, id, data) },
+      });
+    }
+
     const counter: { count: number } =
       (globalThis as any)[GW_ISLAND_COUNTER] ?? { count: 0 };
     const key = `i${counter.count++}`;

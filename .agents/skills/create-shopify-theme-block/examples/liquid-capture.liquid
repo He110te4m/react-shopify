@@ -1,0 +1,15 @@
+{% liquid
+  capture badge_slot
+    if bs.show_badge
+      echo '<div class="my-block__badge">'
+      echo badge_text
+      echo '</div>'
+    endif
+  endcapture
+
+  capture items_html
+    for item in collection.products limit: 10
+      echo '<div class="my-block__item">' | append: item.title | append: '</div>'
+    endfor
+  endcapture
+%}

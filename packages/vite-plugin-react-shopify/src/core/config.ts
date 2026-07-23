@@ -8,43 +8,11 @@
  */
 
 import path from "node:path";
-import fs from "node:fs";
 import { Plugin, UserConfig } from "vite";
 import { logger } from "./logger";
 import type { ResolvedOptions } from "./options";
 
 const log = logger("config");
-const GENERATED_ASSET_RE = /\.(js|css)(\.map)?$/;
-
-function removeFileIfInside(outDir: string, file: string): void {
-  const target = path.resolve(outDir, file);
-  const root = path.resolve(outDir);
-  if (target !== root && target.startsWith(root + path.sep)) {
-    fs.rmSync(target, { force: true });
-    fs.rmSync(`${target}.map`, { force: true });
-  }
-}
-
-function cleanManifestAssets(outDir: string): void {
-  const manifestPath = path.join(outDir, ".vite", "manifest.json");
-  if (!fs.existsSync(manifestPath)) return;
-
-  try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as Record<string, any>;
-    for (const chunk of Object.values(manifest)) {
-      if (typeof chunk.file === "string") removeFileIfInside(outDir, chunk.file);
-      if (Array.isArray(chunk.css)) {
-        for (const css of chunk.css) removeFileIfInside(outDir, css);
-      }
-      if (Array.isArray(chunk.assets)) {
-        for (const asset of chunk.assets) removeFileIfInside(outDir, asset);
-      }
-    }
-  } catch (err) {
-    log.warn("Failed to read previous manifest for asset cleanup: %s", err);
-  }
-}
-
 /** Detect if Vite is running in watch/dev mode. */
 function isWatchMode(): boolean {
   return process.argv.includes("--watch") || process.env.SHOPIFY_DEV_WATCH === "1";
@@ -55,32 +23,8 @@ function isWatchMode(): boolean {
  * for React Shopify theme projects.
  */
 export default function shopifyConfig(options: ResolvedOptions): Plugin {
-  let outDir = path.join(options.themeRoot, options.buildDir);
-
-  function cleanOldChunks(): void {
-    if (!fs.existsSync(outDir)) return;
-
-    cleanManifestAssets(outDir);
-
-    if (!options.chunkPrefix) return;
-
-    for (const item of fs.readdirSync(outDir, { withFileTypes: true })) {
-      if (!item.isFile()) continue;
-      if (!item.name.startsWith(options.chunkPrefix)) continue;
-      if (!GENERATED_ASSET_RE.test(item.name)) continue;
-
-      fs.rmSync(path.join(outDir, item.name), { force: true });
-    }
-  }
-
   return {
     name: "vite-plugin-shopify:config",
-    configResolved(config) {
-      outDir = config.build.outDir;
-    },
-    buildStart() {
-      cleanOldChunks();
-    },
     config(config: UserConfig): UserConfig {
       const sourceDirAbs = path.resolve(options.themeRoot, options.sourceCodeDir);
       const watch = isWatchMode();

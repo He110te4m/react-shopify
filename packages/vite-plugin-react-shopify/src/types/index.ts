@@ -13,6 +13,8 @@ export type {
 
 export type {
   ShopifyEntryType,
+  ShopifyEntryRuntime,
+  ShopifyEntryConfig,
   ShopifyBlockType,
   ShopifyMeta,
   BlockDefinition,

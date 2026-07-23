@@ -58,6 +58,15 @@ function IslandImpl({
 
   // ── SSR ───────────────────────────────────────────────────────────────
   if (ctx.phase === "ssg") {
+    if (ctx.runtime === "static") {
+      return createElement(Tag, {
+        ...rest,
+        className,
+        style,
+        dangerouslySetInnerHTML: { __html: expression },
+      });
+    }
+
     // Auto-assign a stable key from the global counter
     const counter: { count: number } =
       (globalThis as any)[GW_ISLAND_COUNTER] ?? { count: 0 };

@@ -74,7 +74,7 @@ export function useLiquidCssVars(
       const key = spec.key ?? `css:${name}:${spec.liquid}:${spec.when ?? ""}`;
       if (ctx.phase === "ssg") {
         ctx.track(key, { bridge: cssBridgeValue(spec) });
-        style[name] = cssSsgValue(spec);
+        style[name] = ctx.serialize(cssSsgValue(spec));
       } else {
         style[name] = String(ctx.read(key) ?? spec.fallback);
       }
@@ -101,7 +101,7 @@ export function useLiquidClass(
       type: "boolean",
       bridge: `{% if ${condition} %}true{% else %}false{% endif %}`,
     });
-    return `{% ${options?.unless ? "unless" : "if"} ${condition} %}${className}{% end${options?.unless ? "unless" : "if"} %}`;
+    return ctx.serialize(`{% ${options?.unless ? "unless" : "if"} ${condition} %}${className}{% end${options?.unless ? "unless" : "if"} %}`);
   }
 
   const matched = isTruthy(ctx.read(key));
@@ -120,11 +120,14 @@ export function useLiquidDynamicClass(
     ctx.track(key, {
       bridge: `{% if ${condition} %}{{ ${valueExpr} | json }}{% else %}null{% endif %}`,
     });
-    return `{% if ${condition} %}${className(`{{ ${valueExpr} }}`)}{% endif %}`;
+    return ctx.serialize(`{% if ${condition} %}${className(`{{ ${valueExpr} }}`)}{% endif %}`);
   }
 
   const value = ctx.read(key);
   return typeof value === "string" && value ? className(value) : undefined;
 }
 
-export type LiquidValueInput<T extends string | number = string> = T | LiquidValue;
+export type LiquidValueInput<T extends string | number = string> =
+  | T
+  | LiquidValue
+  | (T extends string ? string : never);
