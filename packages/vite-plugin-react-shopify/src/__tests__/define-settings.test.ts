@@ -5,9 +5,12 @@ import {
   compileShopifyReference,
   createCheckboxSetting,
   createImageSetting,
+  createProductListSetting,
+  createProductSetting,
   createTextSetting,
   type SettingDescriptor,
 } from "../contract";
+import type { ShopifySettingObject } from "../types/settings";
 import { bridgeId } from "../runtime/bridge";
 import { defineSettings } from "../runtime/defineSettings";
 import { LiquidDataProvider } from "../runtime/provider";
@@ -89,7 +92,7 @@ describe("defineSettings", () => {
 
     expectTypeOf<ReturnType<typeof settings.useProps>>().toEqualTypeOf<{
       title: string;
-      image: string;
+      image: ShopifySettingObject | null;
       visible: boolean;
       count: number;
       size: number;
@@ -188,8 +191,52 @@ describe("defineSettings", () => {
 
     expect(settings.schema).toBe(schema);
     expect(compileShopifyReference(settings.refs.title)).toBe("section.settings.title");
-    expect("useProps" in settings).toBe(false);
+    expect(settings.useProps).toBeTypeOf("function");
 
     expect(compileShopifyReference(settings.refs.title)).toBe("section.settings.title");
+  });
+
+  it("bridges object and object-list settings as JSON", () => {
+    globalState.document = {};
+    const settings = defineSettings("section", {
+      product: createProductSetting({ label: "Product" }),
+      products: createProductListSetting({ label: "Products" }),
+    });
+    const productId = bridgeId("section.settings.product", {
+      expression: "section.settings.product",
+      type: "json",
+    });
+    const productsId = bridgeId("section.settings.products", {
+      expression: "section.settings.products",
+      type: "json",
+    });
+    let props: ReturnType<typeof settings.useProps> | undefined;
+
+    function Example() {
+      props = settings.useProps();
+      return null;
+    }
+
+    renderToStaticMarkup(
+      createElement(
+        LiquidDataProvider,
+        {
+          value: {
+            [productId]: { id: 1, title: "Product" },
+            [productsId]: [{ id: 1 }, { id: 2 }],
+          },
+        },
+        createElement(Example),
+      ),
+    );
+
+    expect(props).toEqual({
+      product: { id: 1, title: "Product" },
+      products: [{ id: 1 }, { id: 2 }],
+    });
+    expectTypeOf<
+      NonNullable<typeof props>["product"]
+    >().toEqualTypeOf<ShopifySettingObject | null>();
+    expectTypeOf<NonNullable<typeof props>["products"]>().toEqualTypeOf<ShopifySettingObject[]>();
   });
 });

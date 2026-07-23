@@ -322,7 +322,7 @@ export default function ImageBanner() {
       fallback: "0%",
     },
     "--banner-overlay-opacity": {
-      value: dividedBy(refs.image_overlay_opacity, 100),
+      value: dividedBy(refs.image_overlay_opacity, 100, { divisorFormat: "float" }),
       fallback: "0",
     },
   });

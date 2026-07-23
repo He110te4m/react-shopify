@@ -17,7 +17,22 @@ interface BaseSettingSchema {
 
 // ── Value types ─────────────────────────────────────────────────────────
 
+/** Stable fallback shape for Shopify Liquid objects exposed by settings. */
+export interface ShopifySettingObject {
+  [key: string]: unknown;
+}
+
+/** Literal value accepted by schema defaults and preset settings. */
 export type SettingValue = string | number | boolean;
+
+/** Resolved runtime value returned by a Shopify setting. */
+export type ResolvedSettingValue =
+  | string
+  | number
+  | boolean
+  | ShopifySettingObject
+  | ShopifySettingObject[]
+  | null;
 
 export type InputSettings = Record<string, SettingValue>;
 
@@ -108,19 +123,13 @@ export interface ColorSchemeSetting extends BaseSettingSchema {
 
 export interface ColorSchemeRole {
   text: string;
-  background:
-    | string
-    | { solid: string; gradient?: string };
+  background: string | { solid: string; gradient?: string };
   links?: string;
   icons?: string;
-  primary_button?:
-    | string
-    | { solid: string; gradient?: string };
+  primary_button?: string | { solid: string; gradient?: string };
   on_primary_button?: string;
   primary_button_border?: string;
-  secondary_button?:
-    | string
-    | { solid: string; gradient?: string };
+  secondary_button?: string | { solid: string; gradient?: string };
   on_secondary_button?: string;
   secondary_button_border?: string;
 }
@@ -267,10 +276,7 @@ export type InputSettingSchema =
   | VideoSetting
   | VideoUrlSetting;
 
-export type SidebarSetting =
-  | HeaderSetting
-  | ParagraphSetting
-  | LineBreakSetting;
+export type SidebarSetting = HeaderSetting | ParagraphSetting | LineBreakSetting;
 
 export type SettingSchema = InputSettingSchema | SidebarSetting;
 
@@ -290,21 +296,47 @@ export type SchemaSetting = SettingSchema;
  */
 type IsEmptyStringDefault<T> = T extends { default: "" } ? true : false;
 
-type EmptyDefaultsExist<T extends readonly any[]> =
-  true extends { [K in keyof T]: IsEmptyStringDefault<T[K]> }[number] ? true : false;
+type EmptyDefaultsExist<T extends readonly any[]> = true extends {
+  [K in keyof T]: IsEmptyStringDefault<T[K]>;
+}[number]
+  ? true
+  : false;
 
 export type AssertNoEmptyDefaults<T extends readonly SettingSchema[]> =
-  EmptyDefaultsExist<T> extends true
-    ? never
-    : true;
+  EmptyDefaultsExist<T> extends true ? never : true;
 
 // ── Utility ─────────────────────────────────────────────────────────────
 
-type ValueForType<T extends string> =
-  T extends "checkbox" ? boolean
-  : T extends "number" | "range" ? number
-  : string;
+type ObjectSettingType =
+  | "article"
+  | "blog"
+  | "collection"
+  | "color_scheme_group"
+  | "font_picker"
+  | "image_picker"
+  | "link_list"
+  | "metaobject"
+  | "page"
+  | "product"
+  | "video"
+  | "video_url";
+
+type ObjectListSettingType =
+  | "article_list"
+  | "collection_list"
+  | "metaobject_list"
+  | "product_list";
+
+export type SettingValueForType<T extends string> = T extends "checkbox"
+  ? boolean
+  : T extends "number" | "range"
+    ? number
+    : T extends ObjectListSettingType
+      ? ShopifySettingObject[]
+      : T extends ObjectSettingType
+        ? ShopifySettingObject | null
+        : string;
 
 export type InferSettings<T extends readonly { type: string; id: string }[]> = {
-  [K in T[number] as K["id"]]: ValueForType<K["type"]>;
+  [K in T[number] as K["id"]]: SettingValueForType<K["type"]>;
 };

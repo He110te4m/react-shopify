@@ -1,5 +1,6 @@
 import type { SettingSchema } from "../types/settings";
 import {
+  assertValidSettingSchemas,
   createSettingsSchema,
   type SettingDescriptorMap,
   type SettingSchemaFromMap,
@@ -26,6 +27,12 @@ export interface SettingsContract<Map extends SettingDescriptorMap> {
   useProps: () => SettingsProps<SettingSchemaFromMap<Map>>;
 }
 
+export interface SettingsArrayContract<Schema extends readonly SettingSchema[]> {
+  schema: Schema;
+  refs: SettingsRefs<Schema>;
+  useProps: () => SettingsProps<Schema>;
+}
+
 function createRefs<const Schema extends readonly SettingSchema[]>(
   scope: SettingsScope,
   schema: Schema,
@@ -40,7 +47,7 @@ function createRefs<const Schema extends readonly SettingSchema[]>(
 export function defineSettings<const T extends readonly SettingSchema[]>(
   scope: SettingsScope,
   schema: T,
-): { schema: T; refs: SettingsRefs<T> };
+): SettingsArrayContract<T>;
 export function defineSettings<const Map extends SettingDescriptorMap>(
   scope: SettingsScope,
   settings: Map,
@@ -50,7 +57,13 @@ export function defineSettings(
   settings: readonly SettingSchema[] | SettingDescriptorMap,
 ): any {
   if (Array.isArray(settings)) {
-    return { schema: settings, refs: createRefs(scope, settings) };
+    assertValidSettingSchemas(settings);
+    const refs = createRefs(scope, settings);
+    return {
+      schema: settings,
+      refs,
+      useProps: () => useSettingsProps(settings, refs),
+    };
   }
 
   const schema = createSettingsSchema(settings as SettingDescriptorMap);

@@ -12,6 +12,8 @@ import {
   isPresent,
   literal,
   multiply,
+  not,
+  or,
   property,
   round,
 } from "../contract/expression";
@@ -42,6 +44,46 @@ describe("Shopify expression contract", () => {
 
     expect(compileShopifyReference(percentage)).toBe(
       "section.settings.image.width | divided_by: section.settings.image.aspect_ratio | times: 100 | round: 0 | append: '%'",
+    );
+  });
+
+  it("preserves an explicitly requested floating-point divisor literal", () => {
+    const opacity = createSettingExpression<number>("section", "image_overlay_opacity");
+
+    expect(compileShopifyReference(dividedBy(opacity, 100))).toBe(
+      "section.settings.image_overlay_opacity | divided_by: 100",
+    );
+    expect(compileShopifyReference(dividedBy(opacity, 100, { divisorFormat: "float" }))).toBe(
+      "section.settings.image_overlay_opacity | divided_by: 100.0",
+    );
+  });
+
+  it("normalizes negation without emitting chained comparisons", () => {
+    const behavior = createSettingExpression<string>("section", "image_behavior");
+    const image = createSettingExpression<unknown, "object">("section", "image");
+
+    expect(compileShopifyReference(not(eq(behavior, "ambient")))).toBe(
+      "section.settings.image_behavior != 'ambient'",
+    );
+    expect(compileShopifyReference(not(and(eq(behavior, "ambient"), isPresent(image))))).toBe(
+      "section.settings.image_behavior != 'ambient' or section.settings.image == blank",
+    );
+  });
+
+  it("rejects mixed logical nesting that Liquid cannot parenthesize", () => {
+    const behavior = createSettingExpression<string>("section", "image_behavior");
+    const ambient = eq(behavior, "ambient");
+    const fixed = eq(behavior, "fixed");
+    const zoom = eq(behavior, "zoom-in");
+
+    expect(() => and(or(ambient, fixed), zoom)).toThrowError(
+      "Liquid cannot nest or() inside and(); parentheses are not supported",
+    );
+    expect(() => or(and(ambient, fixed), zoom)).toThrowError(
+      "Liquid cannot nest and() inside or(); parentheses are not supported",
+    );
+    expect(compileShopifyReference(and(and(ambient, fixed), zoom))).toBe(
+      "section.settings.image_behavior == 'ambient' and section.settings.image_behavior == 'fixed' and section.settings.image_behavior == 'zoom-in'",
     );
   });
 
@@ -141,11 +183,17 @@ describe("each", () => {
       "products",
     );
     const ssgHtml = renderToStaticMarkup(
-      each(products, (product) => {
+      each(products, (product, index) => {
         const title = isShopifyReference(product)
           ? property<string>(product, "title")
           : product.title;
-        return createElement("span", null, createElement(ShopifyOutput, { value: title }));
+        return createElement(
+          "span",
+          null,
+          createElement(ShopifyOutput, { value: index }),
+          ":",
+          createElement(ShopifyOutput, { value: title }),
+        );
       }),
     );
     const restored = restoreLiquidTokens(
@@ -153,21 +201,29 @@ describe("each", () => {
       globalState.__shopify_ssg_liquid_tokens as Map<string, string>,
     );
     expect(restored).toMatch(/\{% for shopify_item_\d+ in section\.settings\.products %\}/);
-    expect(restored).toMatch(/<span>\{\{ shopify_item_\d+\.title \}\}<\/span>/);
+    expect(restored).toMatch(
+      /<span>\{\{ forloop\.index0 \}\}:\{\{ shopify_item_\d+\.title \}\}<\/span>/,
+    );
 
     globalState.document = {};
     const clientHtml = renderToStaticMarkup(
       createElement(
         LiquidDataProvider,
         { value: { "collection:section.settings.products": [{ title: "One" }] } },
-        each(products, (product) => {
+        each(products, (product, index) => {
           const title = isShopifyReference(product)
             ? property<string>(product, "title")
             : product.title;
-          return createElement("span", null, createElement(ShopifyOutput, { value: title }));
+          return createElement(
+            "span",
+            null,
+            createElement(ShopifyOutput, { value: index }),
+            ":",
+            createElement(ShopifyOutput, { value: title }),
+          );
         }),
       ),
     );
-    expect(clientHtml).toBe("<span>One</span>");
+    expect(clientHtml).toBe("<span>0:One</span>");
   });
 });

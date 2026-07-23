@@ -26,10 +26,12 @@ export type { UseLiquidOptions } from "./useLiquid";
 export { defineSettings, liquidExpression } from "./defineSettings";
 export type {
   LiquidExpression,
+  SettingsArrayContract,
   SettingsContract,
   SettingsProps,
   SettingsRefs,
 } from "./defineSettings";
+export type { SettingPropValue } from "./useProps";
 
 // ── Hydration Boundaries ───────────────────────────────────────────────────
 export { Island } from "./Island";
@@ -100,29 +102,12 @@ export { createSnippetProxy } from "./Snippet";
 
 export {
   assertValidSettingSchemas,
-  createCheckboxSetting,
-  createColorSchemeSetting,
-  createHeaderSetting,
-  createImageSetting,
-  createInlineRichTextSetting,
-  createNumberSetting,
-  createParagraphSetting,
-  createRangeSetting,
-  createSelectSetting,
-  createSettingsSchema,
-  createTextSetting,
-  createUrlSetting,
   SettingSchemaValidationError,
   validateSettingSchemas,
 } from "../contract";
 
-export type {
-  SettingDescriptor,
-  SettingDescriptorMap,
-  SettingSchemaFromMap,
-  SettingValidationCode,
-  SettingValidationError,
-} from "../contract";
+export * from "../contract/builder";
+export type { SettingValidationCode, SettingValidationError } from "../contract";
 
 export {
   and,

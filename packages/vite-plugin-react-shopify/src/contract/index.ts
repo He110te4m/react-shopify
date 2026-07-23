@@ -1,34 +1,4 @@
-export {
-  createCheckboxSetting,
-  createColorSchemeSetting,
-  createHeaderSetting,
-  createImageSetting,
-  createInlineRichTextSetting,
-  createNumberSetting,
-  createParagraphSetting,
-  createRangeSetting,
-  createSelectSetting,
-  createSettingsSchema,
-  createTextSetting,
-  createUrlSetting,
-} from "./builder";
-
-export type {
-  CheckboxSettingOptions,
-  ColorSchemeSettingOptions,
-  HeaderSettingOptions,
-  ImageSettingOptions,
-  InlineRichTextSettingOptions,
-  NumberSettingOptions,
-  ParagraphSettingOptions,
-  RangeSettingOptions,
-  SelectSettingOptions,
-  SettingDescriptor,
-  SettingDescriptorMap,
-  SettingSchemaFromMap,
-  TextSettingOptions,
-  UrlSettingOptions,
-} from "./builder";
+export * from "./builder";
 
 export {
   assertValidSettingSchemas,

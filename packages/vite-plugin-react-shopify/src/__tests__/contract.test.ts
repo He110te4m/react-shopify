@@ -1,10 +1,42 @@
-import { describe, expect, it } from "vitest";
-import type { InferSettings } from "../types/settings";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import type { InferSettings, ShopifySettingObject } from "../types/settings";
 import {
+  createArticleListSetting,
+  createArticleSetting,
+  createBlogSetting,
   createCheckboxSetting,
+  createCollectionListSetting,
+  createCollectionSetting,
+  createColorBackgroundSetting,
+  createColorSchemeGroupSetting,
+  createColorSchemeSetting,
+  createColorSetting,
+  createFontPickerSetting,
+  createHeaderSetting,
+  createHtmlSetting,
   createImageSetting,
+  createInlineRichTextSetting,
+  createLineBreakSetting,
+  createLinkListSetting,
+  createLiquidSetting,
+  createMetaobjectListSetting,
+  createMetaobjectSetting,
+  createNumberSetting,
+  createPageSetting,
+  createParagraphSetting,
+  createProductListSetting,
+  createProductSetting,
+  createRadioSetting,
+  createRangeSetting,
+  createRichTextSetting,
+  createSelectSetting,
   createSettingsSchema,
+  createTextAlignmentSetting,
   createTextSetting,
+  createTextareaSetting,
+  createUrlSetting,
+  createVideoSetting,
+  createVideoUrlSetting,
   validateSettingSchemas,
 } from "../contract";
 
@@ -31,8 +63,114 @@ describe("setting builders", () => {
     ]);
 
     type Props = InferSettings<typeof schema>;
-    const props: Props = { title: "Hello", image: "", visible: false };
+    const props: Props = { title: "Hello", image: null, visible: false };
     expect(props.visible).toBe(false);
+  });
+
+  it("provides builders for every declared setting schema type", () => {
+    const schema = createSettingsSchema({
+      article: createArticleSetting({ label: "Article" }),
+      articles: createArticleListSetting({ label: "Articles" }),
+      blog: createBlogSetting({ label: "Blog" }),
+      checkbox: createCheckboxSetting({ label: "Checkbox" }),
+      collection: createCollectionSetting({ label: "Collection" }),
+      collections: createCollectionListSetting({ label: "Collections" }),
+      color: createColorSetting({ label: "Color" }),
+      background: createColorBackgroundSetting({ label: "Background" }),
+      colorScheme: createColorSchemeSetting({ label: "Color scheme" }),
+      schemes: createColorSchemeGroupSetting({
+        label: "Schemes",
+        definition: [{ type: "color", id: "text", label: "Text", default: "#000000" }],
+        role: { text: "text", background: "text" },
+      }),
+      font: createFontPickerSetting({ label: "Font", default: "helvetica_n4" }),
+      html: createHtmlSetting({ label: "HTML" }),
+      image: createImageSetting({ label: "Image" }),
+      inline: createInlineRichTextSetting({ label: "Inline" }),
+      menu: createLinkListSetting({ label: "Menu" }),
+      liquid: createLiquidSetting({ label: "Liquid" }),
+      metaobject: createMetaobjectSetting({ label: "Metaobject", metaobject_type: "author" }),
+      metaobjects: createMetaobjectListSetting({
+        label: "Metaobjects",
+        metaobject_type: "author",
+      }),
+      number: createNumberSetting({ label: "Number" }),
+      page: createPageSetting({ label: "Page" }),
+      product: createProductSetting({ label: "Product" }),
+      products: createProductListSetting({ label: "Products" }),
+      radio: createRadioSetting({
+        label: "Radio",
+        options: [{ value: "a", label: "A" }],
+      }),
+      range: createRangeSetting({ label: "Range", min: 0, max: 10, default: 5 }),
+      richtext: createRichTextSetting({ label: "Rich text" }),
+      select: createSelectSetting({
+        label: "Select",
+        options: [{ value: "a", label: "A" }],
+      }),
+      alignment: createTextAlignmentSetting({ label: "Alignment" }),
+      text: createTextSetting({ label: "Text" }),
+      textarea: createTextareaSetting({ label: "Textarea" }),
+      url: createUrlSetting({ label: "URL" }),
+      video: createVideoSetting({ label: "Video" }),
+      videoUrl: createVideoUrlSetting({ label: "Video URL", accept: ["youtube"] }),
+      header: createHeaderSetting({ content: "Header" }),
+      paragraph: createParagraphSetting({ content: "Paragraph" }),
+      break: createLineBreakSetting(),
+    });
+
+    expect(schema.map((setting) => setting.type)).toEqual([
+      "article",
+      "article_list",
+      "blog",
+      "checkbox",
+      "collection",
+      "collection_list",
+      "color",
+      "color_background",
+      "color_scheme",
+      "color_scheme_group",
+      "font_picker",
+      "html",
+      "image_picker",
+      "inline_richtext",
+      "link_list",
+      "liquid",
+      "metaobject",
+      "metaobject_list",
+      "number",
+      "page",
+      "product",
+      "product_list",
+      "radio",
+      "range",
+      "richtext",
+      "select",
+      "text_alignment",
+      "text",
+      "textarea",
+      "url",
+      "video",
+      "video_url",
+      "header",
+      "paragraph",
+      "line_break",
+    ]);
+    expect(schema[0]).toMatchObject({ id: "article" });
+    expect(schema.at(-1)).toEqual({ type: "line_break" });
+  });
+
+  it("infers object and object-list values instead of strings", () => {
+    const schema = createSettingsSchema({
+      product: createProductSetting({ label: "Product" }),
+      products: createProductListSetting({ label: "Products" }),
+      url: createUrlSetting({ label: "URL" }),
+    });
+    type Props = InferSettings<typeof schema>;
+
+    expectTypeOf<Props["product"]>().toEqualTypeOf<ShopifySettingObject | null>();
+    expectTypeOf<Props["products"]>().toEqualTypeOf<ShopifySettingObject[]>();
+    expectTypeOf<Props["url"]>().toEqualTypeOf<string>();
   });
 
   it("keeps an explicit id instead of the object key", () => {

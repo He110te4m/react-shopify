@@ -1,11 +1,12 @@
 /**
- * @file AST-based hydration mismatch fixer for JSX/TSX source.
+ * @file AST-based hydration mismatch diagnostics for JSX/TSX source.
  *
  * React SSR renders adjacent text and expression children without separators,
  * but browser hydration treats them as separate DOM nodes, causing mismatches.
- * This module parses the source with OXC, walks the AST, detects runs of
- * adjacent `JSXText` + `JSXExpressionContainer` children, and wraps them in a
- * template literal `{\`...\`}` so React produces a single text node.
+ * This module parses the source with OXC and detects runs of adjacent
+ * `JSXText` + `JSXExpressionContainer` children. It intentionally does not
+ * rewrite them: coercing arbitrary React children into a template literal
+ * changes the rendering semantics of nullish, boolean, and element values.
  */
 
 import type { JSXChild, JSXElement, JSXFragment } from "@oxc-project/types";
@@ -15,19 +16,12 @@ import { logger } from "../core/logger";
 
 const log = logger("hydration-fix");
 
-interface Replacement {
-  start: number;
-  end: number;
-  replacement: string;
-}
-
 /**
- * Analyze and fix a JSX/TSX source file for adjacent-text hydration issues.
+ * Analyze a JSX/TSX source file for adjacent-text hydration risks.
  *
  * @param source The raw source code string.
  * @param filePath The file path (used for error reporting and parser config).
- * @returns The fixed source with zero or more replacements applied, and a
- *   count of how many fixes were made.
+ * @returns The unchanged source and a count of potential issues found.
  */
 export function autoFixAdjacentText(
   source: string,
@@ -36,50 +30,38 @@ export function autoFixAdjacentText(
   const parseResult = parseSync(filePath, source);
 
   if (parseResult.errors.length > 0) {
-    log.debug("OXC parse errors for %s, skipping hydration fix", filePath);
+    log.debug("OXC parse errors for %s, skipping hydration diagnostics", filePath);
     return { result: source, fixCount: 0 };
   }
 
-  const replacements: Replacement[] = [];
+  let issueCount = 0;
   walk(parseResult.program, {
     enter(node) {
       if (node.type === "JSXElement" || node.type === "JSXFragment") {
         const children = (node as JSXElement | JSXFragment).children;
         if (children.length > 0) {
-          processChildren(children, source, replacements);
+          issueCount += countAdjacentTextIssues(children, source);
         }
       }
     },
   });
 
-  if (replacements.length === 0) {
+  if (issueCount === 0) {
     return { result: source, fixCount: 0 };
   }
 
-  // Apply replacements in reverse order so offsets stay valid
-  replacements.sort((a, b) => b.start - a.start);
-
-  let fixed = source;
-  for (const { start, end, replacement } of replacements) {
-    fixed = fixed.slice(0, start) + replacement + fixed.slice(end);
-  }
-
   log.warn(
-    `auto-fixed ${replacements.length} adjacent text+expression issue(s) in ${filePath}`,
+    `detected ${issueCount} adjacent text+expression hydration risk(s) in ${filePath}; source was left unchanged`,
   );
 
-  return { result: fixed, fixCount: replacements.length };
+  return { result: source, fixCount: issueCount };
 }
 
 /**
- * Walk a JSX element's children, detecting runs of adjacent text +
- * expression children and emitting replacement records.
+ * Count runs of adjacent text + expression children in a JSX element.
  */
-function processChildren(
-  children: JSXChild[],
-  source: string,
-  replacements: Replacement[],
-): void {
+function countAdjacentTextIssues(children: JSXChild[], source: string): number {
+  let issueCount = 0;
   let i = 0;
   while (i < children.length) {
     if (children[i].type !== "JSXText" && children[i].type !== "JSXExpressionContainer") {
@@ -112,29 +94,25 @@ function processChildren(
     const runText = source.slice(sliceStart, sliceEnd);
     const trimmed = runText.trim();
 
-    if (!needsFix(trimmed)) {
+    if (!isAdjacentTextRisk(trimmed)) {
       i = runEnd + 1;
       continue;
     }
 
-    // Wrap in template literal: `{x} {y}` → {`${x} ${y}`}
-    const tpl = trimmed.replace(/\{([^}]+)\}/g, "${$1}");
-    replacements.push({
-      start: sliceStart,
-      end: sliceEnd,
-      replacement: `{\`${tpl}\`}`,
-    });
+    issueCount++;
 
     i = runEnd + 1;
   }
+
+  return issueCount;
 }
 
 /**
- * Decide whether a run of JSX text+expressions needs fixing.
+ * Decide whether a run of JSX text+expressions warrants a diagnostic.
  *
  * Single expressions or elements containing HTML tags are safe.
  */
-function needsFix(content: string): boolean {
+function isAdjacentTextRisk(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
 

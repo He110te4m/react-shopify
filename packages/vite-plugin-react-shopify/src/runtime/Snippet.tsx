@@ -71,7 +71,7 @@ export function createSnippetProxy(
         continue;
       }
       if (!PROP_PATTERN.test(name)) throw new TypeError(`Invalid snippet prop name ${name}`);
-      if (allowed.size > 0 && !allowed.has(name)) {
+      if (!allowed.has(name)) {
         throw new TypeError(`Snippet ${snippetName} does not declare prop ${name}`);
       }
       const compiled = compileProp(snippetName, name, value);

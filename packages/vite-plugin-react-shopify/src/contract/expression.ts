@@ -5,7 +5,11 @@ export type ShopifyContentKind = "text" | "html" | "object";
 export type ShopifyLiteral = string | number | boolean | null;
 
 export type ShopifyExpressionNode =
-  | { readonly kind: "literal"; readonly value: ShopifyLiteral }
+  | {
+      readonly kind: "literal";
+      readonly value: ShopifyLiteral;
+      readonly numberFormat?: "float";
+    }
   | { readonly kind: "path"; readonly segments: readonly string[] }
   | { readonly kind: "property"; readonly source: ShopifyExpressionNode; readonly name: string }
   | {
@@ -69,8 +73,8 @@ function reference<T, Content extends ShopifyContentKind = "text">(
   }) as ShopifyReference<T, Content>;
 }
 
-function literalNode(value: ShopifyLiteral): ShopifyExpressionNode {
-  return freezeNode({ kind: "literal", value });
+function literalNode(value: ShopifyLiteral, numberFormat?: "float"): ShopifyExpressionNode {
+  return freezeNode({ kind: "literal", value, ...(numberFormat ? { numberFormat } : {}) });
 }
 
 function operandNode(
@@ -79,28 +83,55 @@ function operandNode(
   return isShopifyReference(value) ? value.node : literalNode(value);
 }
 
-function compileLiteral(value: ShopifyLiteral): string {
+function compileLiteral(value: ShopifyLiteral, numberFormat?: "float"): string {
   if (value === null) return "nil";
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new TypeError(`Liquid numeric literals must be finite`);
+    if (numberFormat === "float" && Number.isInteger(value)) return `${value}.0`;
     return String(value);
+  }
+  if (numberFormat) {
+    throw new TypeError("Liquid float literals require a numeric value");
   }
   if (typeof value === "boolean") return value ? "true" : "false";
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 
+function assertComparisonOperand(node: ShopifyExpressionNode): void {
+  if (node.kind === "binary" || node.kind === "logical") {
+    throw new TypeError(
+      "Liquid comparison operands cannot contain comparison or logical expressions",
+    );
+  }
+}
+
+function nestedLogicalError(parent: "and" | "or", child: "and" | "or"): TypeError {
+  return new TypeError(
+    `Liquid cannot nest ${child}() inside ${parent}(); parentheses are not supported`,
+  );
+}
+
 export function compileShopifyNode(node: ShopifyExpressionNode): string {
   switch (node.kind) {
     case "literal":
-      return compileLiteral(node.value);
+      return compileLiteral(node.value, node.numberFormat);
     case "path":
       return node.segments.join(".");
     case "property":
       return `${compileShopifyNode(node.source)}.${node.name}`;
     case "binary":
+      assertComparisonOperand(node.left);
+      assertComparisonOperand(node.right);
       return `${compileShopifyNode(node.left)} ${node.operator} ${compileShopifyNode(node.right)}`;
     case "logical":
-      return node.operands.map(compileShopifyNode).join(` ${node.operator} `);
+      return node.operands
+        .map((operand) => {
+          if (operand.kind === "logical" && operand.operator !== node.operator) {
+            throw nestedLogicalError(node.operator, operand.operator);
+          }
+          return compileShopifyNode(operand);
+        })
+        .join(` ${node.operator} `);
     case "filter": {
       const args = node.args.length ? `: ${node.args.map(compileShopifyNode).join(", ")}` : "";
       return `${compileShopifyNode(node.source)} | ${node.name}${args}`;
@@ -177,11 +208,14 @@ function binary<T extends string | number | boolean>(
   left: ShopifyReference<T, any>,
   right: ShopifyReference<T, any> | T,
 ): ShopifyCondition {
+  const rightNode = operandNode(right);
+  assertComparisonOperand(left.node);
+  assertComparisonOperand(rightNode);
   return reference({
     kind: "binary",
     operator,
     left: left.node,
-    right: operandNode(right),
+    right: rightNode,
   });
 }
 
@@ -242,6 +276,25 @@ export function isTruthy(value: ShopifyReference<boolean, any>): ShopifyConditio
 }
 
 export function not(condition: ShopifyCondition): ShopifyCondition {
+  const node = condition.node;
+  if (node.kind === "binary") {
+    const operator = {
+      "==": "!=",
+      "!=": "==",
+      ">": "<=",
+      ">=": "<",
+      "<": ">=",
+      "<=": ">",
+    } as const;
+    return reference({ ...node, operator: operator[node.operator] });
+  }
+  if (node.kind === "logical") {
+    const operator = node.operator === "and" ? "or" : "and";
+    return logical(
+      operator,
+      node.operands.map((operand) => not(reference<boolean>(operand))),
+    );
+  }
   return eq(condition, false);
 }
 
@@ -253,7 +306,13 @@ function logical(
     throw new TypeError(`${operator}() requires at least one condition`);
   }
   if (conditions.length === 1) return conditions[0];
-  return reference({ kind: "logical", operator, operands: conditions.map((item) => item.node) });
+  const operands = conditions.flatMap((condition) => {
+    const node = condition.node;
+    if (node.kind !== "logical") return [node];
+    if (node.operator !== operator) throw nestedLogicalError(operator, node.operator);
+    return node.operands;
+  });
+  return reference({ kind: "logical", operator, operands });
 }
 
 export function and(...conditions: readonly ShopifyCondition[]): ShopifyCondition {
@@ -280,9 +339,28 @@ export function filter<T = string, Content extends ShopifyContentKind = "text">(
 
 export function dividedBy(
   value: ShopifyReference<number, any> | number,
+  divisor: ShopifyReference<number, any>,
+): ShopifyReference<number>;
+export function dividedBy(
+  value: ShopifyReference<number, any> | number,
+  divisor: number,
+  options?: { readonly divisorFormat: "float" },
+): ShopifyReference<number>;
+export function dividedBy(
+  value: ShopifyReference<number, any> | number,
   divisor: ShopifyReference<number, any> | number,
+  options?: { readonly divisorFormat: "float" },
 ): ShopifyReference<number> {
-  return filter<number>(value, "divided_by", divisor);
+  const divisorNode =
+    options?.divisorFormat === "float"
+      ? literalNode(divisor as number, "float")
+      : operandNode(divisor);
+  return reference({
+    kind: "filter",
+    source: operandNode(value),
+    name: "divided_by",
+    args: [divisorNode],
+  });
 }
 
 export function multiply(

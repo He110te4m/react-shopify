@@ -1,7 +1,7 @@
 /**
- * @file Vite plugin wrapper for the hydration fix transform.
+ * @file Vite plugin wrapper for hydration mismatch diagnostics.
  *
- * Runs in `enforce: "pre"` so the fix is applied before any other transforms.
+ * Runs in `enforce: "pre"` so diagnostics see the original JSX source.
  * Only processes `.tsx`/`.jsx` files within the project's source directory.
  */
 
@@ -11,8 +11,8 @@ import type { ResolvedOptions } from "../core/options";
 import { autoFixAdjacentText } from "./index";
 
 /**
- * Vite plugin that applies {@link autoFixAdjacentText} to all React component
- * files before they reach the main build pipeline.
+ * Vite plugin that diagnoses adjacent text/expression hydration risks without
+ * transforming React component source.
  */
 export default function hydrationFix(options: ResolvedOptions): Plugin {
   const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);
@@ -25,10 +25,7 @@ export default function hydrationFix(options: ResolvedOptions): Plugin {
       if (!/\.(tsx|jsx)$/.test(id)) return;
       if (!id.startsWith(sourceDir)) return;
 
-      const { result, fixCount } = autoFixAdjacentText(code, id);
-      if (fixCount > 0) {
-        return result;
-      }
+      autoFixAdjacentText(code, id);
       return;
     },
   };

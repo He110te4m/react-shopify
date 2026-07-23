@@ -7,7 +7,7 @@ export type ShopifyLoopValue<T> = T | ShopifyReference<T, "object">;
 
 export interface LiquidEachProps<T> {
   collection: ShopifyReference<readonly T[], "object">;
-  children: (item: ShopifyLoopValue<T>, index: number) => ReactNode;
+  children: (item: ShopifyLoopValue<T>, index: number | ShopifyReference<number>) => ReactNode;
   fallback?: ReactNode;
   itemName?: string;
   trackKey?: string;
@@ -30,10 +30,11 @@ function LiquidEachImpl<T>({
     ctx.track(key, { expression });
     const variableName = itemName ?? `shopify_item_${loopId++}`;
     const item = path<T, "object">(variableName);
+    const index = path<number>("forloop", "index0");
     return (
       <>
         {ctx.serialize(`{% for ${variableName} in ${expression} %}`)}
-        {children(item, 0)}
+        {children(item, index)}
         {fallback === null ? null : ctx.serialize("{% else %}")}
         {fallback}
         {ctx.serialize("{% endfor %}")}
@@ -54,7 +55,7 @@ function LiquidEachImpl<T>({
 
 export function each<T>(
   collection: ShopifyReference<readonly T[], "object">,
-  render: (item: ShopifyLoopValue<T>, index: number) => ReactNode,
+  render: (item: ShopifyLoopValue<T>, index: number | ShopifyReference<number>) => ReactNode,
   fallback?: ReactNode | (() => ReactNode),
 ): ReactElement {
   return createElement(LiquidEachImpl<T>, {

@@ -28,9 +28,16 @@ export interface SnippetArtifact {
   props: readonly string[];
 }
 
-function resolveSourceImport(specifier: string, resolveDir: string): string | undefined {
-  if (!specifier.startsWith(".") && !path.isAbsolute(specifier)) return undefined;
-  const base = path.resolve(resolveDir, specifier);
+function resolveSourceImport(
+  specifier: string,
+  resolveDir: string,
+  sourceDir: string,
+): string | undefined {
+  const isSourceAlias = specifier.startsWith("~/") || specifier.startsWith("@/");
+  if (!isSourceAlias && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return undefined;
+  const base = isSourceAlias
+    ? path.resolve(sourceDir, specifier.slice(2))
+    : path.resolve(resolveDir, specifier);
   const candidates = [
     base,
     `${base}.tsx`,
@@ -110,7 +117,7 @@ export async function bundleEntry(
         name: "ssg-snippet-proxy",
         setup(build: any) {
           build.onResolve({ filter: /.*/ }, (args: any) => {
-            const resolved = resolveSourceImport(args.path, args.resolveDir);
+            const resolved = resolveSourceImport(args.path, args.resolveDir, sourceDir);
             if (!resolved || !snippetByPath.has(path.resolve(resolved))) return undefined;
             return { namespace: "ssg-snippet-proxy", path: path.resolve(resolved) };
           });

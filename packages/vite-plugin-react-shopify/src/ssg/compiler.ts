@@ -143,14 +143,16 @@ async function compileEntry(
   cssSnippetMap: Map<string, string>,
   snippetArtifacts: readonly SnippetArtifact[],
 ): Promise<{ output: GeneratedOutput; runtime: "static" | "hydrate" | "client" }> {
+  const source = fs.readFileSync(entry.filePath, "utf-8");
+  const inferredRuntime = isStaticComponent(source, entry.filePath) ? "static" : "hydrate";
+  assertSnippetRuntime(entry, inferredRuntime);
+
   // Bundle via esbuild
   const bundleResult = await bundleEntry(entry, projectRoot, sourceDir, snippetArtifacts);
   if (!bundleResult) throw new Error(`Unable to bundle ${entry.filePath}`);
 
   try {
     // SSR render
-    const source = fs.readFileSync(entry.filePath, "utf-8");
-    const inferredRuntime = isStaticComponent(source, entry.filePath) ? "static" : "hydrate";
     const renderResult = await renderEntry(
       bundleResult.tmpFile,
       entry,
@@ -160,6 +162,11 @@ async function compileEntry(
     if (!renderResult) throw new Error(`Unable to render ${entry.filePath}`);
 
     const { html, trackedExpressions, liquidBlocks, trackMap, runtime } = renderResult;
+    if (entry.targetType === "snippet" && runtime !== "static") {
+      throw new Error(
+        `Snippet entry ${entry.filePath} must be static; resolved runtime ${JSON.stringify(runtime)} is not supported`,
+      );
+    }
 
     validateShopifyMeta(entry.meta, {
       kebabName: entry.kebabName,
@@ -234,6 +241,25 @@ async function compileEntry(
     } catch {
       /* ignore */
     }
+  }
+}
+
+function assertSnippetRuntime(
+  entry: ReturnType<typeof scanEntries>[number],
+  inferredRuntime: "static" | "hydrate",
+): void {
+  if (entry.targetType !== "snippet") return;
+  if (entry.runtime === "hydrate" || entry.runtime === "client") {
+    throw new Error(
+      `Snippet entry ${entry.filePath} must be static; shopifyEntry.runtime ${JSON.stringify(entry.runtime)} is not supported`,
+    );
+  }
+  if (inferredRuntime !== "static") {
+    const reason =
+      entry.runtime === "auto"
+        ? "auto runtime inferred client interaction"
+        : "it declares static runtime but contains client interaction";
+    throw new Error(`Snippet entry ${entry.filePath} must be static; ${reason}`);
   }
 }
 

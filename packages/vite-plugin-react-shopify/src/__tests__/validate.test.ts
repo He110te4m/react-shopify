@@ -76,116 +76,102 @@ describe("validate/rules", () => {
       expect(result).toContain("empty string default");
     });
 
-  it("handles setting without id", () => {
-    const result = rules.checkEmptyStringDefault({ type: "text", default: "" });
-    expect(result).toContain("(no id)");
-  });
-});
-
-describe("checkEntryTypeOverride", () => {
-  it("returns null when meta type is absent", () => {
-    expect(rules.checkEntryTypeOverride(undefined, "block", "test-block")).toBeNull();
+    it("handles setting without id", () => {
+      const result = rules.checkEmptyStringDefault({ type: "text", default: "" });
+      expect(result).toContain("(no id)");
+    });
   });
 
-  it("warns even when meta type matches directory-inferred target type", () => {
-    const result = rules.checkEntryTypeOverride("block", "block", "test-block");
-    expect(result).not.toBeNull();
-    expect(result).toContain("shopifyMeta.type is deprecated and ignored");
-    expect(result).toContain('"block"');
+  describe("checkEntryTypeOverride", () => {
+    it("returns null when meta type is absent", () => {
+      expect(rules.checkEntryTypeOverride(undefined, "block", "test-block")).toBeNull();
+    });
+
+    it("warns even when meta type matches directory-inferred target type", () => {
+      const result = rules.checkEntryTypeOverride("block", "block", "test-block");
+      expect(result).not.toBeNull();
+      expect(result).toContain("shopifyMeta.type is deprecated and ignored");
+      expect(result).toContain('"block"');
+    });
+
+    it("warns when meta type conflicts with directory-inferred target type", () => {
+      const result = rules.checkEntryTypeOverride("section", "block", "test-block");
+      expect(result).not.toBeNull();
+      expect(result).toContain('shopifyMeta.type "section" is deprecated and ignored');
+      expect(result).toContain('"block"');
+      expect(result).toContain("blocks[].type");
+    });
   });
 
-  it("warns when meta type conflicts with directory-inferred target type", () => {
-    const result = rules.checkEntryTypeOverride("section", "block", "test-block");
-    expect(result).not.toBeNull();
-    expect(result).toContain('shopifyMeta.type "section" is deprecated and ignored');
-    expect(result).toContain('"block"');
-    expect(result).toContain("blocks[].type");
-  });
-});
+  describe("checkBlocksCoexistence", () => {
+    it("returns null for empty blocks array", () => {
+      expect(rules.checkBlocksCoexistence([], "test-comp")).toBeNull();
+    });
 
-describe("checkBlocksCoexistence", () => {
-  it("returns null for empty blocks array", () => {
-    expect(rules.checkBlocksCoexistence([], "test-comp")).toBeNull();
-  });
+    it("returns null for undefined blocks", () => {
+      expect(rules.checkBlocksCoexistence(undefined, "test-comp")).toBeNull();
+    });
 
-  it("returns null for undefined blocks", () => {
-    expect(rules.checkBlocksCoexistence(undefined, "test-comp")).toBeNull();
-  });
+    it("returns null for single entry", () => {
+      expect(rules.checkBlocksCoexistence([{ type: "@theme" }], "test-comp")).toBeNull();
+    });
 
-  it("returns null for single entry", () => {
-    expect(
-      rules.checkBlocksCoexistence([{ type: "@theme" }], "test-comp"),
-    ).toBeNull();
-  });
+    it("returns null when all entries are theme/app references", () => {
+      expect(
+        rules.checkBlocksCoexistence(
+          [{ type: "@theme" }, { type: "@app" }, { type: "slide" }],
+          "test-comp",
+        ),
+      ).toBeNull();
+    });
 
-  it("returns null when all entries are theme/app references", () => {
-    expect(
-      rules.checkBlocksCoexistence(
-        [{ type: "@theme" }, { type: "@app" }, { type: "slide" }],
+    it("returns null when all entries are section blocks", () => {
+      expect(
+        rules.checkBlocksCoexistence(
+          [
+            { type: "product", name: "Product" },
+            { type: "collection", name: "Collection", limit: 2 },
+          ],
+          "test-comp",
+        ),
+      ).toBeNull();
+    });
+
+    it("warns when section block and @theme are mixed", () => {
+      const result = rules.checkBlocksCoexistence(
+        [{ type: "product", name: "Product" }, { type: "@theme" }],
         "test-comp",
-      ),
-    ).toBeNull();
-  });
+      );
+      expect(result).not.toBeNull();
+      expect(result).toContain("test-comp");
+      expect(result).toContain("mutually exclusive");
+      expect(result).toContain("@theme");
+      expect(result).toContain("Product");
+    });
 
-  it("returns null when all entries are section blocks", () => {
-    expect(
-      rules.checkBlocksCoexistence(
-        [
-          { type: "product", name: "Product" },
-          { type: "collection", name: "Collection", limit: 2 },
-        ],
+    it("warns when section block and theme block filename are mixed", () => {
+      const result = rules.checkBlocksCoexistence(
+        [{ type: "slide" }, { type: "product", name: "Product", settings: [] }],
         "test-comp",
-      ),
-    ).toBeNull();
-  });
+      );
+      expect(result).not.toBeNull();
+      expect(result).toContain("mutually exclusive");
+    });
 
-  it("warns when section block and @theme are mixed", () => {
-    const result = rules.checkBlocksCoexistence(
-      [
-        { type: "product", name: "Product" },
-        { type: "@theme" },
-      ],
-      "test-comp",
-    );
-    expect(result).not.toBeNull();
-    expect(result).toContain("test-comp");
-    expect(result).toContain("mutually exclusive");
-    expect(result).toContain("@theme");
-    expect(result).toContain("Product");
+    it("warns when section block has only limit (no name)", () => {
+      const result = rules.checkBlocksCoexistence(
+        [{ type: "@app" }, { type: "product", limit: 3 }],
+        "test-comp",
+      );
+      expect(result).not.toBeNull();
+    });
   });
-
-  it("warns when section block and theme block filename are mixed", () => {
-    const result = rules.checkBlocksCoexistence(
-      [
-        { type: "slide" },
-        { type: "product", name: "Product", settings: [] },
-      ],
-      "test-comp",
-    );
-    expect(result).not.toBeNull();
-    expect(result).toContain("mutually exclusive");
-  });
-
-  it("warns when section block has only limit (no name)", () => {
-    const result = rules.checkBlocksCoexistence(
-      [
-        { type: "@app" },
-        { type: "product", limit: 3 },
-      ],
-      "test-comp",
-    );
-    expect(result).not.toBeNull();
-  });
-});
 });
 
 describe("validateShopifyMeta", () => {
   it("warns about long name", () => {
     const meta = { name: "A".repeat(30) };
-    const warnings = validateShopifyMeta(
-      meta,
-      { kebabName: "test-comp", filePath: "/test.tsx" },
-    );
+    const warnings = validateShopifyMeta(meta, { kebabName: "test-comp", filePath: "/test.tsx" });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("30 chars");
     expect(meta.name).toBe("A".repeat(25));
@@ -193,37 +179,31 @@ describe("validateShopifyMeta", () => {
 
   it("does not truncate translated names", () => {
     const meta = { name: "t:sections.image-banner.name" };
-    const warnings = validateShopifyMeta(
-      meta,
-      { kebabName: "test-comp", filePath: "/test.tsx" },
-    );
+    const warnings = validateShopifyMeta(meta, { kebabName: "test-comp", filePath: "/test.tsx" });
     expect(warnings).toHaveLength(0);
     expect(meta.name).toBe("t:sections.image-banner.name");
   });
 
-  it("warns about empty string defaults", () => {
-    const warnings = validateShopifyMeta(
-      {
-        name: "Test",
-        settings: [
-          { id: "title", type: "text", default: "" },
-          { id: "count", type: "number", default: 0 },
-        ],
-      },
-      { kebabName: "test-comp", filePath: "/test.tsx" },
-    );
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("title");
-    expect(warnings[0]).toContain("empty string default");
+  it("fails on invalid setting schemas", () => {
+    expect(() =>
+      validateShopifyMeta(
+        {
+          name: "Test",
+          settings: [
+            { id: "title", type: "text", label: "Title", default: "" },
+            { id: "count", type: "number", label: "Count", default: 0 },
+          ],
+        },
+        { kebabName: "test-comp", filePath: "/test.tsx" },
+      ),
+    ).toThrow(/empty string default/);
   });
 
   it("returns empty array when all meta is valid", () => {
     const warnings = validateShopifyMeta(
       {
         name: "Test Section",
-        settings: [
-          { id: "title", type: "text", default: "Hello" },
-        ],
+        settings: [{ id: "title", type: "text", label: "Title", default: "Hello" }],
       },
       { kebabName: "test-comp", filePath: "/test.tsx" },
     );
@@ -234,10 +214,7 @@ describe("validateShopifyMeta", () => {
     const warnings = validateShopifyMeta(
       {
         name: "Test",
-        blocks: [
-          { type: "product", name: "Product" },
-          { type: "@theme" },
-        ],
+        blocks: [{ type: "product", name: "Product" }, { type: "@theme" }],
       },
       { kebabName: "test-comp", filePath: "/test.tsx" },
     );
@@ -268,6 +245,46 @@ describe("validateShopifyMeta", () => {
     );
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("deprecated");
+  });
+
+  it("fails when enabled_on and disabled_on coexist", () => {
+    expect(() =>
+      validateShopifyMeta(
+        {
+          name: "Test Section",
+          enabled_on: { templates: ["index"] },
+          disabled_on: { groups: ["footer"] },
+        },
+        { kebabName: "test-section", filePath: "/test.tsx" },
+      ),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it("fails when an availability scope is empty", () => {
+    expect(() =>
+      validateShopifyMeta(
+        { name: "Test Section", enabled_on: {} },
+        { kebabName: "test-section", filePath: "/test.tsx" },
+      ),
+    ).toThrow(/non-empty templates or groups array/);
+  });
+
+  it("validates settings nested in section blocks", () => {
+    expect(() =>
+      validateShopifyMeta(
+        {
+          name: "Test Section",
+          blocks: [
+            {
+              type: "slide",
+              name: "Slide",
+              settings: [{ type: "select", id: "layout", label: "Layout" } as never],
+            },
+          ],
+        },
+        { kebabName: "test-section", filePath: "/test.tsx" },
+      ),
+    ).toThrow(/requires a non-empty options array/);
   });
 });
 

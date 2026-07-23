@@ -48,4 +48,11 @@ describe("snippet SSG proxy", () => {
       renderToStaticMarkup(createElement(Snippet, { onClick: () => undefined })),
     ).toThrow(/cannot cross the Liquid boundary/);
   });
+
+  it("rejects undeclared props when the snippet declares no props", () => {
+    const Snippet = createSnippetProxy("react-empty", []);
+    expect(() => renderToStaticMarkup(createElement(Snippet, { extra: "value" }))).toThrow(
+      "Snippet react-empty does not declare prop extra",
+    );
+  });
 });

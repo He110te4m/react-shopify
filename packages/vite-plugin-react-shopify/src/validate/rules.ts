@@ -3,7 +3,7 @@
  */
 
 import type { BlockDefinition } from "../types/shopify";
-import type { ShopifyEntryType } from "../types/shopify";
+import type { ShopifyEntryType, TemplateScope } from "../types/shopify";
 
 /** Maximum allowed length for `shopifyMeta.name` (Shopify limit). */
 export const MAX_NAME_LENGTH = 25;
@@ -25,9 +25,11 @@ export function checkNameLength(meta: { name: string }, kebabName: string): stri
 /**
  * Check that a setting does not have an empty string as its default value.
  */
-export function checkEmptyStringDefault(
-  setting: { id?: string; type: string; default?: unknown },
-): string | null {
+export function checkEmptyStringDefault(setting: {
+  id?: string;
+  type: string;
+  default?: unknown;
+}): string | null {
   if (setting.default === "") {
     const label = "id" in setting && setting.id ? setting.id : "(no id)";
     return `Setting "${label}" (type: ${setting.type}) has empty string default`;
@@ -53,15 +55,63 @@ export function checkEntryTypeOverride(
   );
 }
 
+function checkScope(
+  field: "enabled_on" | "disabled_on",
+  scope: TemplateScope | undefined,
+  kebabName: string,
+): string[] {
+  if (scope === undefined) return [];
+
+  const errors: string[] = [];
+  const templates = scope.templates;
+  const groups = scope.groups;
+  const hasTemplates = Array.isArray(templates) && templates.length > 0;
+  const hasGroups = Array.isArray(groups) && groups.length > 0;
+
+  if (!hasTemplates && !hasGroups) {
+    errors.push(
+      `[${kebabName}] shopifyMeta.${field} must include a non-empty templates or groups array`,
+    );
+  }
+
+  for (const [key, values] of [
+    ["templates", templates],
+    ["groups", groups],
+  ] as const) {
+    if (
+      values !== undefined &&
+      (!Array.isArray(values) ||
+        values.some((value) => typeof value !== "string" || value.trim() === ""))
+    ) {
+      errors.push(`[${kebabName}] shopifyMeta.${field}.${key} must contain only non-empty strings`);
+    }
+  }
+
+  return errors;
+}
+
+/** Validate section availability scopes, which Shopify treats as schema errors. */
+export function checkAvailabilityScopes(
+  enabledOn: TemplateScope | undefined,
+  disabledOn: TemplateScope | undefined,
+  kebabName: string,
+): string[] {
+  const errors: string[] = [];
+  if (enabledOn !== undefined && disabledOn !== undefined) {
+    errors.push(
+      `[${kebabName}] shopifyMeta.enabled_on and shopifyMeta.disabled_on are mutually exclusive`,
+    );
+  }
+  errors.push(...checkScope("enabled_on", enabledOn, kebabName));
+  errors.push(...checkScope("disabled_on", disabledOn, kebabName));
+  return errors;
+}
+
 /** A block kind discriminator used by {@link checkBlocksCoexistence}. */
 type BlockKind = "section" | "theme-or-app";
 
 function classifyBlock(block: BlockDefinition): BlockKind {
-  if (
-    block.name !== undefined ||
-    block.limit !== undefined ||
-    block.settings !== undefined
-  ) {
+  if (block.name !== undefined || block.limit !== undefined || block.settings !== undefined) {
     return "section";
   }
   return "theme-or-app";
@@ -85,9 +135,7 @@ export function checkBlocksCoexistence(
   if (!conflict) return null;
 
   const [sectionExample, themeAppExample] =
-    firstKind === "section"
-      ? [blocks[0], conflict]
-      : [conflict, blocks[0]];
+    firstKind === "section" ? [blocks[0], conflict] : [conflict, blocks[0]];
 
   return (
     `[${kebabName}] shopifyMeta.blocks mixes section blocks and theme/app block ` +
@@ -128,16 +176,16 @@ export function checkBlockSlot(
   if (hasDeclaredBlocks && blockSlotCount === 0) {
     warnings.push(
       `[${kebabName}] shopifyMeta.blocks is declared but no <BlockSlot /> found ` +
-      `in the React tree — child blocks will not render. Add <BlockSlot /> ` +
-      `where you want child blocks to appear.`,
+        `in the React tree — child blocks will not render. Add <BlockSlot /> ` +
+        `where you want child blocks to appear.`,
     );
   }
 
   if (blockSlotCount > 1) {
     warnings.push(
       `[${kebabName}] Multiple <BlockSlot /> found (${blockSlotCount}). ` +
-      `Shopify supports at most one '{% content_for 'blocks' %}' per section/block. ` +
-      `Remove duplicate BlockSlot components.`,
+        `Shopify supports at most one '{% content_for 'blocks' %}' per section/block. ` +
+        `Remove duplicate BlockSlot components.`,
     );
   }
 

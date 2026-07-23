@@ -51,6 +51,7 @@ export function assembleLiquidFile(
   const type = entry.targetType;
   const parts = [buildDisclaimer(options.source)];
   const runtime = options.runtime ?? (scriptAsset ? "hydrate" : "static");
+  const moduleScripts = buildModuleScripts(entry, scriptAsset, options, runtime);
 
   const liquidPrepend = liquidBlocks.length > 0 ? liquidBlocks.join("\n") : "";
 
@@ -66,7 +67,17 @@ export function assembleLiquidFile(
       );
       break;
     case "block":
-      parts.push(...buildBlock(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
+      parts.push(
+        ...buildBlock(
+          html,
+          entry,
+          trackedExpressions,
+          liquidPrepend,
+          trackMap,
+          runtime,
+          moduleScripts,
+        ),
+      );
       break;
     case "snippet":
       parts.push(
@@ -93,23 +104,10 @@ export function assembleLiquidFile(
     );
   }
 
-  // Block scripts go BEFORE the section script so block entry modules
-  // register `ssg:blocks:ready` listeners before the section hydrates.
-  if (runtime !== "static" && options.blockScripts && options.blockScripts.length > 0) {
-    log.debug(
-      "%s: emitting %d block scripts before own script",
-      entry.kebabName,
-      options.blockScripts.length,
-    );
-    for (const bs of options.blockScripts) {
-      const assetPath = getAssetRelativePath(options.buildDir, bs);
-      parts.push("", `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
+  if (type !== "block") {
+    for (const script of moduleScripts) {
+      parts.push("", script);
     }
-  }
-
-  if (runtime !== "static" && scriptAsset) {
-    const assetPath = getAssetRelativePath(options.buildDir, scriptAsset);
-    parts.push("", `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
   }
 
   if (type !== "snippet") {
@@ -117,6 +115,38 @@ export function assembleLiquidFile(
   }
 
   return parts.join("\n") + "\n";
+}
+
+function buildModuleScripts(
+  entry: SSGEntry,
+  scriptAsset: string | null,
+  options: AssembleOptions,
+  runtime: "static" | "hydrate" | "client",
+): string[] {
+  if (runtime === "static") return [];
+
+  const scripts: string[] = [];
+
+  // Block scripts go BEFORE the section script so block entry modules
+  // register `ssg:blocks:ready` listeners before the section hydrates.
+  if (options.blockScripts && options.blockScripts.length > 0) {
+    log.debug(
+      "%s: emitting %d block scripts before own script",
+      entry.kebabName,
+      options.blockScripts.length,
+    );
+    for (const bs of options.blockScripts) {
+      const assetPath = getAssetRelativePath(options.buildDir, bs);
+      scripts.push(`<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
+    }
+  }
+
+  if (scriptAsset) {
+    const assetPath = getAssetRelativePath(options.buildDir, scriptAsset);
+    scripts.push(`<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
+  }
+
+  return scripts;
 }
 
 function resolveLiquidBridge(
@@ -180,6 +210,7 @@ function buildBlock(
   liquidPrepend: string = "",
   trackMap?: Map<string, TrackOptions>,
   runtime: "static" | "hydrate" | "client" = "static",
+  moduleScripts: string[] = [],
 ): string[] {
   const ownsWrapper = entry.meta.tag == null;
   if (runtime === "static" && !ownsWrapper) {
@@ -214,6 +245,10 @@ function buildBlock(
     lines.push(`  <div ${ATTR_HYDRATE}>${html}</div>`);
   } else {
     lines.push(html);
+  }
+
+  for (const script of moduleScripts) {
+    lines.push(`  ${script}`);
   }
 
   lines.push(`</${tag}>`);

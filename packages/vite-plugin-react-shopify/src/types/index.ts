@@ -5,11 +5,7 @@
  * full settings schema type hierarchy into a single import target.
  */
 
-export type {
-  Options,
-  SSGOptions,
-  ImportMapOptions,
-} from "./options";
+export type { Options, SSGOptions, ImportMapOptions } from "./options";
 
 export type {
   ShopifyEntryType,
@@ -28,6 +24,7 @@ export type { SSGEntry } from "./ssg";
 
 export type {
   SettingValue,
+  ResolvedSettingValue,
   InputSettings,
   CheckboxSetting,
   NumberSetting,
