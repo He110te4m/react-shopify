@@ -1,12 +1,20 @@
-import { useLiquid } from "vite-plugin-react-shopify/runtime";
+import {
+  createSettingExpression,
+  multiply,
+  round,
+  useShopifyValue,
+} from "vite-plugin-react-shopify/runtime";
+
+const paddingTop = createSettingExpression<number>("section", "padding_top");
+const paddingBottom = createSettingExpression<number>("section", "padding_bottom");
 
 export function useSectionPadding(): {
   style: React.CSSProperties;
 } {
-  const [ptDesktop] = useLiquid<string>("section.settings.padding_top");
-  const [pbDesktop] = useLiquid<string>("section.settings.padding_bottom");
-  const [ptMobile] = useLiquid<string>("section.settings.padding_top | times: 0.75 | round: 0");
-  const [pbMobile] = useLiquid<string>("section.settings.padding_bottom | times: 0.75 | round: 0");
+  const ptDesktop = useShopifyValue(paddingTop, { type: "number" });
+  const pbDesktop = useShopifyValue(paddingBottom, { type: "number" });
+  const ptMobile = useShopifyValue(round(multiply(paddingTop, 0.75)), { type: "number" });
+  const pbMobile = useShopifyValue(round(multiply(paddingBottom, 0.75)), { type: "number" });
 
   return {
     style: {

@@ -35,11 +35,18 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
 
     for (const filePath of files) {
       const absPath = path.resolve(filePath);
+      const relativePath = normalizePath(path.relative(sourceDir, absPath));
+      const relativeEntryPath = normalizePath(
+        path.relative(path.join(sourceDir, dir), absPath),
+      ).replace(/\.[^.]+$/, "");
       const fileName = path.basename(filePath, path.extname(filePath));
       const componentName = fileName;
-      const kebabName = toKebabCase(fileName);
+      const pathSegments = relativeEntryPath.split("/").map(toKebabCase);
+      const kebabName = pathSegments.join("-");
       const targetType: ShopifyEntryType = TYPE_BY_DIR[dir] ?? "section";
+      const id = `${targetType}-${pathSegments.join("--")}`;
       const runtime = extractEntryRuntime(absPath);
+      const snippetProps = targetType === "snippet" ? extractSnippetProps(absPath) : [];
       const meta: SSGEntry["meta"] = { name: deriveName(fileName) };
 
       if (targetType === "section") {
@@ -50,17 +57,49 @@ export function scanEntries(options: ResolvedOptions): SSGEntry[] {
         }
       }
 
-      entries.push({ filePath: absPath, componentName, kebabName, targetType, runtime, meta });
+      entries.push({
+        id,
+        filePath: absPath,
+        relativePath,
+        componentName,
+        kebabName,
+        targetType,
+        runtime,
+        snippetProps,
+        meta,
+      });
     }
   }
 
   return entries;
 }
 
+function extractSnippetProps(filePath: string): string[] {
+  const source = fs.readFileSync(filePath, "utf-8");
+  const match = source.match(
+    /export\s+default\s+function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\{([\s\S]*?)\}\s*(?::[^)]*)?\)/,
+  );
+  if (!match) return [];
+
+  return match[1]
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .replace(/^\.\.\./, "")
+        .split(/[=:]/, 1)[0]
+        .trim(),
+    )
+    .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
+}
+
 function extractEntryRuntime(filePath: string): SSGEntry["runtime"] {
   try {
     const source = fs.readFileSync(filePath, "utf-8");
-    const match = source.match(/(?:export\s+)?const\s+shopifyEntry\s*=\s*\{[\s\S]*?\bruntime\s*:\s*["'](auto|static|hydrate)["']/);
+    const match = source.match(
+      /(?:export\s+)?const\s+shopifyEntry\s*=\s*\{[\s\S]*?\bruntime\s*:\s*["'](auto|static|hydrate|client)["']/,
+    );
     return (match?.[1] as SSGEntry["runtime"] | undefined) ?? "auto";
   } catch {
     return "auto";

@@ -7,7 +7,6 @@
  * style attributes) before returning a `RenderResult` containing the HTML, all
  * tracked Liquid expressions, registered liquid blocks, and entry metadata.
  */
-import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import crypto from "node:crypto";
@@ -24,8 +23,14 @@ import {
   GW_LIQUID_TOKEN_PREFIX,
   GW_RUNTIME,
   GW_HTML_EXPRESSIONS,
+  GW_VALUE_REFERENCES,
 } from "../constants/attributes";
-import { normalizeVoidElements, normalizeStyleAttributes, restoreLiquidTokens } from "./post-process";
+import { path as shopifyPath, type ShopifyReference } from "../contract/expression";
+import {
+  normalizeVoidElements,
+  normalizeStyleAttributes,
+  restoreLiquidTokens,
+} from "./post-process";
 
 /**
  * Converts a local filesystem path to a `file://` URL suitable for dynamic
@@ -86,7 +91,7 @@ export interface RenderResult {
   liquidBlocks: string[];
   trackMap: Map<string, any>;
   entryMeta: any;
-  runtime: "static" | "hydrate";
+  runtime: "static" | "hydrate" | "client";
 }
 
 /**
@@ -110,7 +115,14 @@ export interface RenderResult {
  */
 export function renderEntry(
   tmpFile: string,
-  entry: { filePath: string; kebabName: string; targetType: string; meta: any },
+  entry: {
+    id: string;
+    filePath: string;
+    kebabName: string;
+    targetType: string;
+    snippetProps: readonly string[];
+    meta: any;
+  },
   projectRoot: string,
   inferredRuntime: "static" | "hydrate",
 ): Promise<RenderResult | null> {
@@ -118,12 +130,15 @@ export function renderEntry(
     const Component = mod.default;
     const shopifyMeta = mod.shopifyMeta;
     const configuredRuntime = mod.shopifyEntry?.runtime;
-    if (configuredRuntime && !["auto", "static", "hydrate"].includes(configuredRuntime)) {
-      throw new Error(`${entry.filePath} exports invalid shopifyEntry.runtime ${JSON.stringify(configuredRuntime)}`);
+    if (configuredRuntime && !["auto", "static", "hydrate", "client"].includes(configuredRuntime)) {
+      throw new Error(
+        `${entry.filePath} exports invalid shopifyEntry.runtime ${JSON.stringify(configuredRuntime)}`,
+      );
     }
-    const runtime = configuredRuntime && configuredRuntime !== "auto"
-      ? configuredRuntime as "static" | "hydrate"
-      : inferredRuntime;
+    const runtime =
+      configuredRuntime && configuredRuntime !== "auto"
+        ? (configuredRuntime as "static" | "hydrate" | "client")
+        : inferredRuntime;
 
     if (runtime === "static" && inferredRuntime === "hydrate") {
       throw new Error(`${entry.filePath} declares static runtime but contains client interaction`);
@@ -154,6 +169,7 @@ export function renderEntry(
     const trackedExpressions = new Set<string>();
     const liquidBlocks: string[] = [];
     const liquidTokens = new Map<string, string>();
+    const valueReferences = new Map<string, ShopifyReference<unknown, any>>();
 
     try {
       // Global state: tells hooks what type of Liquid entity we're rendering.
@@ -166,7 +182,8 @@ export function renderEntry(
       (globalThis as any)[GW_FILTERS] = filterMap;
       const htmlExpressions = new Set<string>();
       for (const setting of shopifyMeta?.settings ?? []) {
-        if (!["html", "richtext", "inline_richtext"].includes(setting.type) || !setting.id) continue;
+        if (!["html", "richtext", "inline_richtext"].includes(setting.type) || !setting.id)
+          continue;
         htmlExpressions.add(`${prefix}${setting.id}`);
       }
       (globalThis as any)[GW_HTML_EXPRESSIONS] = htmlExpressions;
@@ -175,13 +192,26 @@ export function renderEntry(
       (globalThis as any)[GW_TRACK] = trackedExpressions;
       (globalThis as any)[GW_BLOCKS] = liquidBlocks;
       (globalThis as any)[GW_LIQUID_TOKENS] = liquidTokens;
-      (globalThis as any)[GW_LIQUID_TOKEN_PREFIX] = `__VRS_LIQUID_${crypto.randomBytes(8).toString("hex")}`;
+      (globalThis as any)[GW_LIQUID_TOKEN_PREFIX] =
+        `__VRS_LIQUID_${crypto.randomBytes(8).toString("hex")}`;
+      (globalThis as any)[GW_VALUE_REFERENCES] = valueReferences;
 
       // Island key counter — auto-incremented by <Island> during SSR so each
       // island gets a unique `data-ssg-i` attribute for client pre-capture.
       (globalThis as any)[GW_ISLAND_COUNTER] = { count: 0 };
 
-      const element = createElement(Component);
+      const componentProps =
+        entry.targetType === "snippet"
+          ? Object.fromEntries(
+              entry.snippetProps.map((name) => {
+                const token = `${(globalThis as any)[GW_LIQUID_TOKEN_PREFIX]}_${liquidTokens.size.toString(36)}__`;
+                liquidTokens.set(token, `{{ ${name} }}`);
+                valueReferences.set(token, shopifyPath(name));
+                return [name, token];
+              }),
+            )
+          : undefined;
+      const element = createElement(Component, componentProps);
       let html = renderToStaticMarkup(element);
 
       html = normalizeVoidElements(html);
@@ -200,6 +230,7 @@ export function renderEntry(
       delete (globalThis as any)[GW_HTML_EXPRESSIONS];
       delete (globalThis as any)[GW_LIQUID_TOKENS];
       delete (globalThis as any)[GW_LIQUID_TOKEN_PREFIX];
+      delete (globalThis as any)[GW_VALUE_REFERENCES];
       delete (globalThis as any)[GW_ISLAND_COUNTER];
     }
   });
@@ -213,8 +244,8 @@ export function renderEntry(
  * @returns The script asset basename (e.g. `"entry-abc123.js"`), or `null`
  *   if no chunk was found in the manifest.
  */
-export function resolveScriptAsset(kebabName: string, manifest: Manifest): string | null {
-  const manifestKey = `shopify:entry:${kebabName}`;
+export function resolveScriptAsset(entryId: string, manifest: Manifest): string | null {
+  const manifestKey = `shopify:entry:${entryId}`;
   const entryChunk = manifest[manifestKey];
   if (!entryChunk) return null;
 

@@ -73,6 +73,44 @@ export type {
   BlockDefinition,
 } from "./types";
 
+export {
+  assertValidSettingSchemas,
+  createCheckboxSetting,
+  createColorSchemeSetting,
+  createHeaderSetting,
+  createImageSetting,
+  createInlineRichTextSetting,
+  createNumberSetting,
+  createParagraphSetting,
+  createRangeSetting,
+  createSelectSetting,
+  createSettingsSchema,
+  createTextSetting,
+  createUrlSetting,
+  SettingSchemaValidationError,
+  SETTING_ID_PATTERN,
+  validateSettingSchemas,
+} from "./contract";
+
+export type {
+  CheckboxSettingOptions,
+  ColorSchemeSettingOptions,
+  HeaderSettingOptions,
+  ImageSettingOptions,
+  InlineRichTextSettingOptions,
+  NumberSettingOptions,
+  ParagraphSettingOptions,
+  RangeSettingOptions,
+  SelectSettingOptions,
+  SettingDescriptor,
+  SettingDescriptorMap,
+  SettingSchemaFromMap,
+  SettingValidationCode,
+  SettingValidationError,
+  TextSettingOptions,
+  UrlSettingOptions,
+} from "./contract";
+
 export type {
   CheckboxSetting,
   NumberSetting,

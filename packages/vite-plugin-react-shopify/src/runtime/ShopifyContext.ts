@@ -25,7 +25,9 @@ import {
   GW_LIQUID_TOKENS,
   GW_LIQUID_TOKEN_PREFIX,
   GW_RUNTIME,
+  GW_VALUE_REFERENCES,
 } from "../constants/attributes";
+import { unsafeShopifyReference, type ShopifyReference } from "../contract/expression";
 import type { TrackOptions } from "./bridge";
 export type { TrackOptions } from "./bridge";
 
@@ -33,9 +35,9 @@ export type ShopifyPhase = "ssg" | "hydrating" | "mounted";
 
 export interface ShopifyContext {
   phase: ShopifyPhase;
-  runtime: "static" | "hydrate";
+  runtime: "static" | "hydrate" | "client";
   /** Read a Liquid value. SSG: returns `{{ path }}` placeholder. Client: bridge value. */
-  read(path: string): unknown;
+  read(path: string, reference?: ShopifyReference<unknown, any>): unknown;
   /** Register an expression for inclusion in the JSON bridge. SSG-only; no-op on client. */
   track(path: string, opts?: TrackOptions): void;
   /** Push raw Liquid code into the assembler. SSG-only; no-op on client. */
@@ -50,12 +52,17 @@ function isSSGEnvironment(): boolean {
 }
 
 function createSSGContext(): ShopifyContext {
-  const runtime = ((globalThis as any)[GW_RUNTIME] ?? "hydrate") as "static" | "hydrate";
+  const runtime = ((globalThis as any)[GW_RUNTIME] ?? "hydrate") as "static" | "hydrate" | "client";
   return {
     phase: "ssg",
     runtime,
-    read(path: string) {
-      return this.serialize(`{{ ${path} }}`);
+    read(path: string, reference?: ShopifyReference<unknown, any>) {
+      const token = this.serialize(`{{ ${path} }}`);
+      const references = (globalThis as any)[GW_VALUE_REFERENCES] as
+        | Map<string, ShopifyReference<unknown, any>>
+        | undefined;
+      references?.set(token, reference ?? unsafeShopifyReference(path));
+      return token;
     },
     track(id: string, opts?: TrackOptions) {
       if (runtime === "static") return;
@@ -88,9 +95,18 @@ function createSSGContext(): ShopifyContext {
   };
 }
 
-function createClientContext(
-  bridgeData: Record<string, any>,
-): ShopifyContext {
+/** Resolve a registered SSG placeholder without parsing generated Liquid. */
+export function resolveShopifyReference(
+  value: unknown,
+): ShopifyReference<unknown, any> | undefined {
+  if (typeof value !== "string") return undefined;
+  const references = (globalThis as any)[GW_VALUE_REFERENCES] as
+    | Map<string, ShopifyReference<unknown, any>>
+    | undefined;
+  return references?.get(value);
+}
+
+function createClientContext(bridgeData: Record<string, any>): ShopifyContext {
   return {
     // Client phase is always 'hydrating' (initial render) or 'mounted'
     // (subsequent). We don't distinguish them because useLiquid uses the

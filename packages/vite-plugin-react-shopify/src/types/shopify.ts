@@ -10,7 +10,7 @@ import type { SettingSchema, InputSettings } from "./settings";
 
 /** The four generated Shopify entry categories inferred from source directories. */
 export type ShopifyEntryType = "template" | "section" | "block" | "snippet";
-export type ShopifyEntryRuntime = "auto" | "static" | "hydrate";
+export type ShopifyEntryRuntime = "auto" | "static" | "hydrate" | "client";
 
 export interface ShopifyEntryConfig {
   runtime: ShopifyEntryRuntime;

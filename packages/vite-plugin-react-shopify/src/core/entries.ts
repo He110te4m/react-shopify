@@ -28,7 +28,7 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
 
       const input: Record<string, string> = {};
       for (const entry of entries) {
-        input[entry.kebabName] = `\0shopify:entry:${entry.kebabName}`;
+        input[entry.id] = `\0shopify:entry:${entry.id}`;
       }
 
       const existingInput = config.build?.rollupOptions?.input;
@@ -49,8 +49,8 @@ export default function shopifyEntries(options: ResolvedOptions): Plugin {
 
     load(id) {
       if (!id.startsWith("\0\0shopify:entry:")) return;
-      const kebabName = id.replace("\0\0shopify:entry:", "");
-      const entry = entries.find((e) => e.kebabName === kebabName);
+      const entryId = id.replace("\0\0shopify:entry:", "");
+      const entry = entries.find((item) => item.id === entryId);
       if (!entry) return;
 
       const sourceDir = path.resolve(options.themeRoot, options.sourceCodeDir);

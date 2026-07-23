@@ -1,11 +1,18 @@
-import { Fragment, memo } from "react";
-import { useShopifyContext } from "./ShopifyContext";
+import { createElement, Fragment, memo } from "react";
+import type { ReactNode } from "react";
+import {
+  compileShopifyReference,
+  isShopifyReference,
+  type ShopifyCondition,
+} from "../contract/expression";
+import { resolveShopifyReference, useShopifyContext } from "./ShopifyContext";
 
 export interface LiquidIfProps {
-  condition: string;
+  condition: string | boolean | ShopifyCondition;
   trackKey?: string;
   unless?: boolean;
-  children?: React.ReactNode;
+  children?: ReactNode;
+  fallback?: ReactNode;
 }
 
 function isTruthy(value: unknown): boolean {
@@ -15,26 +22,74 @@ function isTruthy(value: unknown): boolean {
   return true;
 }
 
-function LiquidIfImpl({ condition, trackKey = condition, unless = false, children }: LiquidIfProps) {
+function LiquidIfImpl({
+  condition,
+  trackKey,
+  unless = false,
+  children,
+  fallback = null,
+}: LiquidIfProps) {
   const ctx = useShopifyContext();
+  const reference = isShopifyReference(condition) ? condition : resolveShopifyReference(condition);
+  const compiled = reference
+    ? compileShopifyReference(reference)
+    : typeof condition === "boolean"
+      ? condition
+        ? "true"
+        : "false"
+      : condition;
+  const key = trackKey ?? `condition:${unless ? "unless" : "if"}:${compiled}`;
 
   if (ctx.phase === "ssg") {
-    ctx.track(trackKey, {
+    ctx.track(key, {
       type: "boolean",
-      bridge: `{% if ${condition} %}true{% else %}false{% endif %}`,
+      bridge: `{% if ${compiled} %}true{% else %}false{% endif %}`,
     });
     return (
       <>
-        {ctx.serialize(`{% ${unless ? "unless" : "if"} ${condition} %}`)}
+        {ctx.serialize(`{% ${unless ? "unless" : "if"} ${compiled} %}`)}
         {children}
+        {fallback === null ? null : ctx.serialize("{% else %}")}
+        {fallback}
         {ctx.serialize(`{% end${unless ? "unless" : "if"} %}`)}
       </>
     );
   }
 
-  const matched = isTruthy(ctx.read(trackKey));
-  if (unless ? matched : !matched) return null;
+  const matched = typeof condition === "boolean" ? condition : isTruthy(ctx.read(key));
+  if (unless ? matched : !matched) return <Fragment>{fallback}</Fragment>;
   return <Fragment>{children}</Fragment>;
 }
 
 export const LiquidIf = memo(LiquidIfImpl);
+
+type RenderBranch = ReactNode | (() => ReactNode);
+
+function renderBranch(branch: RenderBranch | undefined): ReactNode {
+  return typeof branch === "function" ? branch() : branch;
+}
+
+/** Functional conditional rendered as Liquid during SSG and React on the client. */
+export function when(
+  condition: boolean | ShopifyCondition,
+  truthy: RenderBranch,
+  fallback?: RenderBranch,
+): React.ReactElement {
+  return createElement(
+    LiquidIf,
+    { condition, fallback: renderBranch(fallback) },
+    renderBranch(truthy),
+  );
+}
+
+export function unless(
+  condition: boolean | ShopifyCondition,
+  truthy: RenderBranch,
+  fallback?: RenderBranch,
+): React.ReactElement {
+  return createElement(
+    LiquidIf,
+    { condition, unless: true, fallback: renderBranch(fallback) },
+    renderBranch(truthy),
+  );
+}

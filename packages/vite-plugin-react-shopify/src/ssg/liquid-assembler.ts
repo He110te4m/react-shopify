@@ -34,7 +34,7 @@ export interface AssembleOptions {
   buildDir: string;
   /** Block script filenames to emit BEFORE the section script. */
   blockScripts?: string[];
-  runtime?: "static" | "hydrate";
+  runtime?: "static" | "hydrate" | "client";
   source?: { path: string; hash: string; pluginVersion: string };
 }
 
@@ -56,19 +56,27 @@ export function assembleLiquidFile(
 
   switch (type) {
     case "template":
-      parts.push(...buildSnippet(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
+      parts.push(
+        ...buildSnippet(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime),
+      );
       break;
     case "section":
-      parts.push(...buildSection(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
+      parts.push(
+        ...buildSection(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime),
+      );
       break;
     case "block":
       parts.push(...buildBlock(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
       break;
     case "snippet":
-      parts.push(...buildSnippet(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
+      parts.push(
+        ...buildSnippet(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime),
+      );
       break;
     default:
-      parts.push(...buildSection(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime));
+      parts.push(
+        ...buildSection(html, entry, trackedExpressions, liquidPrepend, trackMap, runtime),
+      );
       break;
   }
 
@@ -87,23 +95,21 @@ export function assembleLiquidFile(
 
   // Block scripts go BEFORE the section script so block entry modules
   // register `ssg:blocks:ready` listeners before the section hydrates.
-  if (runtime === "hydrate" && options.blockScripts && options.blockScripts.length > 0) {
-    log.debug("%s: emitting %d block scripts before own script", entry.kebabName, options.blockScripts.length);
+  if (runtime !== "static" && options.blockScripts && options.blockScripts.length > 0) {
+    log.debug(
+      "%s: emitting %d block scripts before own script",
+      entry.kebabName,
+      options.blockScripts.length,
+    );
     for (const bs of options.blockScripts) {
       const assetPath = getAssetRelativePath(options.buildDir, bs);
-      parts.push(
-        "",
-        `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`,
-      );
+      parts.push("", `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
     }
   }
 
-  if (runtime === "hydrate" && scriptAsset) {
+  if (runtime !== "static" && scriptAsset) {
     const assetPath = getAssetRelativePath(options.buildDir, scriptAsset);
-    parts.push(
-      "",
-      `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`,
-    );
+    parts.push("", `<script type="module" src="{{ '${assetPath}' | asset_url }}"></script>`);
   }
 
   if (type !== "snippet") {
@@ -143,17 +149,14 @@ function buildSection(
   trackedExpressions: string[],
   liquidPrepend: string = "",
   trackMap?: Map<string, TrackOptions>,
-  runtime: "static" | "hydrate" = "static",
+  runtime: "static" | "hydrate" | "client" = "static",
 ): string[] {
   if (runtime === "static") {
     return ["", ...(liquidPrepend ? [liquidPrepend] : []), html];
   }
 
-  const lines: string[] = [
-    "",
-    `<div`,
-  ];
-  lines.push(`  ${ATTR_COMPONENT}="${entry.kebabName}"`);
+  const lines: string[] = ["", `<div`];
+  lines.push(`  ${ATTR_COMPONENT}="${entry.id}"`);
   lines.push(`>`);
 
   if (liquidPrepend) lines.push(liquidPrepend);
@@ -161,9 +164,7 @@ function buildSection(
   const liquidBridge = resolveLiquidBridge(trackedExpressions, trackMap);
   if (liquidBridge) lines.push(liquidBridge);
 
-  lines.push(
-    `  <div ${ATTR_HYDRATE}>${html}</div>`,
-  );
+  lines.push(`  <div ${ATTR_HYDRATE}>${html}</div>`);
 
   // BlockSlot is now a React component rendered inside the SSR HTML.
   // No need to auto-inject a `<shopify-block-slot>` sibling — the React
@@ -178,7 +179,7 @@ function buildBlock(
   trackedExpressions: string[],
   liquidPrepend: string = "",
   trackMap?: Map<string, TrackOptions>,
-  runtime: "static" | "hydrate" = "static",
+  runtime: "static" | "hydrate" | "client" = "static",
 ): string[] {
   const ownsWrapper = entry.meta.tag == null;
   if (runtime === "static" && !ownsWrapper) {
@@ -202,12 +203,12 @@ function buildBlock(
     if (cls) lines.push(`  class="${cls}"`);
     lines.push(`  {{ block.shopify_attributes }}`);
   }
-  if (runtime === "hydrate") lines.push(`  ${ATTR_COMPONENT}="${entry.kebabName}"`);
+  if (runtime !== "static") lines.push(`  ${ATTR_COMPONENT}="${entry.id}"`);
   lines.push(`>`);
 
   if (liquidPrepend) lines.push(liquidPrepend);
 
-  if (runtime === "hydrate") {
+  if (runtime !== "static") {
     const liquidBridge = resolveLiquidBridge(trackedExpressions, trackMap);
     if (liquidBridge) lines.push(liquidBridge);
     lines.push(`  <div ${ATTR_HYDRATE}>${html}</div>`);
@@ -225,27 +226,19 @@ function buildSnippet(
   trackedExpressions: string[],
   liquidPrepend: string = "",
   trackMap?: Map<string, TrackOptions>,
-  runtime: "static" | "hydrate" = "static",
+  runtime: "static" | "hydrate" | "client" = "static",
 ): string[] {
   if (runtime === "static") {
     return ["", ...(liquidPrepend ? [liquidPrepend] : []), html];
   }
 
-  const lines: string[] = [
-    "",
-    `<div ${ATTR_COMPONENT}="${entry.kebabName}">`,
-  ];
+  const lines: string[] = ["", `<div ${ATTR_COMPONENT}="${entry.id}">`];
 
   if (liquidPrepend) lines.push(liquidPrepend);
 
   const liquidBridge = resolveLiquidBridge(trackedExpressions, trackMap);
   if (liquidBridge) lines.push(liquidBridge);
 
-  lines.push(
-    `  <div ${ATTR_HYDRATE}>`,
-    `    ${html}`,
-    `  </div>`,
-    `</div>`,
-  );
+  lines.push(`  <div ${ATTR_HYDRATE}>`, `    ${html}`, `  </div>`, `</div>`);
   return lines;
 }

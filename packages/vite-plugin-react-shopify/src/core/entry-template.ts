@@ -1,5 +1,10 @@
 import type { SSGEntry } from "../types/ssg";
-import { ATTR_HYDRATE, ATTR_COMPONENT, ATTR_LIQUID_BRIDGE, ATTR_ISLAND } from "../constants/attributes";
+import {
+  ATTR_HYDRATE,
+  ATTR_COMPONENT,
+  ATTR_LIQUID_BRIDGE,
+  ATTR_ISLAND,
+} from "../constants/attributes";
 import { debugLines } from "./runtime-debug";
 
 export interface EntryOptions {
@@ -11,7 +16,7 @@ export function generateEntryModule(
   componentRel: string,
   opts: EntryOptions = {},
 ): string {
-  const { kebabName } = entry;
+  const { id: entryId, kebabName } = entry;
   const { debug = false } = opts;
 
   const dbg = debugLines(debug);
@@ -19,11 +24,12 @@ export function generateEntryModule(
   const lines: string[] = [
     `import { createElement } from 'react'`,
     `import Component from '~/${componentRel}'`,
-    `import { hydrateRoot } from 'react-dom/client'`,
+    `import { createRoot, hydrateRoot } from 'react-dom/client'`,
     `import { LiquidDataProvider } from 'vite-plugin-react-shopify/runtime'`,
     ``,
-    `const SELECTOR = '[${ATTR_COMPONENT}="${kebabName}"]'`,
+    `const SELECTOR = '[${ATTR_COMPONENT}="${entryId}"]'`,
     `const IS_BLOCK = ${entry.targetType === "block"}`,
+    `const IS_CLIENT_ONLY = ${entry.runtime === "client"}`,
     `const ISLAND_DATA_KEY = '__ssg_islands'`,
     `const ISLAND_COUNTER_KEY = '__ssg_island_counter'`,
     `const roots = new Map()`,
@@ -65,7 +71,15 @@ export function generateEntryModule(
     ...dbg(`  console.debug('[SSG:${kebabName}] liquidData', liquidData)`),
     `  liquidData[ISLAND_DATA_KEY] = captureIslands(h)`,
     `  liquidData[ISLAND_COUNTER_KEY] = { count: 0 }`,
-    `  roots.set(h, hydrateRoot(h, createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))))`,
+    `  const tree = createElement(LiquidDataProvider, { value: liquidData }, createElement(Component))`,
+    `  if (IS_CLIENT_ONLY) {`,
+    `    h.replaceChildren()`,
+    `    const root = createRoot(h)`,
+    `    root.render(tree)`,
+    `    roots.set(h, root)`,
+    `  } else {`,
+    `    roots.set(h, hydrateRoot(h, tree))`,
+    `  }`,
     ...dbg(`  console.debug('[SSG:${kebabName}] hydrate done')`),
     `}`,
     ``,

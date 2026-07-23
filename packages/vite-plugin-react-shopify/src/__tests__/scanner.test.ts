@@ -56,7 +56,8 @@ describe("scanEntries", () => {
     `);
 
     const section = scanEntries(makeOptions(root)).find((entry) => entry.kebabName === "static-example");
-    expect((section?.meta as { _blockTypes?: string[] })._blockTypes).toEqual(["react-hero-banner"]);
+    expect(section).toBeDefined();
+    expect((section!.meta as { _blockTypes?: string[] })._blockTypes).toEqual(["react-hero-banner"]);
   });
 
   it("reads explicit shopifyEntry runtime metadata", () => {
@@ -69,5 +70,28 @@ describe("scanEntries", () => {
 
     const section = scanEntries(makeOptions(root))[0];
     expect(section.runtime).toBe("static");
+  });
+
+  it("uses path-aware identities and extracts snippet props", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shopify-scan-"));
+    tmpRoots.push(root);
+    const options = makeOptions(root);
+    options.ssg.directories = ["sections", "blocks", "snippets"];
+
+    writeFile(root, "frontend/sections/Card.tsx", "export default function Card() { return <div /> }");
+    writeFile(root, "frontend/blocks/Card.tsx", "export default function Card() { return <div /> }");
+    writeFile(
+      root,
+      "frontend/snippets/cards/Button.tsx",
+      `export default function Button({ label, style = "primary" }: { label: string; style?: string }) { return <button>{label}</button> }`,
+    );
+
+    const entries = scanEntries(options);
+    expect(entries.find((entry) => entry.targetType === "section")?.id).toBe("section-card");
+    expect(entries.find((entry) => entry.targetType === "block")?.id).toBe("block-card");
+    const snippet = entries.find((entry) => entry.targetType === "snippet");
+    expect(snippet?.id).toBe("snippet-cards--button");
+    expect(snippet?.kebabName).toBe("cards-button");
+    expect(snippet?.snippetProps).toEqual(["label", "style"]);
   });
 });

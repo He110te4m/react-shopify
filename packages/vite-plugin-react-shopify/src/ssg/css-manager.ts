@@ -32,12 +32,12 @@ export function analyzeCssDistribution(
   const cssRefCount = new Map<string, number>();
 
   for (const entry of entries) {
-    const manifestKey = `shopify:entry:${entry.kebabName}`;
+    const manifestKey = `shopify:entry:${entry.id}`;
     const chunk = manifest[manifestKey];
     if (!chunk) continue;
 
     const cssFiles = collectCssFiles(chunk, manifest, new Set());
-    entryCssFiles.set(entry.kebabName, cssFiles);
+    entryCssFiles.set(entry.id, cssFiles);
 
     for (const f of cssFiles) {
       cssRefCount.set(f, (cssRefCount.get(f) || 0) + 1);
@@ -124,11 +124,7 @@ function readCssFile(cssFile: string, buildDir: string, themeRoot: string): stri
  * Recursively collect all CSS file paths for a chunk by following its
  * `imports` chain in the manifest.
  */
-function collectCssFiles(
-  chunk: any,
-  manifest: Manifest,
-  visited: Set<string>,
-): string[] {
+function collectCssFiles(chunk: any, manifest: Manifest, visited: Set<string>): string[] {
   if (visited.has(chunk.file)) return [];
   visited.add(chunk.file);
 

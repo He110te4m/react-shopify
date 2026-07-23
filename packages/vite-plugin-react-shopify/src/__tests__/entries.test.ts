@@ -122,11 +122,14 @@ describe("nested section+block isolation", () => {
 describe("dynamic block hydration coordination", () => {
   const blockModule = generateEntryModule(
     {
+      id: "block-interactive",
       filePath: "/app/frontend/blocks/Interactive.tsx",
+      relativePath: "blocks/Interactive.tsx",
       componentName: "Interactive",
       kebabName: "interactive",
       targetType: "block",
       runtime: "hydrate",
+      snippetProps: [],
       meta: { name: "Interactive" },
     },
     "blocks/Interactive.tsx",
@@ -142,5 +145,29 @@ describe("dynamic block hydration coordination", () => {
     expect(blockModule).toContain("ssg:blocks:ready");
     expect(blockModule).toContain("shopify:section:load");
     expect(blockModule.indexOf("scan(document)")).toBeGreaterThan(0);
+  });
+});
+
+describe("client-only entry", () => {
+  const clientModule = generateEntryModule(
+    {
+      id: "block-client-only",
+      filePath: "/app/frontend/blocks/ClientOnly.tsx",
+      relativePath: "blocks/ClientOnly.tsx",
+      componentName: "ClientOnly",
+      kebabName: "client-only",
+      targetType: "block",
+      runtime: "client",
+      snippetProps: [],
+      meta: { name: "Client only" },
+    },
+    "blocks/ClientOnly.tsx",
+  );
+
+  it("mounts with createRoot instead of hydrating fallback markup", () => {
+    expect(clientModule).toContain("const IS_CLIENT_ONLY = true");
+    expect(clientModule).toContain("h.replaceChildren()");
+    expect(clientModule).toContain("const root = createRoot(h)");
+    expect(clientModule).toContain("hydrateRoot(h, tree)");
   });
 });

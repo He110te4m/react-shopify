@@ -19,8 +19,13 @@ import { Manifest } from "vite";
 import type { ResolvedOptions } from "../core/options";
 import { logger } from "../core/logger";
 import { scanEntries } from "./scanner";
-import { analyzeCssDistribution, generateSharedCssSnippets, categorizeCss, readCssFileContents } from "./css-manager";
-import { bundleEntry } from "./bundler";
+import {
+  analyzeCssDistribution,
+  generateSharedCssSnippets,
+  categorizeCss,
+  readCssFileContents,
+} from "./css-manager";
+import { bundleEntry, type SnippetArtifact } from "./bundler";
 import { renderEntry, resolveScriptAsset } from "./renderer";
 import { assembleLiquidFile } from "./liquid-assembler";
 import { getOutputPath } from "./liquid-paths";
@@ -61,7 +66,21 @@ export async function compileAllEntries(
   const sharedCss = generateSharedCssSnippets(cssRefCount, options);
   const outputs: GeneratedOutput[] = [...sharedCss.outputs];
   const errors: Error[] = [];
-  const runtimes = new Map<string, "static" | "hydrate">();
+  const runtimes = new Map<string, "static" | "hydrate" | "client">();
+  const snippetArtifacts: SnippetArtifact[] = entries
+    .filter((entry) => entry.targetType === "snippet")
+    .map((entry) => ({
+      filePath: entry.filePath,
+      name: path.basename(
+        getOutputPath(entry, {
+          prefix: options.ssg.prefix,
+          outputName: options.ssg.outputName || undefined,
+          themeRoot: options.themeRoot,
+        }),
+        ".liquid",
+      ),
+      props: entry.snippetProps,
+    }));
 
   for (const entry of entries) {
     try {
@@ -73,9 +92,10 @@ export async function compileAllEntries(
         sourceDir,
         entryCssFiles,
         sharedCss.map,
+        snippetArtifacts,
       );
       outputs.push(result.output);
-      runtimes.set(entry.kebabName, result.runtime);
+      runtimes.set(entry.id, result.runtime);
     } catch (err) {
       log.error("Failed to compile %s:", entry.filePath, err);
       errors.push(err instanceof Error ? err : new Error(String(err)));
@@ -84,7 +104,10 @@ export async function compileAllEntries(
 
   if (errors.length > 0) {
     fs.rmSync(path.join(sourceDir, ".ssg-tmp"), { recursive: true, force: true });
-    throw new AggregateError(errors, `Failed to compile ${errors.length} of ${entries.length} Shopify entries`);
+    throw new AggregateError(
+      errors,
+      `Failed to compile ${errors.length} of ${entries.length} Shopify entries`,
+    );
   }
 
   const clientAssets = planClientAssetPrune(entries, runtimes, manifest, options);
@@ -118,16 +141,22 @@ async function compileEntry(
   sourceDir: string,
   entryCssFiles: Map<string, string[]>,
   cssSnippetMap: Map<string, string>,
-): Promise<{ output: GeneratedOutput; runtime: "static" | "hydrate" }> {
+  snippetArtifacts: readonly SnippetArtifact[],
+): Promise<{ output: GeneratedOutput; runtime: "static" | "hydrate" | "client" }> {
   // Bundle via esbuild
-  const bundleResult = await bundleEntry(entry, projectRoot, sourceDir);
+  const bundleResult = await bundleEntry(entry, projectRoot, sourceDir, snippetArtifacts);
   if (!bundleResult) throw new Error(`Unable to bundle ${entry.filePath}`);
 
   try {
     // SSR render
     const source = fs.readFileSync(entry.filePath, "utf-8");
     const inferredRuntime = isStaticComponent(source, entry.filePath) ? "static" : "hydrate";
-    const renderResult = await renderEntry(bundleResult.tmpFile, entry, projectRoot, inferredRuntime);
+    const renderResult = await renderEntry(
+      bundleResult.tmpFile,
+      entry,
+      projectRoot,
+      inferredRuntime,
+    );
     if (!renderResult) throw new Error(`Unable to render ${entry.filePath}`);
 
     const { html, trackedExpressions, liquidBlocks, trackMap, runtime } = renderResult;
@@ -139,36 +168,57 @@ async function compileEntry(
     });
 
     // Post-render: check BlockSlot usage matches declared blocks config
-    validateBlockSlot(html, { kebabName: entry.kebabName, filePath: entry.filePath }, entry.meta.blocks);
+    validateBlockSlot(
+      html,
+      { kebabName: entry.kebabName, filePath: entry.filePath },
+      entry.meta.blocks,
+    );
 
     // Categorize CSS
-    const cssFiles = entryCssFiles.get(entry.kebabName) || [];
-    const { inline: cssInlineFiles, snippets: cssSnippets } = categorizeCss(cssFiles, cssSnippetMap);
+    const cssFiles = entryCssFiles.get(entry.id) || [];
+    const { inline: cssInlineFiles, snippets: cssSnippets } = categorizeCss(
+      cssFiles,
+      cssSnippetMap,
+    );
     const cssInline = readCssFileContents(cssInlineFiles, options.buildDir, options.themeRoot);
 
-    log.debug("compiling %s (type=%s, css inline=%d, css snippets=%d)",
-      entry.kebabName, entry.targetType, cssInline.length, cssSnippets.length);
+    log.debug(
+      "compiling %s (type=%s, css inline=%d, css snippets=%d)",
+      entry.kebabName,
+      entry.targetType,
+      cssInline.length,
+      cssSnippets.length,
+    );
 
-    const scriptAsset = runtime === "hydrate" ? resolveScriptAsset(entry.kebabName, manifest) : null;
-    if (runtime === "hydrate" && !scriptAsset) {
+    const scriptAsset = runtime !== "static" ? resolveScriptAsset(entry.id, manifest) : null;
+    if (runtime !== "static" && !scriptAsset) {
       throw new Error(`Missing client manifest entry for hydrated component ${entry.kebabName}`);
     }
 
     // Assemble Liquid
-    const liquidContent = assembleLiquidFile(html, entry, scriptAsset, {
-      inline: cssInline,
-      snippets: cssSnippets,
-    }, {
-      prefix: options.ssg.prefix,
-      outputName: options.ssg.outputName || undefined,
-      buildDir: options.buildDir,
-      runtime,
-      source: {
-        path: path.relative(options.themeRoot, entry.filePath),
-        hash: crypto.createHash("sha256").update(source).digest("hex").slice(0, 12),
-        pluginVersion: getPluginVersion(),
+    const liquidContent = assembleLiquidFile(
+      html,
+      entry,
+      scriptAsset,
+      {
+        inline: cssInline,
+        snippets: cssSnippets,
       },
-    }, [...trackedExpressions], liquidBlocks, trackMap);
+      {
+        prefix: options.ssg.prefix,
+        outputName: options.ssg.outputName || undefined,
+        buildDir: options.buildDir,
+        runtime,
+        source: {
+          path: path.relative(options.themeRoot, entry.filePath),
+          hash: crypto.createHash("sha256").update(source).digest("hex").slice(0, 12),
+          pluginVersion: getPluginVersion(),
+        },
+      },
+      [...trackedExpressions],
+      liquidBlocks,
+      trackMap,
+    );
 
     // Write output
     const outputPath = getOutputPath(entry, {
@@ -196,7 +246,8 @@ function commitOutputs(outputs: GeneratedOutput[], sourceDir: string, themeRoot:
   const seen = new Set<string>();
   for (const output of outputs) {
     const absoluteOutput = path.resolve(output.path);
-    if (seen.has(absoluteOutput)) throw new Error(`Duplicate generated output path: ${output.path}`);
+    if (seen.has(absoluteOutput))
+      throw new Error(`Duplicate generated output path: ${output.path}`);
     seen.add(absoluteOutput);
     const relative = path.relative(themeRoot, output.path);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -249,9 +300,10 @@ function cleanupOrphanLiquid(outputs: GeneratedOutput[], options: ResolvedOption
         continue;
       }
       const generatedEntry = content.includes("automatically generated by vite-plugin");
-      const generatedCss = directory === "snippets"
-        && name.startsWith(options.ssg.cssPrefix)
-        && content.startsWith("{% stylesheet %}");
+      const generatedCss =
+        directory === "snippets" &&
+        name.startsWith(options.ssg.cssPrefix) &&
+        content.startsWith("{% stylesheet %}");
       if (generatedEntry || generatedCss) {
         try {
           fs.rmSync(file, { force: true });
@@ -265,7 +317,7 @@ function cleanupOrphanLiquid(outputs: GeneratedOutput[], options: ResolvedOption
 
 function planClientAssetPrune(
   entries: ReturnType<typeof scanEntries>,
-  runtimes: Map<string, "static" | "hydrate">,
+  runtimes: Map<string, "static" | "hydrate" | "client">,
   manifest: Manifest,
   options: ResolvedOptions,
 ): { manifestOutput: GeneratedOutput; files: Set<string> } {
@@ -275,11 +327,12 @@ function planClientAssetPrune(
     const chunk = manifest[key];
     if (!chunk || reachable.has(chunk.file)) return;
     reachable.add(chunk.file);
-    for (const imported of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) visit(imported);
+    for (const imported of [...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])])
+      visit(imported);
   };
 
   for (const entry of entries) {
-    if (runtimes.get(entry.kebabName) === "hydrate") visit(`shopify:entry:${entry.kebabName}`);
+    if (runtimes.get(entry.id) !== "static") visit(`shopify:entry:${entry.id}`);
   }
 
   const buildRoot = path.resolve(options.themeRoot, options.buildDir);
@@ -296,7 +349,8 @@ function planClientAssetPrune(
 
   const prunedManifest: Manifest = {};
   for (const [key, chunk] of Object.entries(manifest)) {
-    if (chunk.file.endsWith(".css") && path.basename(chunk.file).startsWith(options.chunkPrefix)) continue;
+    if (chunk.file.endsWith(".css") && path.basename(chunk.file).startsWith(options.chunkPrefix))
+      continue;
     if (chunk.file.endsWith(".js") && !reachable.has(chunk.file)) continue;
     prunedManifest[key] = { ...chunk, css: undefined };
   }

@@ -9,6 +9,11 @@
  */
 import { useMemo } from "react";
 import { GW_BLOCKS } from "../constants/attributes";
+import {
+  compileShopifyReference,
+  isShopifyReference,
+  type ShopifyReference,
+} from "../contract/expression";
 import { Island } from "./Island";
 import { assignLiquidValue, type LiquidValue, type LiquidValueInput } from "./LiquidValue";
 import { useShopifyContext } from "./ShopifyContext";
@@ -18,10 +23,12 @@ export type ImageFetchPriority = "high" | "low" | "medium" | "auto";
 export type ImageDecoding = "async" | "sync" | "auto";
 export type ImageCrop = "top" | "center" | "bottom" | "left" | "right";
 
-export interface ShopifyImageProps
-  extends Omit<React.HTMLAttributes<HTMLSpanElement>, "dangerouslySetInnerHTML"> {
-  /** Liquid expression (e.g. {@code "section.settings.hero_image"}). */
-  image: string;
+export interface ShopifyImageProps extends Omit<
+  React.HTMLAttributes<HTMLSpanElement>,
+  "dangerouslySetInnerHTML"
+> {
+  /** Typed Shopify image reference. Raw strings remain as a legacy escape hatch. */
+  image: ShopifyReference<unknown, "object"> | string;
 
   /** CDN resize width passed to the {@code image_url} filter. */
   width?: number;
@@ -67,7 +74,8 @@ function getLargestWidth(widths?: string): number | undefined {
 }
 
 function isLiquidValue(value: unknown): value is LiquidValue {
-  return typeof value === "object" && value != null && "kind" in value;
+  if (typeof value !== "object" || value == null || !("kind" in value)) return false;
+  return value.kind === "expression" || value.kind === "choice";
 }
 
 function isLiquidVar(v: string): boolean {
@@ -84,6 +92,7 @@ function liquidParam(
   assignments: string[],
 ): string | undefined {
   if (value == null) return undefined;
+  if (isShopifyReference(value)) return compileShopifyReference(value);
   if (isLiquidValue(value)) {
     const varName = `shopify_img_${name}_${assignments.length}`;
     assignments.push(...assignLiquidValue(varName, value));
@@ -124,8 +133,8 @@ function buildImageTagParams(o: {
       o.preload === "true"
         ? "preload: true"
         : isLiquidVar(o.preload)
-        ? `preload: ${o.preload}`
-        : "preload: true",
+          ? `preload: ${o.preload}`
+          : "preload: true",
     );
   }
   if (tagWidth) parts.push(`width: ${tagWidth}`);
@@ -203,15 +212,15 @@ export function ShopifyImage({
   // a non-empty expression so Island renders consistently across phases.
   const expression = useMemo(() => {
     if (ctx.phase !== "ssg") return "";
-    ctx.track(image);
+    const imageExpression = isShopifyReference(image) ? compileShopifyReference(image) : image;
+    ctx.track(imageExpression);
     const needAuto =
       autoLoading &&
       (loading === undefined || fetchPriority === undefined || preload === undefined);
     const autoVars = needAuto ? getAutoLoadVars(ctx.inject, ctx.track) : null;
     const effLoad = loading ?? autoVars?.loadVar;
     const effFetch = fetchPriority ?? autoVars?.fetchVar;
-    const effPre =
-      preload !== undefined ? (preload ? "true" : undefined) : autoVars?.preVar;
+    const effPre = preload !== undefined ? (preload ? "true" : undefined) : autoVars?.preVar;
 
     const inferredWidth = typeof widths === "string" ? getLargestWidth(widths) : undefined;
     const assignments: string[] = [];
@@ -232,7 +241,7 @@ export function ShopifyImage({
     const urlPart = urlParams ? ` | image_url: ${urlParams}` : "";
     const tagPart = tagParams ? ` | image_tag: ${tagParams}` : "";
     const setup = assignments.length ? `{%- liquid\n  ${assignments.join("\n  ")}\n-%}` : "";
-    return `{% if ${image} != blank %}${setup}{{ ${image}${urlPart}${tagPart} }}{% endif %}`;
+    return `{% if ${imageExpression} != blank %}${setup}{{ ${imageExpression}${urlPart}${tagPart} }}{% endif %}`;
   }, [
     ctx.phase,
     image,

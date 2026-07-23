@@ -27,6 +27,7 @@ export const GW_LIQUID_TOKENS = '__shopify_ssg_liquid_tokens' as const;
 export const GW_LIQUID_TOKEN_PREFIX = '__shopify_ssg_liquid_token_prefix' as const;
 export const GW_RUNTIME = '__shopify_ssg_runtime' as const;
 export const GW_HTML_EXPRESSIONS = '__shopify_ssg_html_expressions' as const;
+export const GW_VALUE_REFERENCES = '__shopify_ssg_value_references' as const;
 
 export const EVENT_SECTION_LOAD = 'shopify:section:load' as const;
 export const EVENT_SECTION_UNLOAD = 'shopify:section:unload' as const;

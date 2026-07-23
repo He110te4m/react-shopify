@@ -1,17 +1,36 @@
 import type { ShopifyEntryConfig, ShopifyMeta } from "vite-plugin-react-shopify";
 import {
   BlockSlot,
-  Island,
-  LiquidIf,
+  LiquidHtml,
   ShopifyImage,
+  and,
+  append,
+  createCheckboxSetting,
+  createColorSchemeSetting,
+  createHeaderSetting,
+  createImageSetting,
+  createRangeSetting,
+  createSelectSetting,
   defineSettings,
-  liquid,
+  dividedBy,
+  eq,
+  isBlank,
+  isPresent,
   liquidChoice,
   liquidIf,
-  useLiquidExpression,
+  multiply,
+  neq,
+  or,
+  placeholderSvg,
+  property,
+  sectionValue,
+  themeSetting,
   useLiquidClass,
   useLiquidCssVars,
   useLiquidDynamicClass,
+  useShopifyValue,
+  when,
+  type ShopifyReference,
 } from "vite-plugin-react-shopify/runtime";
 import { clsx } from "../utils/classes";
 import "./ImageBanner.css";
@@ -19,17 +38,171 @@ import "./ImageBanner.css";
 const defaultWidths = "375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840";
 const ambientWidths = "450, 660, 900, 1320, 1800, 2136, 2400, 3600, 7680";
 
+const imageBannerSettings = defineSettings("section", {
+  image: createImageSetting({ label: "t:sections.image-banner.settings.image.label" }),
+  image_2: createImageSetting({ label: "t:sections.image-banner.settings.image_2.label" }),
+  image_overlay_opacity: createRangeSetting({
+    min: 0,
+    max: 100,
+    step: 10,
+    unit: "%",
+    label: "t:sections.image-banner.settings.image_overlay_opacity.label",
+    default: 0,
+  }),
+  image_height: createSelectSetting({
+    options: [
+      {
+        value: "adapt",
+        label: "t:sections.image-banner.settings.image_height.options__1.label",
+      },
+      {
+        value: "small",
+        label: "t:sections.image-banner.settings.image_height.options__2.label",
+      },
+      {
+        value: "medium",
+        label: "t:sections.image-banner.settings.image_height.options__3.label",
+      },
+      {
+        value: "large",
+        label: "t:sections.image-banner.settings.image_height.options__4.label",
+      },
+    ],
+    default: "medium",
+    label: "t:sections.image-banner.settings.image_height.label",
+  }),
+  image_behavior: createSelectSetting({
+    options: [
+      { value: "none", label: "t:sections.all.animation.image_behavior.options__1.label" },
+      {
+        value: "ambient",
+        label: "t:sections.all.animation.image_behavior.options__2.label",
+      },
+      { value: "fixed", label: "t:sections.all.animation.image_behavior.options__3.label" },
+      { value: "zoom-in", label: "t:sections.all.animation.image_behavior.options__4.label" },
+    ],
+    default: "none",
+    label: "t:sections.all.animation.image_behavior.label",
+  }),
+  content_header: createHeaderSetting({
+    content: "t:sections.image-banner.settings.content.content",
+  }),
+  desktop_content_position: createSelectSetting({
+    options: [
+      {
+        value: "top-left",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__1.label",
+      },
+      {
+        value: "top-center",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__2.label",
+      },
+      {
+        value: "top-right",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__3.label",
+      },
+      {
+        value: "middle-left",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__4.label",
+      },
+      {
+        value: "middle-center",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__5.label",
+      },
+      {
+        value: "middle-right",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__6.label",
+      },
+      {
+        value: "bottom-left",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__7.label",
+      },
+      {
+        value: "bottom-center",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__8.label",
+      },
+      {
+        value: "bottom-right",
+        label: "t:sections.image-banner.settings.desktop_content_position.options__9.label",
+      },
+    ],
+    default: "middle-center",
+    label: "t:sections.image-banner.settings.desktop_content_position.label",
+  }),
+  desktop_content_alignment: createSelectSetting({
+    options: [
+      {
+        value: "left",
+        label: "t:sections.image-banner.settings.desktop_content_alignment.options__1.label",
+      },
+      {
+        value: "center",
+        label: "t:sections.image-banner.settings.desktop_content_alignment.options__2.label",
+      },
+      {
+        value: "right",
+        label: "t:sections.image-banner.settings.desktop_content_alignment.options__3.label",
+      },
+    ],
+    default: "center",
+    label: "t:sections.image-banner.settings.desktop_content_alignment.label",
+  }),
+  show_text_box: createCheckboxSetting({
+    default: true,
+    label: "t:sections.image-banner.settings.show_text_box.label",
+  }),
+  color_scheme: createColorSchemeSetting({
+    label: "t:sections.all.colors.label",
+    default: "scheme-1",
+  }),
+  mobile_header: createHeaderSetting({
+    content: "t:sections.image-banner.settings.mobile.content",
+  }),
+  stack_images_on_mobile: createCheckboxSetting({
+    default: true,
+    label: "t:sections.image-banner.settings.stack_images_on_mobile.label",
+  }),
+  mobile_content_alignment: createSelectSetting({
+    options: [
+      {
+        value: "left",
+        label: "t:sections.image-banner.settings.mobile_content_alignment.options__1.label",
+      },
+      {
+        value: "center",
+        label: "t:sections.image-banner.settings.mobile_content_alignment.options__2.label",
+      },
+      {
+        value: "right",
+        label: "t:sections.image-banner.settings.mobile_content_alignment.options__3.label",
+      },
+    ],
+    default: "center",
+    label: "t:sections.image-banner.settings.mobile_content_alignment.label",
+  }),
+  show_text_below: createCheckboxSetting({
+    default: true,
+    label: "t:sections.image-banner.settings.show_text_below.label",
+  }),
+});
+
+const { refs } = imageBannerSettings;
+const animationsReveal = themeSetting<boolean>("animations_reveal_on_scroll");
+const currentSectionIndex = sectionValue<number>("index");
+
 export const shopifyEntry = { runtime: "static" } satisfies ShopifyEntryConfig;
 
-function imageSizes(otherImage: string) {
+function imageSizes(otherImage: ShopifyReference<unknown, "object">) {
+  const ambient = eq(refs.image_behavior, "ambient");
+  const otherPresent = isPresent(otherImage);
   return liquidChoice(
     [
-      [`section.settings.image_behavior == 'ambient' and ${otherImage} != blank and section.settings.stack_images_on_mobile`, "(min-width: 750px) 60vw, 120vw"],
-      [`section.settings.image_behavior == 'ambient' and ${otherImage} != blank`, "60vw"],
-      ["section.settings.image_behavior == 'ambient'", "120vw"],
-      ["section.settings.image_behavior == 'fixed' or section.settings.image_behavior == 'zoom-in'", "100vw"],
-      [`${otherImage} != blank and section.settings.stack_images_on_mobile`, "(min-width: 750px) 50vw, 100vw"],
-      [`${otherImage} != blank`, "50vw"],
+      [and(ambient, otherPresent, refs.stack_images_on_mobile), "(min-width: 750px) 60vw, 120vw"],
+      [and(ambient, otherPresent), "60vw"],
+      [ambient, "120vw"],
+      [or(eq(refs.image_behavior, "fixed"), eq(refs.image_behavior, "zoom-in")), "100vw"],
+      [and(otherPresent, refs.stack_images_on_mobile), "(min-width: 750px) 50vw, 100vw"],
+      [otherPresent, "50vw"],
     ],
     "100vw",
   );
@@ -37,9 +210,9 @@ function imageSizes(otherImage: string) {
 
 function PlaceholderMedia() {
   return (
-    <Island
+    <LiquidHtml
       as="span"
-      expression="{{ 'hero-apparel-1' | placeholder_svg_tag: 'placeholder-svg' }}"
+      expression={placeholderSvg("hero-apparel-1", "placeholder-svg")}
       style={{ display: "contents" }}
     />
   );
@@ -47,92 +220,109 @@ function PlaceholderMedia() {
 
 function ImageBannerMedia() {
   const imageBehaviorClass = useLiquidDynamicClass(
-    "section.settings.image_behavior != 'none'",
-    "section.settings.image_behavior",
+    neq(refs.image_behavior, "none"),
+    refs.image_behavior,
     (value: string) => `animate--${value}`,
   );
 
   const firstMediaClassName = clsx(
     "banner__media media",
     "banner__media--first",
-    useLiquidClass("section.settings.image_2 != blank", "banner__media-half"),
+    useLiquidClass(isPresent(refs.image_2), "banner__media-half"),
     imageBehaviorClass,
-    useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
+    useLiquidClass(animationsReveal, "scroll-trigger animate--fade-in"),
   );
 
   const placeholderMediaClassName = clsx(
     "banner__media media placeholder",
     "banner__media--placeholder",
     imageBehaviorClass,
-    useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
+    useLiquidClass(animationsReveal, "scroll-trigger animate--fade-in"),
   );
 
   const secondMediaClassName = clsx(
     "banner__media media",
     "banner__media--second",
-    useLiquidClass("section.settings.image != blank", "banner__media-half"),
+    useLiquidClass(isPresent(refs.image), "banner__media-half"),
     imageBehaviorClass,
-    useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
+    useLiquidClass(animationsReveal, "scroll-trigger animate--fade-in"),
   );
+
+  const firstWidth = property<number>(refs.image, "width");
+  const firstRatio = property<number>(refs.image, "aspect_ratio");
+  const secondWidth = property<number>(refs.image_2, "width");
+  const secondRatio = property<number>(refs.image_2, "aspect_ratio");
 
   return (
     <>
-      <LiquidIf condition="section.settings.image != blank">
+      {when(isPresent(refs.image), () => (
         <div className={firstMediaClassName}>
           <ShopifyImage
-            image="section.settings.image"
+            image={refs.image}
             width={3840}
-            tagWidth={liquid("section.settings.image.width")}
-            tagHeight={liquid("section.settings.image.width | divided_by: section.settings.image.aspect_ratio")}
-            imageClass={liquidIf("section.settings.image_2 != blank", "banner__media-image-half")}
-            sizes={imageSizes("section.settings.image_2")}
-            widths={liquidChoice([["section.settings.image_behavior == 'ambient'", ambientWidths]], defaultWidths)}
-            fetchPriority={liquidChoice([["section.index == 1", "high"]], "auto")}
+            tagWidth={firstWidth}
+            tagHeight={dividedBy(firstWidth, firstRatio)}
+            imageClass={liquidIf(isPresent(refs.image_2), "banner__media-image-half")}
+            sizes={imageSizes(refs.image_2)}
+            widths={liquidChoice(
+              [[eq(refs.image_behavior, "ambient"), ambientWidths]],
+              defaultWidths,
+            )}
+            fetchPriority={liquidChoice([[eq(currentSectionIndex, 1), "high"]], "auto")}
             autoLoading={false}
           />
         </div>
-      </LiquidIf>
+      ))}
 
-      <LiquidIf condition="section.settings.image == blank and section.settings.image_2 == blank">
+      {when(and(isBlank(refs.image), isBlank(refs.image_2)), () => (
         <div className={placeholderMediaClassName}>
           <PlaceholderMedia />
         </div>
-      </LiquidIf>
+      ))}
 
-      <LiquidIf condition="section.settings.image_2 != blank">
+      {when(isPresent(refs.image_2), () => (
         <div className={secondMediaClassName}>
           <ShopifyImage
-            image="section.settings.image_2"
+            image={refs.image_2}
             width={3840}
-            tagWidth={liquid("section.settings.image_2.width")}
-            tagHeight={liquid("section.settings.image_2.width | divided_by: section.settings.image_2.aspect_ratio")}
-            imageClass={liquidIf("section.settings.image != blank", "banner__media-image-half")}
-            sizes={imageSizes("section.settings.image")}
-            widths={liquidChoice([["section.settings.image_behavior == 'ambient'", ambientWidths]], defaultWidths)}
-            fetchPriority={liquidChoice([["section.index == 1", "high"]], "auto")}
+            tagWidth={secondWidth}
+            tagHeight={dividedBy(secondWidth, secondRatio)}
+            imageClass={liquidIf(isPresent(refs.image), "banner__media-image-half")}
+            sizes={imageSizes(refs.image)}
+            widths={liquidChoice(
+              [[eq(refs.image_behavior, "ambient"), ambientWidths]],
+              defaultWidths,
+            )}
+            fetchPriority={liquidChoice([[eq(currentSectionIndex, 1), "high"]], "auto")}
             autoLoading={false}
           />
         </div>
-      </LiquidIf>
+      ))}
     </>
   );
 }
 
 export default function ImageBanner() {
-  const sectionId = useLiquidExpression<string>("section.id");
-  const imageHeight = useLiquidExpression<string>(imageBannerSettings.refs.image_height);
-  const desktopContentAlignment = useLiquidExpression<string>(imageBannerSettings.refs.desktop_content_alignment);
-  const mobileContentAlignment = useLiquidExpression<string>(imageBannerSettings.refs.mobile_content_alignment);
-  const desktopContentPosition = useLiquidExpression<string>(imageBannerSettings.refs.desktop_content_position);
-  const colorScheme = useLiquidExpression<string>(imageBannerSettings.refs.color_scheme);
+  const sectionId = useShopifyValue(sectionValue<string>("id"));
+  const {
+    image_height: imageHeight,
+    desktop_content_alignment: desktopContentAlignment,
+    mobile_content_alignment: mobileContentAlignment,
+    desktop_content_position: desktopContentPosition,
+    color_scheme: colorScheme,
+  } = imageBannerSettings.useProps();
+  const adaptPadding = append(
+    multiply(dividedBy(1, property<number>(refs.image, "aspect_ratio")), 100),
+    "%",
+  );
   const style = useLiquidCssVars({
     "--banner-adapt-padding-bottom": {
-      liquid: "1 | divided_by: section.settings.image.aspect_ratio | times: 100 | append: '%'",
-      when: "section.settings.image_height == 'adapt' and section.settings.image != blank",
+      value: adaptPadding,
+      when: and(eq(refs.image_height, "adapt"), isPresent(refs.image)),
       fallback: "0%",
     },
     "--banner-overlay-opacity": {
-      liquid: "section.settings.image_overlay_opacity | divided_by: 100.0",
+      value: dividedBy(refs.image_overlay_opacity, 100),
       fallback: "0",
     },
   });
@@ -142,23 +332,20 @@ export default function ImageBanner() {
     `banner--content-align-mobile-${mobileContentAlignment}`,
     `banner--${imageHeight}`,
     useLiquidClass(
-      "section.settings.stack_images_on_mobile and section.settings.image != blank and section.settings.image_2 != blank",
+      and(refs.stack_images_on_mobile, isPresent(refs.image), isPresent(refs.image_2)),
       "banner--stacked",
     ),
-    useLiquidClass(
-      "section.settings.image_height == 'adapt' and section.settings.image != blank",
-      "banner--adapt",
-    ),
-    useLiquidClass("section.settings.show_text_below", "banner--mobile-bottom"),
-    useLiquidClass("section.settings.show_text_box", "banner--desktop-transparent", { unless: true }),
-    useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--fade-in"),
+    useLiquidClass(and(eq(refs.image_height, "adapt"), isPresent(refs.image)), "banner--adapt"),
+    useLiquidClass(refs.show_text_below, "banner--mobile-bottom"),
+    useLiquidClass(refs.show_text_box, "banner--desktop-transparent", { unless: true }),
+    useLiquidClass(animationsReveal, "scroll-trigger animate--fade-in"),
   );
 
   const contentClassName = clsx(
     "banner__content",
     `banner__content--${desktopContentPosition}`,
     "page-width",
-    useLiquidClass("settings.animations_reveal_on_scroll", "scroll-trigger animate--slide-in"),
+    useLiquidClass(animationsReveal, "scroll-trigger animate--slide-in"),
   );
 
   return (
@@ -188,209 +375,16 @@ export const shopifyMeta = {
   disabled_on: {
     groups: ["header", "footer"],
   },
-  settings: [
-    {
-      type: "image_picker",
-      id: "image",
-      label: "t:sections.image-banner.settings.image.label",
-    },
-    {
-      type: "image_picker",
-      id: "image_2",
-      label: "t:sections.image-banner.settings.image_2.label",
-    },
-    {
-      type: "range",
-      id: "image_overlay_opacity",
-      min: 0,
-      max: 100,
-      step: 10,
-      unit: "%",
-      label: "t:sections.image-banner.settings.image_overlay_opacity.label",
-      default: 0,
-    },
-    {
-      type: "select",
-      id: "image_height",
-      options: [
-        {
-          value: "adapt",
-          label: "t:sections.image-banner.settings.image_height.options__1.label",
-        },
-        {
-          value: "small",
-          label: "t:sections.image-banner.settings.image_height.options__2.label",
-        },
-        {
-          value: "medium",
-          label: "t:sections.image-banner.settings.image_height.options__3.label",
-        },
-        {
-          value: "large",
-          label: "t:sections.image-banner.settings.image_height.options__4.label",
-        },
-      ],
-      default: "medium",
-      label: "t:sections.image-banner.settings.image_height.label",
-    },
-    {
-      type: "select",
-      id: "image_behavior",
-      options: [
-        {
-          value: "none",
-          label: "t:sections.all.animation.image_behavior.options__1.label",
-        },
-        {
-          value: "ambient",
-          label: "t:sections.all.animation.image_behavior.options__2.label",
-        },
-        {
-          value: "fixed",
-          label: "t:sections.all.animation.image_behavior.options__3.label",
-        },
-        {
-          value: "zoom-in",
-          label: "t:sections.all.animation.image_behavior.options__4.label",
-        },
-      ],
-      default: "none",
-      label: "t:sections.all.animation.image_behavior.label",
-    },
-    {
-      type: "header",
-      content: "t:sections.image-banner.settings.content.content",
-    },
-    {
-      type: "select",
-      id: "desktop_content_position",
-      options: [
-        {
-          value: "top-left",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__1.label",
-        },
-        {
-          value: "top-center",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__2.label",
-        },
-        {
-          value: "top-right",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__3.label",
-        },
-        {
-          value: "middle-left",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__4.label",
-        },
-        {
-          value: "middle-center",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__5.label",
-        },
-        {
-          value: "middle-right",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__6.label",
-        },
-        {
-          value: "bottom-left",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__7.label",
-        },
-        {
-          value: "bottom-center",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__8.label",
-        },
-        {
-          value: "bottom-right",
-          label: "t:sections.image-banner.settings.desktop_content_position.options__9.label",
-        },
-      ],
-      default: "middle-center",
-      label: "t:sections.image-banner.settings.desktop_content_position.label",
-    },
-    {
-      type: "select",
-      id: "desktop_content_alignment",
-      options: [
-        {
-          value: "left",
-          label: "t:sections.image-banner.settings.desktop_content_alignment.options__1.label",
-        },
-        {
-          value: "center",
-          label: "t:sections.image-banner.settings.desktop_content_alignment.options__2.label",
-        },
-        {
-          value: "right",
-          label: "t:sections.image-banner.settings.desktop_content_alignment.options__3.label",
-        },
-      ],
-      default: "center",
-      label: "t:sections.image-banner.settings.desktop_content_alignment.label",
-    },
-    {
-      type: "checkbox",
-      id: "show_text_box",
-      default: true,
-      label: "t:sections.image-banner.settings.show_text_box.label",
-    },
-    {
-      type: "color_scheme",
-      id: "color_scheme",
-      label: "t:sections.all.colors.label",
-      default: "scheme-1",
-    },
-    {
-      type: "header",
-      content: "t:sections.image-banner.settings.mobile.content",
-    },
-    {
-      type: "checkbox",
-      id: "stack_images_on_mobile",
-      default: true,
-      label: "t:sections.image-banner.settings.stack_images_on_mobile.label",
-    },
-    {
-      type: "select",
-      id: "mobile_content_alignment",
-      options: [
-        {
-          value: "left",
-          label: "t:sections.image-banner.settings.mobile_content_alignment.options__1.label",
-        },
-        {
-          value: "center",
-          label: "t:sections.image-banner.settings.mobile_content_alignment.options__2.label",
-        },
-        {
-          value: "right",
-          label: "t:sections.image-banner.settings.mobile_content_alignment.options__3.label",
-        },
-      ],
-      default: "center",
-      label: "t:sections.image-banner.settings.mobile_content_alignment.label",
-    },
-    {
-      type: "checkbox",
-      id: "show_text_below",
-      default: true,
-      label: "t:sections.image-banner.settings.show_text_below.label",
-    },
-  ],
+  settings: imageBannerSettings.schema,
   blocks: [{ type: "@theme" }, { type: "@app" }],
   presets: [
     {
       name: "t:sections.image-banner.presets.name",
       blocks: [
-        {
-          type: "react-heading-block",
-        },
-        {
-          type: "react-text-block",
-        },
-        {
-          type: "react-button-block",
-        },
+        { type: "react-heading-block" },
+        { type: "react-text-block" },
+        { type: "react-button-block" },
       ],
     },
   ],
 } satisfies ShopifyMeta;
-
-const imageBannerSettings = defineSettings("section", shopifyMeta.settings);

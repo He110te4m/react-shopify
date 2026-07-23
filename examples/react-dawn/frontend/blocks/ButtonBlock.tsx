@@ -1,57 +1,95 @@
 import type { ShopifyMeta } from "vite-plugin-react-shopify";
-import { LiquidIf, useLiquid, useShopifyContext } from "vite-plugin-react-shopify/runtime";
+import {
+  and,
+  createCheckboxSetting,
+  createHeaderSetting,
+  createTextSetting,
+  createUrlSetting,
+  defineSettings,
+  escape,
+  isPresent,
+  useLiquidClass,
+  useShopifyValue,
+  when,
+  type ShopifyReference,
+} from "vite-plugin-react-shopify/runtime";
+import ButtonSnippet from "../snippets/Button";
 import { clsx } from "../utils/classes";
 import "./ButtonBlock.css";
 
-function useLiquidChoice(key: string, condition: string, truthy: string, falsy: string): string {
-  const ctx = useShopifyContext();
-  if (ctx.phase === "ssg") {
-    ctx.track(key, {
-      bridge: `{% if ${condition} %}${JSON.stringify(truthy)}{% else %}${JSON.stringify(falsy)}{% endif %}`,
-    });
-    return ctx.serialize(`{% if ${condition} %}${truthy}{% else %}${falsy}{% endif %}`);
-  }
-  return String(ctx.read(key) ?? falsy);
-}
+const buttonSettings = defineSettings("block", {
+  first_header: createHeaderSetting({
+    content: "t:sections.image-banner.blocks.buttons.settings.header_1.content",
+  }),
+  button_label_1: createTextSetting({
+    default: "t:sections.image-banner.blocks.buttons.settings.button_label_1.default",
+    label: "t:sections.image-banner.blocks.buttons.settings.button_label_1.label",
+    info: "t:sections.image-banner.blocks.buttons.settings.button_label_1.info",
+  }),
+  button_link_1: createUrlSetting({
+    label: "t:sections.image-banner.blocks.buttons.settings.button_link_1.label",
+  }),
+  button_style_secondary_1: createCheckboxSetting({
+    default: false,
+    label: "t:sections.image-banner.blocks.buttons.settings.button_style_secondary_1.label",
+  }),
+  second_header: createHeaderSetting({
+    content: "t:sections.image-banner.blocks.buttons.settings.header_2.content",
+  }),
+  button_label_2: createTextSetting({
+    default: "t:sections.image-banner.blocks.buttons.settings.button_label_2.default",
+    label: "t:sections.image-banner.blocks.buttons.settings.button_label_2.label",
+    info: "t:sections.image-banner.blocks.buttons.settings.button_label_2.info",
+  }),
+  button_link_2: createUrlSetting({
+    label: "t:sections.image-banner.blocks.buttons.settings.button_link_2.label",
+  }),
+  button_style_secondary_2: createCheckboxSetting({
+    default: false,
+    label: "t:sections.image-banner.blocks.buttons.settings.button_style_secondary_2.label",
+  }),
+});
 
-function ButtonLink({ index }: { index: 1 | 2 }) {
-  const [label] = useLiquid<string>(`block.settings.button_label_${index} | escape`);
-  const [link] = useLiquid<string>(`block.settings.button_link_${index}`);
-  const buttonStyle = useLiquidChoice(
-    `react_button_block_style_${index}`,
-    `block.settings.button_style_secondary_${index}`,
-    "button--secondary",
-    "button--primary",
-  );
+function ButtonLink({
+  label,
+  link,
+  secondary,
+}: {
+  label: ShopifyReference<string>;
+  link: ShopifyReference<string>;
+  secondary: ShopifyReference<boolean>;
+}) {
+  const resolvedLabel = useShopifyValue(escape(label));
+  const resolvedLink = useShopifyValue(link);
 
-  return (
-    <LiquidIf condition={`block.settings.button_label_${index} != blank`}>
-      <LiquidIf condition={`block.settings.button_link_${index} == blank`}>
-        <a role="link" aria-disabled="true" className={clsx("button", buttonStyle)}>
-          {label}
-        </a>
-      </LiquidIf>
-      <LiquidIf condition={`block.settings.button_link_${index} != blank`}>
-        <a href={link} className={clsx("button", buttonStyle)}>
-          {label}
-        </a>
-      </LiquidIf>
-    </LiquidIf>
+  return when(isPresent(label), () =>
+    when(
+      secondary,
+      () => <ButtonSnippet label={resolvedLabel} link={resolvedLink} style="button--secondary" />,
+      () => <ButtonSnippet label={resolvedLabel} link={resolvedLink} style="button--primary" />,
+    ),
   );
 }
 
 export default function ButtonBlock() {
-  const multipleClass = useLiquidChoice(
-    "react_button_block_multiple",
-    "block.settings.button_label_1 != blank and block.settings.button_label_2 != blank",
+  const { refs } = buttonSettings;
+  const multipleClass = useLiquidClass(
+    and(isPresent(refs.button_label_1), isPresent(refs.button_label_2)),
     "banner__buttons--multiple",
-    "",
   );
 
   return (
     <div className={clsx("banner__buttons", multipleClass)}>
-      <ButtonLink index={1} />
-      <ButtonLink index={2} />
+      <ButtonLink
+        label={refs.button_label_1}
+        link={refs.button_link_1}
+        secondary={refs.button_style_secondary_1}
+      />
+      <ButtonLink
+        label={refs.button_label_2}
+        link={refs.button_link_2}
+        secondary={refs.button_style_secondary_2}
+      />
     </div>
   );
 }
@@ -59,50 +97,5 @@ export default function ButtonBlock() {
 export const shopifyMeta = {
   name: "t:sections.image-banner.blocks.buttons.name",
   class: "banner__block banner__block--buttons",
-  settings: [
-    {
-      type: "header",
-      content: "t:sections.image-banner.blocks.buttons.settings.header_1.content",
-    },
-    {
-      type: "text",
-      id: "button_label_1",
-      default: "t:sections.image-banner.blocks.buttons.settings.button_label_1.default",
-      label: "t:sections.image-banner.blocks.buttons.settings.button_label_1.label",
-      info: "t:sections.image-banner.blocks.buttons.settings.button_label_1.info",
-    },
-    {
-      type: "url",
-      id: "button_link_1",
-      label: "t:sections.image-banner.blocks.buttons.settings.button_link_1.label",
-    },
-    {
-      type: "checkbox",
-      id: "button_style_secondary_1",
-      default: false,
-      label: "t:sections.image-banner.blocks.buttons.settings.button_style_secondary_1.label",
-    },
-    {
-      type: "header",
-      content: "t:sections.image-banner.blocks.buttons.settings.header_2.content",
-    },
-    {
-      type: "text",
-      id: "button_label_2",
-      default: "t:sections.image-banner.blocks.buttons.settings.button_label_2.default",
-      label: "t:sections.image-banner.blocks.buttons.settings.button_label_2.label",
-      info: "t:sections.image-banner.blocks.buttons.settings.button_label_2.info",
-    },
-    {
-      type: "url",
-      id: "button_link_2",
-      label: "t:sections.image-banner.blocks.buttons.settings.button_link_2.label",
-    },
-    {
-      type: "checkbox",
-      id: "button_style_secondary_2",
-      default: false,
-      label: "t:sections.image-banner.blocks.buttons.settings.button_style_secondary_2.label",
-    },
-  ],
+  settings: buttonSettings.schema,
 } satisfies ShopifyMeta;

@@ -26,11 +26,25 @@
             "button_link_1": "shopify://collections/all",
             "button_style_secondary_1": true
           }
+        },
+        "hydrated_counter_block": {
+          "type": "react-hydrated-counter-block",
+          "settings": {
+            "label": "Hydrated counter"
+          }
+        },
+        "client_only_block": {
+          "type": "react-client-only-block",
+          "settings": {
+            "message": "Client-only interaction"
+          }
         }
       },
       "block_order": [
         "heading_block",
-        "button_block"
+        "button_block",
+        "hydrated_counter_block",
+        "client_only_block"
       ],
       "settings": {
         "image_overlay_opacity": 40,

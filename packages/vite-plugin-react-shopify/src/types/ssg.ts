@@ -9,10 +9,14 @@
 import type { ShopifyEntryRuntime, ShopifyEntryType, ShopifyMeta } from "./shopify";
 
 export interface SSGEntry {
+  /** Unique compiler identity, including entry type and relative source path. */
+  id: string;
   filePath: string;
+  relativePath: string;
   componentName: string;
   kebabName: string;
   targetType: ShopifyEntryType;
   runtime: ShopifyEntryRuntime;
+  snippetProps: readonly string[];
   meta: Required<Pick<ShopifyMeta, "name">> & ShopifyMeta;
 }

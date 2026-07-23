@@ -22,6 +22,27 @@ export interface BundleResult {
   tmpFile: string;
 }
 
+export interface SnippetArtifact {
+  filePath: string;
+  name: string;
+  props: readonly string[];
+}
+
+function resolveSourceImport(specifier: string, resolveDir: string): string | undefined {
+  if (!specifier.startsWith(".") && !path.isAbsolute(specifier)) return undefined;
+  const base = path.resolve(resolveDir, specifier);
+  const candidates = [
+    base,
+    `${base}.tsx`,
+    `${base}.jsx`,
+    `${base}.ts`,
+    `${base}.js`,
+    path.join(base, "index.tsx"),
+    path.join(base, "index.jsx"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
 /**
  * Bundle the source file via esbuild, fix hydration issues, strip CSS, and
  * write the output to a temporary `.mjs` file.
@@ -35,6 +56,7 @@ export async function bundleEntry(
   entry: { filePath: string; kebabName: string },
   projectRoot: string,
   sourceDir: string,
+  snippets: readonly SnippetArtifact[] = [],
 ): Promise<BundleResult | null> {
   const projectRequire = createRequire(path.join(projectRoot, "package.json"));
 
@@ -59,6 +81,9 @@ export async function bundleEntry(
 
   log.debug("bundling %s via esbuild", entry.kebabName);
   const startBundled = Date.now();
+  const snippetByPath = new Map(
+    snippets.map((snippet) => [path.resolve(snippet.filePath), snippet] as const),
+  );
 
   await esbuild.build({
     stdin: {
@@ -81,6 +106,27 @@ export async function bundleEntry(
     write: true,
     allowOverwrite: true,
     plugins: [
+      {
+        name: "ssg-snippet-proxy",
+        setup(build: any) {
+          build.onResolve({ filter: /.*/ }, (args: any) => {
+            const resolved = resolveSourceImport(args.path, args.resolveDir);
+            if (!resolved || !snippetByPath.has(path.resolve(resolved))) return undefined;
+            return { namespace: "ssg-snippet-proxy", path: path.resolve(resolved) };
+          });
+          build.onLoad({ filter: /.*/, namespace: "ssg-snippet-proxy" }, (args: any) => {
+            const snippet = snippetByPath.get(path.resolve(args.path));
+            if (!snippet) return undefined;
+            return {
+              contents: [
+                `import { createSnippetProxy } from 'vite-plugin-react-shopify/runtime'`,
+                `export default createSnippetProxy(${JSON.stringify(snippet.name)}, ${JSON.stringify(snippet.props)})`,
+              ].join("\n"),
+              loader: "js",
+            };
+          });
+        },
+      },
       {
         // Browser-only modules are intentionally kept out of the Node SSG
         // bundle. The browser Vite build still sees and chunks the real module.
