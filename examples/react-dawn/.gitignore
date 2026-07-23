@@ -1,34 +1,34 @@
-# OS generated files #
-######################
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-node_modules/
+# # OS generated files #
+# ######################
+# .DS_Store
+# .DS_Store?
+# ._*
+# .Spotlight-V100
+# .Trashes
+# ehthumbs.db
+# Thumbs.db
+# node_modules/
 
-# Shopify CLI files
-.shopify/
+# # Shopify CLI files
+# .shopify/
 
-## Release files
-release
-*.zip
+# ## Release files
+# release
+# *.zip
 
-# Vite build output
-assets/.vite/
-assets/react-shopify-*.js
-assets/react-shopify-*.js.map
-assets/react-shopify-*.css
-assets/react-shopify-*.css.map
+# # Vite build output
+# assets/.vite/
+# assets/react-shopify-*.js
+# assets/react-shopify-*.js.map
+# assets/react-shopify-*.css
+# assets/react-shopify-*.css.map
 
-# Shopify importmap snippet (auto-generated)
-snippets/shopify-importmap.liquid
+# # Shopify importmap snippet (auto-generated)
+# snippets/shopify-importmap.liquid
 
-# SSG compiled Liquid files (auto-generated)
-sections/react-*.liquid
-blocks/react-*.liquid
-snippets/react-*.liquid
-snippets/css-*.liquid
-templates/page.react-*.liquid
+# # SSG compiled Liquid files (auto-generated)
+# sections/react-*.liquid
+# blocks/react-*.liquid
+# snippets/react-*.liquid
+# snippets/css-*.liquid
+# templates/page.react-*.liquid
