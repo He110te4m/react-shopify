@@ -8,7 +8,7 @@ import {
   createCheckboxSetting,
   createColorSchemeSetting,
   createHeaderSetting,
-  createImageSetting,
+  createImagePickerSetting,
   createRangeSetting,
   createSelectSetting,
   defineSettings,
@@ -39,8 +39,8 @@ const defaultWidths = "375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840";
 const ambientWidths = "450, 660, 900, 1320, 1800, 2136, 2400, 3600, 7680";
 
 const imageBannerSettings = defineSettings("section", {
-  image: createImageSetting({ label: "t:sections.image-banner.settings.image.label" }),
-  image_2: createImageSetting({ label: "t:sections.image-banner.settings.image_2.label" }),
+  image: createImagePickerSetting({ label: "t:sections.image-banner.settings.image.label" }),
+  image_2: createImagePickerSetting({ label: "t:sections.image-banner.settings.image_2.label" }),
   image_overlay_opacity: createRangeSetting({
     min: 0,
     max: 100,
